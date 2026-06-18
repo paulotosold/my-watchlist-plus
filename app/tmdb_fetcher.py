@@ -47,79 +47,68 @@ def _get_genre_names(genre_codes):
 
     return [genres[code] for code in genre_codes if code in genres]
 
-# SEARCH -----------------------------------------------------------------------
-def search_movie_candidates(search_title, max_candidates=10):
-    url = "https://api.themoviedb.org/3/search/movie"
+# -----------------------------------------------------------------------
 
+def find_tmdb_match_by_imdb_id(imdb_id):
+    url = f"https://api.themoviedb.org/3/find/{imdb_id.strip()}"
     params = {
-        "query": search_title,
-        "include_adult": "false",
+        "external_source": "imdb_id",
         "language": "en-US",
-        "page": 1,
     }
 
     response = requests.get(url, headers=headers, params=params, timeout=15)
     response.raise_for_status()
 
-    data = response.json()
+    result = response.json()
 
     candidates = []
 
-    for result in data.get("results", [])[:max_candidates]:
-        candidate = {
-            "tmdb_id": result.get("id"),
-            "title": result.get("title"),
-            "original_title": result.get("original_title"),
-            "release_date": result.get("release_date"),
-            "genres": _get_genre_names(genre_codes=result.get("genre_ids", [])),
-            "overview": result.get("overview"),
+    for movie in result.get("movie_results", []):
+        candidates.append({
+            "media_type": "movie",
+            "tmdb_id": movie["id"],
+            "title": movie.get("title"),
+            "release_date": movie.get("release_date"),
+        })
+
+    for series in result.get("tv_results", []):
+        candidates.append({
+            "media_type": "series",
+            "tmdb_id": series["id"],
+            "title": series.get("name"),
+            "release_date": series.get("first_air_date"),
+        })
+
+    for episode in result.get("tv_episode_results", []):
+        candidates.append({
+            "media_type": "episode",
+            "tmdb_id": episode["id"],
+            "title": episode.get("name"),
+            "release_date": episode.get("air_date"),
+            "series_tmdb_id": episode.get("show_id"),
+            "season_num": episode.get("season_number"),
+            "episode_num": episode.get("episode_number"),
+        })
+
+    if len(candidates) == 1:
+        return {
+            "status": "resolved",
+            "match": candidates[0],
         }
 
-        candidates.append(candidate)
+    if len(candidates) > 1:
+        return {
+            "status": "ambiguous",
+            "match": None,
+            "reason": "IMDb ID matched multiple TMDB media categories.",
+            "candidates": candidates,
+        }
 
-    return candidates
-
-# def search_media_candidates(media_intent):
-#     media_type = media_intent.get("media_type")
-#
-#     if media_type is None:
-#         return None
-#
-#     search_title = ((media_intent.get(media_type) or {}).get("title") or {}).get("search")
-#
-#     if media_type == "movie" and search_title is not None:
-#         return _search_movie_candidates(search_title)
-#
-#     elif media_type == "series" and search_title is not None:
-#         return _search_series_candidates(search_title)
-#
-#     elif media_type == "episode":
-#         series_title = ((media_intent.get("series") or {}).get("title") or {}).get("search")
-#         if series_title is None:
-#             return None
-#         else:
-#             return _search_episode_candidates(series_title)
-#
-#     else:
-#         return None
-#
-# def _search_movie_candidates(search_title):
-#     url = "https://api.themoviedb.org/3/search/movie"
-#     params = {
-#         "query": search_title,
-#         "include_adult": "false",
-#         "language": "en-US",
-#         "page": 1,
-#     }
-#     response = requests.get(url, headers=headers, params=params)
-#     data = response.json()
-#     return data["results"]
-#
-# def _search_series_candidates(search_title):
-#     return []
-#
-# def _search_episode_candidates(search_title):
-#     return []
+    return {
+        "status": "not_found",
+        "match": None,
+        "reason": "IMDb ID did not match any TMDB movie, series, or episode.",
+    }
 
 # -----------------------------------------------------------------------
 
