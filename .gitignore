@@ -1,0 +1,38 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local/editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local scratch/reference files
+_local/
+
+# Local app data. Keep directory shape, ignore generated/private contents.
+data/*
+!data/.gitkeep
+!data/media_posters/
+data/media_posters/*
+!data/media_posters/.gitkeep
+data/media.db
+data/media.db-*
