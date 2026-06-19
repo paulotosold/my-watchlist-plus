@@ -654,6 +654,17 @@ def get_tmdb_media_posters(tmdb_id_match):
     raise ValueError(f"Unsupported media_type: {media_type}")
 
 
+def get_tmdb_media_user_data(tmdb_id_match=None):
+    return {
+        "watch_state": "to_watch",
+        "rating": None,
+        "is_collection_pick": None,
+        "watch_history": [],
+        "notes": [],
+        "lists": [],
+    }
+
+
 def _get_tmdb_movie_posters(tmdb_id):
     movie_details = _tmdb_get(f"movie/{tmdb_id}")
     movie_images = _tmdb_get(f"movie/{tmdb_id}/images")

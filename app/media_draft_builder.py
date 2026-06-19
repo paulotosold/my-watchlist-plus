@@ -17,7 +17,23 @@ def build_media_draft_from_db(conn, media_from_db):
         }
 
 def build_media_draft_from_tmdb(imdb_id):
-    pass
+    tmdb_match = app.tmdb_fetcher.find_tmdb_match_by_imdb_id(imdb_id)
+
+    if tmdb_match["status"] != "resolved":
+        raise ValueError(tmdb_match.get("reason") or "TMDB match was not resolved.")
+
+    metadata = app.tmdb_fetcher.get_tmdb_media_metadata(tmdb_match)
+    watch_providers = app.tmdb_fetcher.get_tmdb_media_watch_providers(tmdb_match)
+    posters = app.tmdb_fetcher.get_tmdb_media_posters(tmdb_match)
+    user_data = app.tmdb_fetcher.get_tmdb_media_user_data(tmdb_match)
+
+    return {
+        "media_id": None,
+        "metadata": metadata,
+        "watch_providers": watch_providers,
+        "posters": posters,
+        "user_data": user_data,
+    }
 
 
 def _get_media_metadata(media_type, tmdb_id):
@@ -60,8 +76,11 @@ def _get_user_data(tmdb_id, intent):
     return {
         "watch_state": new_user_data["watch_state"],
         "rating": new_user_data["rating"],
-        "collection_pick": new_user_data["is_collection_pick"],
-        "watched_history": new_user_data["watch_events"],
+        "is_collection_pick": new_user_data["is_collection_pick"],
+        "watch_history": new_user_data.get(
+            "watch_history",
+            new_user_data.get("watch_events", []),
+        ),
         "notes": new_user_data["notes"],
         "lists": new_user_data["lists"]
     }

@@ -505,8 +505,138 @@ def get_db_media_posters(conn, metadata):
 
     raise ValueError(f"Unsupported media_type: {media_type}")
 
+def get_empty_media_user_data():
+    return {
+        "watch_state": "to_watch",
+        "rating": None,
+        "is_collection_pick": None,
+        "watch_history": [],
+        "notes": [],
+        "lists": [],
+    }
+
+def _get_db_media_id(conn, metadata):
+    cursor = conn.execute(
+        """
+        SELECT id
+        FROM media
+        WHERE tmdb_id = ?
+          AND media_type = ?
+        """,
+        (
+            metadata["tmdb_id"],
+            metadata["media_type"],
+        ),
+    )
+
+    row = cursor.fetchone()
+
+    if row is None:
+        return None
+
+    return row["id"]
+
 def get_db_media_user_data(conn, metadata):
-    pass
+    media_id = _get_db_media_id(conn, metadata)
+
+    if media_id is None:
+        return get_empty_media_user_data()
+
+    user_data = get_empty_media_user_data()
+
+    cursor = conn.execute(
+        """
+        SELECT
+            watch_state,
+            rating,
+            is_collection_pick
+        FROM media_state
+        WHERE media_id = ?
+        """,
+        (media_id,),
+    )
+
+    state = cursor.fetchone()
+
+    if state is not None:
+        user_data["watch_state"] = state["watch_state"]
+        user_data["rating"] = state["rating"]
+        user_data["is_collection_pick"] = (
+            None
+            if state["is_collection_pick"] is None
+            else bool(state["is_collection_pick"])
+        )
+
+    cursor = conn.execute(
+        """
+        SELECT
+            id,
+            date_earliest,
+            date_latest
+        FROM watch_history
+        WHERE media_id = ?
+        ORDER BY
+            date_earliest IS NULL,
+            date_earliest,
+            id
+        """,
+        (media_id,),
+    )
+
+    user_data["watch_history"] = [
+        {
+            "id": row["id"],
+            "date_earliest": row["date_earliest"],
+            "date_latest": row["date_latest"],
+        }
+        for row in cursor.fetchall()
+    ]
+
+    cursor = conn.execute(
+        """
+        SELECT
+            id,
+            user_note
+        FROM user_notes
+        WHERE media_id = ?
+        ORDER BY created_at, id
+        """,
+        (media_id,),
+    )
+
+    user_data["notes"] = [
+        {
+            "id": row["id"],
+            "user_note": row["user_note"],
+        }
+        for row in cursor.fetchall()
+    ]
+
+    cursor = conn.execute(
+        """
+        SELECT
+            l.id,
+            l.name,
+            ml.entry_note
+        FROM media_lists ml
+        JOIN lists l
+            ON l.id = ml.list_id
+        WHERE ml.media_id = ?
+        ORDER BY l.name
+        """,
+        (media_id,),
+    )
+
+    user_data["lists"] = [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "entry_note": row["entry_note"],
+        }
+        for row in cursor.fetchall()
+    ]
+
+    return user_data
 
 
 
