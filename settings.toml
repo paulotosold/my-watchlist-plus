@@ -1,0 +1,7 @@
+[tmdb]
+language = "en-US"
+watch_region = "AT"
+
+[watch_providers]
+access_types = ["flatrate", "rent", "buy"]
+subscribed_flatrate_provider_names = []

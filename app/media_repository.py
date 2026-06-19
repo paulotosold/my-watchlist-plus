@@ -320,7 +320,57 @@ def get_db_media_metadata(conn, media_from_db):
     }
 
 def get_db_media_watch_providers(conn, metadata):
-    pass
+    cursor = conn.execute(
+        """
+        SELECT
+            name
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = 'media_watch_providers'
+        """
+    )
+
+    if cursor.fetchone() is None:
+        return []
+
+    cursor = conn.execute(
+        """
+        SELECT
+            provider_tmdb_id,
+            provider_name,
+            country_code,
+            access_type
+        FROM media_watch_providers
+        WHERE media_id = (
+            SELECT id
+            FROM media
+            WHERE tmdb_id = ?
+              AND media_type = ?
+        )
+        ORDER BY
+            CASE access_type
+                WHEN 'flatrate' THEN 1
+                WHEN 'rent' THEN 2
+                WHEN 'buy' THEN 3
+                ELSE 4
+            END,
+            provider_name
+        """,
+        (
+            metadata["tmdb_id"],
+            metadata["media_type"],
+        ),
+    )
+
+    return [
+        {
+            "provider_tmdb_id": row["provider_tmdb_id"],
+            "provider_name": row["provider_name"],
+            "country_code": row["country_code"],
+            "access_type": row["access_type"],
+        }
+        for row in cursor.fetchall()
+    ]
 
 def get_db_media_posters(conn, metadata):
     pass

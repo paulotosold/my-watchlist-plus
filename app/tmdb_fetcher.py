@@ -1,7 +1,12 @@
 import json
 import requests
 
-from app.config import require_env
+from app.config import (
+    TMDB_LANGUAGE,
+    TMDB_WATCH_REGION,
+    WATCH_PROVIDER_ACCESS_TYPES,
+    require_env,
+)
 
 TMDB_READ_ACCESS_TOKEN = require_env("TMDB_READ_ACCESS_TOKEN")
 #from helpers import format_filename
@@ -83,7 +88,7 @@ def _tmdb_get(endpoint, params=None):
     response = requests.get(
         url,
         headers=headers,
-        params=params or {"language": "en-US"},
+        params=params or {"language": TMDB_LANGUAGE},
         timeout=15,
     )
     response.raise_for_status()
@@ -242,13 +247,42 @@ def _format_cast(cast):
     return formatted_cast
 
 
+def _format_watch_providers(watch_provider_data, country_code):
+    providers_by_region = watch_provider_data.get("results", {}).get(country_code, {})
+    formatted_providers = []
+    seen = set()
+
+    for access_type in WATCH_PROVIDER_ACCESS_TYPES:
+        for provider in providers_by_region.get(access_type, []):
+            provider_tmdb_id = provider.get("provider_id")
+            provider_name = provider.get("provider_name")
+
+            if not provider_tmdb_id or not provider_name:
+                continue
+
+            key = (provider_tmdb_id, country_code, access_type)
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            formatted_providers.append({
+                "provider_tmdb_id": provider_tmdb_id,
+                "provider_name": provider_name,
+                "country_code": country_code,
+                "access_type": access_type,
+            })
+
+    return formatted_providers
+
+
 # -----------------------------------------------------------------------
 
 def find_tmdb_match_by_imdb_id(imdb_id):
     url = f"https://api.themoviedb.org/3/find/{imdb_id.strip()}"
     params = {
         "external_source": "imdb_id",
-        "language": "en-US",
+        "language": TMDB_LANGUAGE,
     }
 
     response = requests.get(url, headers=headers, params=params, timeout=15)
@@ -504,25 +538,56 @@ def _get_tmdb_episode_metadata(tmdb_id_match):
     }
 
 
-def get_tmdb_movie_watch_providers(tmdb_id, country_code="AT"):
-    url_movie_watch_providers = f"https://api.themoviedb.org/3/movie/{tmdb_id}/watch/providers"
-    response_movie_watch_providers = requests.get(url_movie_watch_providers, headers=headers)
-    movie_watch_providers = json.loads(response_movie_watch_providers.text)
+def get_tmdb_movie_watch_providers(tmdb_id, country_code=TMDB_WATCH_REGION):
+    return get_tmdb_media_watch_providers({
+        "media_type": "movie",
+        "tmdb_id": tmdb_id,
+    }, country_code=country_code)
 
-    return [
-        {
-            "provider_tmdb_id": provider["provider_id"],
-            "provider_name": provider["provider_name"],
-            "country_code": country_code,
-        }
-        for provider in (
-            movie_watch_providers.get("results", {}).get(country_code, {}).get("flatrate", [])
+
+def get_tmdb_media_watch_providers(tmdb_id_match, country_code=TMDB_WATCH_REGION):
+    if tmdb_id_match.get("status"):
+        if tmdb_id_match.get("status") != "resolved" or not tmdb_id_match.get("match"):
+            raise ValueError(
+                "get_tmdb_media_watch_providers requires a resolved TMDB match."
+            )
+
+        tmdb_id_match = tmdb_id_match["match"]
+
+    media_type = tmdb_id_match["media_type"]
+
+    if media_type == "movie":
+        watch_provider_data = _tmdb_get(
+            f"movie/{tmdb_id_match['tmdb_id']}/watch/providers"
         )
-    ]
+
+    elif media_type == "series":
+        watch_provider_data = _tmdb_get(
+            f"tv/{tmdb_id_match['tmdb_id']}/watch/providers"
+        )
+
+    elif media_type == "episode":
+        series_tmdb_id = tmdb_id_match.get("series_tmdb_id")
+        season_num = tmdb_id_match.get("season_num")
+
+        if not series_tmdb_id or season_num is None:
+            raise ValueError(
+                "Episode watch providers require series_tmdb_id and season_num."
+            )
+
+        watch_provider_data = _tmdb_get(
+            f"tv/{series_tmdb_id}/season/{season_num}/watch/providers"
+        )
+
+    else:
+        raise ValueError(f"Unsupported media_type: {media_type}")
+
+    return _format_watch_providers(watch_provider_data, country_code)
 
 def get_tmdb_movie_posters(tmdb_id):
-    url_movie_details = f"https://api.themoviedb.org/3/movie/{tmdb_id}?language=en-US"
-    response_movie_details = requests.get(url_movie_details, headers=headers)
+    url_movie_details = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+    params = {"language": TMDB_LANGUAGE}
+    response_movie_details = requests.get(url_movie_details, headers=headers, params=params)
     movie_details = json.loads(response_movie_details.text)
 
     url_movie_images = f"https://api.themoviedb.org/3/movie/{tmdb_id}/images"
