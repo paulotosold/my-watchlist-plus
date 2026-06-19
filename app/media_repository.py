@@ -28,7 +28,9 @@ def get_db_genres(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
-            g.name
+            g.tmdb_id,
+            g.name,
+            g.tmdb_scope
         FROM media_genres mg
         JOIN genres g
             ON g.id = mg.genre_id
@@ -39,7 +41,11 @@ def get_db_genres(conn, media_id):
     )
 
     return [
-        row["name"]
+        {
+            "tmdb_id": row["tmdb_id"],
+            "name": row["name"],
+            "tmdb_scope": row["tmdb_scope"],
+        }
         for row in cursor.fetchall()
     ]
 
@@ -47,16 +53,22 @@ def get_db_spoken_languages(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
-            language_code
-        FROM media_spoken_languages
-        WHERE media_id = ?
-        ORDER BY language_code
+            l.code,
+            l.name
+        FROM media_spoken_languages msl
+        JOIN languages l
+            ON l.code = msl.language_code
+        WHERE msl.media_id = ?
+        ORDER BY l.name
         """,
         (media_id,),
     )
 
     return [
-        row["language_code"]
+        {
+            "code": row["code"],
+            "name": row["name"],
+        }
         for row in cursor.fetchall()
     ]
 
@@ -64,9 +76,12 @@ def get_db_origin_language(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
-            language_code
-        FROM media_origin_language
-        WHERE media_id = ?
+            l.code,
+            l.name
+        FROM media_origin_language mol
+        JOIN languages l
+            ON l.code = mol.language_code
+        WHERE mol.media_id = ?
         """,
         (media_id,),
     )
@@ -76,22 +91,31 @@ def get_db_origin_language(conn, media_id):
     if row is None:
         return None
 
-    return row["language_code"]
+    return {
+        "code": row["code"],
+        "name": row["name"],
+    }
 
 def get_db_production_countries(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
-            country_code
-        FROM media_production_countries
-        WHERE media_id = ?
-        ORDER BY country_code
+            c.code,
+            c.name
+        FROM media_production_countries mpc
+        JOIN countries c
+            ON c.code = mpc.country_code
+        WHERE mpc.media_id = ?
+        ORDER BY c.name
         """,
         (media_id,),
     )
 
     return [
-        row["country_code"]
+        {
+            "code": row["code"],
+            "name": row["name"],
+        }
         for row in cursor.fetchall()
     ]
 
@@ -99,6 +123,7 @@ def get_db_production_companies(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
+            c.tmdb_id,
             c.name
         FROM media_production_companies mpc
         JOIN companies c
@@ -110,7 +135,10 @@ def get_db_production_companies(conn, media_id):
     )
 
     return [
-        row["name"]
+        {
+            "tmdb_id": row["tmdb_id"],
+            "name": row["name"],
+        }
         for row in cursor.fetchall()
     ]
 
@@ -118,6 +146,7 @@ def get_db_directors(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
+            p.tmdb_id,
             p.name
         FROM media_directors md
         JOIN people p
@@ -129,7 +158,10 @@ def get_db_directors(conn, media_id):
     )
 
     return [
-        row["name"]
+        {
+            "tmdb_id": row["tmdb_id"],
+            "name": row["name"],
+        }
         for row in cursor.fetchall()
     ]
 
@@ -137,6 +169,7 @@ def get_db_creators(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
+            p.tmdb_id,
             p.name
         FROM media_creators mc
         JOIN people p
@@ -148,7 +181,10 @@ def get_db_creators(conn, media_id):
     )
 
     return [
-        row["name"]
+        {
+            "tmdb_id": row["tmdb_id"],
+            "name": row["name"],
+        }
         for row in cursor.fetchall()
     ]
 
@@ -156,6 +192,7 @@ def get_db_writers(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
+            p.tmdb_id,
             p.name,
             mw.job
         FROM media_writers mw
@@ -171,6 +208,7 @@ def get_db_writers(conn, media_id):
 
     return [
         {
+            "tmdb_id": row["tmdb_id"],
             "name": row["name"],
             "job": row["job"],
         }
@@ -181,6 +219,7 @@ def get_db_actors(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
+            p.tmdb_id,
             p.name,
             ma.character,
             ma.cast_order
@@ -198,6 +237,7 @@ def get_db_actors(conn, media_id):
 
     return [
         {
+            "tmdb_id": row["tmdb_id"],
             "name": row["name"],
             "character": row["character"],
             "cast_order": row["cast_order"],
@@ -231,7 +271,8 @@ def get_db_episode_details(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
-            ed.series_id,
+            s.tmdb_id AS series_tmdb_id,
+            s.imdb_id AS series_imdb_id,
             s.title AS series_title,
             ed.season_num,
             ed.episode_num
@@ -316,4 +357,3 @@ def add_series(conn, tmdb_infos, user_prefs):
 
 def add_episode(conn, tmdb_infos, user_prefs):
     return
-

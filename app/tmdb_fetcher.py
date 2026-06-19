@@ -1,7 +1,5 @@
 import json
-import os
 import requests
-import threading
 
 from app.config import require_env
 
@@ -46,6 +44,203 @@ def _get_genre_names(genre_codes):
     }
 
     return [genres[code] for code in genre_codes if code in genres]
+
+TMDB_GENRE_SCOPES = {
+    28: "movie",
+    12: "movie",
+    10759: "series",
+    16: "movie_series",
+    35: "movie_series",
+    80: "movie_series",
+    99: "movie_series",
+    18: "movie_series",
+    10751: "movie_series",
+    14: "movie",
+    36: "movie",
+    27: "movie",
+    10762: "series",
+    10402: "movie",
+    9648: "movie_series",
+    10763: "series",
+    10764: "series",
+    10749: "movie",
+    878: "movie",
+    10765: "series",
+    10766: "series",
+    10770: "movie",
+    10767: "series",
+    53: "movie",
+    10752: "movie",
+    10768: "series",
+    37: "movie_series",
+}
+
+WRITER_JOBS = {"Writer", "Screenplay", "Teleplay", "Story"}
+
+
+def _tmdb_get(endpoint, params=None):
+    url = f"https://api.themoviedb.org/3/{endpoint.lstrip('/')}"
+    response = requests.get(
+        url,
+        headers=headers,
+        params=params or {"language": "en-US"},
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _clean_date(value):
+    return value or None
+
+
+def _clean_runtime(value):
+    if value is None or value <= 0:
+        return None
+
+    return value
+
+
+def _format_genres(genres, media_type):
+    fallback_scope = "series" if media_type == "episode" else media_type
+
+    return [
+        {
+            "tmdb_id": genre["id"],
+            "name": genre["name"],
+            "tmdb_scope": TMDB_GENRE_SCOPES.get(genre["id"], fallback_scope),
+        }
+        for genre in genres
+        if genre.get("id") and genre.get("name")
+    ]
+
+
+def _format_spoken_languages(spoken_languages):
+    return [
+        {
+            "code": language["iso_639_1"],
+            "name": language.get("english_name") or language.get("name"),
+        }
+        for language in spoken_languages
+        if language.get("iso_639_1")
+    ]
+
+
+def _format_origin_language(language_code, spoken_languages):
+    if not language_code:
+        return None
+
+    for language in spoken_languages:
+        if language["code"] == language_code:
+            return language
+
+    return {
+        "code": language_code,
+        "name": None,
+    }
+
+
+def _format_production_countries(countries):
+    return [
+        {
+            "code": country["iso_3166_1"],
+            "name": country["name"],
+        }
+        for country in countries
+        if country.get("iso_3166_1") and country.get("name")
+    ]
+
+
+def _format_production_companies(companies):
+    return [
+        {
+            "tmdb_id": company["id"],
+            "name": company["name"],
+        }
+        for company in companies
+        if company.get("id") and company.get("name")
+    ]
+
+
+def _format_people(people):
+    formatted_people = []
+    seen = set()
+
+    for person in people:
+        tmdb_id = person.get("id")
+        name = person.get("name")
+
+        if not tmdb_id or not name or tmdb_id in seen:
+            continue
+
+        seen.add(tmdb_id)
+        formatted_people.append({
+            "tmdb_id": tmdb_id,
+            "name": name,
+        })
+
+    return formatted_people
+
+
+def _format_crew(crew, jobs, include_job=False):
+    formatted_crew = []
+    seen = set()
+
+    for person in crew:
+        job = person.get("job")
+        tmdb_id = person.get("id")
+        name = person.get("name")
+
+        if job not in jobs or not tmdb_id or not name:
+            continue
+
+        key = (tmdb_id, job if include_job else None)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        formatted_person = {
+            "tmdb_id": tmdb_id,
+            "name": name,
+        }
+
+        if include_job:
+            formatted_person["job"] = job
+
+        formatted_crew.append(formatted_person)
+
+    return formatted_crew
+
+
+def _format_cast(cast):
+    formatted_cast = []
+    seen = set()
+
+    for person in cast:
+        tmdb_id = person.get("id")
+        name = person.get("name")
+        character = person.get("character")
+
+        if not tmdb_id or not name:
+            continue
+
+        key = (tmdb_id, character)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        formatted_cast.append({
+            "tmdb_id": tmdb_id,
+            "name": name,
+            "character": character,
+            "cast_order": person.get("order"),
+        })
+
+    return formatted_cast
+
 
 # -----------------------------------------------------------------------
 
@@ -113,13 +308,39 @@ def find_tmdb_match_by_imdb_id(imdb_id):
 # -----------------------------------------------------------------------
 
 def get_tmdb_movie_metadata(tmdb_id):
-    url_movie_details = f"https://api.themoviedb.org/3/movie/{tmdb_id}?language=en-US"
-    response_movie_details = requests.get(url_movie_details, headers=headers)
-    movie_details = json.loads(response_movie_details.text)
+    return _get_tmdb_movie_metadata(tmdb_id)
 
-    url_movie_credits = f"https://api.themoviedb.org/3/movie/{tmdb_id}/credits?language=en-US"
-    response_movie_credits = requests.get(url_movie_credits, headers=headers)
-    movie_credits = json.loads(response_movie_credits.text)
+
+def get_tmdb_media_metadata(tmdb_id_match):
+    if tmdb_id_match.get("status"):
+        if tmdb_id_match.get("status") != "resolved" or not tmdb_id_match.get("match"):
+            raise ValueError(
+                "get_tmdb_media_metadata requires a resolved TMDB match."
+            )
+
+        tmdb_id_match = tmdb_id_match["match"]
+
+    media_type = tmdb_id_match["media_type"]
+
+    if media_type == "movie":
+        return _get_tmdb_movie_metadata(tmdb_id_match["tmdb_id"])
+
+    if media_type == "series":
+        return _get_tmdb_series_metadata(tmdb_id_match["tmdb_id"])
+
+    if media_type == "episode":
+        return _get_tmdb_episode_metadata(tmdb_id_match)
+
+    raise ValueError(f"Unsupported media_type: {media_type}")
+
+
+def _get_tmdb_movie_metadata(tmdb_id):
+    movie_details = _tmdb_get(f"movie/{tmdb_id}")
+    movie_credits = _tmdb_get(f"movie/{tmdb_id}/credits")
+
+    spoken_languages = _format_spoken_languages(
+        movie_details.get("spoken_languages", [])
+    )
 
     return {
         "tmdb_id": movie_details["id"],
@@ -128,56 +349,160 @@ def get_tmdb_movie_metadata(tmdb_id):
         "title": movie_details["title"],
         "original_title": movie_details["original_title"],
         "production_status": movie_details.get("status"),
-        "release_date": movie_details.get("release_date"),
-        "runtime_min": movie_details.get("runtime"),
-        "genres": [
-            genre["id"]
-            for genre in movie_details["genres"]
-        ],
+        "release_date": _clean_date(movie_details.get("release_date")),
+        "runtime_min": _clean_runtime(movie_details.get("runtime")),
 
-        "spoken_languages": [
-            spoken_language["iso_639_1"]
-            for spoken_language in movie_details["spoken_languages"]
-        ],
-        "origin_language": movie_details["original_language"],
-        "production_countries": [
-            production_country["iso_3166_1"]
-            for production_country in movie_details["production_countries"]
-        ],
-        "production_companies": [
-            {
-                "company_tmdb_id": production_company["id"],
-                "name": production_company["name"]
-            }
-            for production_company in movie_details["production_companies"]
-        ],
-        "directors": [
-            {
-                "people_tmdb_id": crew["id"],
-                "name": crew["name"],
-            }
-            for crew in movie_credits.get("crew", [])
-            if crew.get("job") == "Director"
-        ],
-        "writers": [
-            {
-                "people_tmdb_id": crew["id"],
-                "name": crew["name"],
-                "job": crew["job"],
-            }
-            for crew in movie_credits.get("crew", [])
-            if crew.get("job") in ["Writer", "Screenplay", "Teleplay", "Story"]
-        ],
-        "actors": [
-            {
-                "people_tmdb_id": cast["id"],
-                "name":  cast["name"],
-                "character": cast.get("character"),
-                "cast_order": cast.get("order")
-            }
-            for cast in movie_credits.get("cast", [])
-        ],
+        "genres": _format_genres(movie_details.get("genres", []), "movie"),
+        "spoken_languages": spoken_languages,
+        "origin_language": _format_origin_language(
+            movie_details.get("original_language"),
+            spoken_languages,
+        ),
+        "production_countries": _format_production_countries(
+            movie_details.get("production_countries", [])
+        ),
+        "production_companies": _format_production_companies(
+            movie_details.get("production_companies", [])
+        ),
+        "directors": _format_crew(movie_credits.get("crew", []), {"Director"}),
+        "creators": [],
+        "writers": _format_crew(
+            movie_credits.get("crew", []),
+            WRITER_JOBS,
+            include_job=True,
+        ),
+        "actors": _format_cast(movie_credits.get("cast", [])),
+
+        "series_summary": None,
+        "episode_details": None,
     }
+
+
+def _get_tmdb_series_metadata(tmdb_id):
+    series_details = _tmdb_get(f"tv/{tmdb_id}")
+    series_ids = _tmdb_get(f"tv/{tmdb_id}/external_ids")
+    series_credits = _tmdb_get(f"tv/{tmdb_id}/credits")
+
+    spoken_languages = _format_spoken_languages(
+        series_details.get("spoken_languages", [])
+    )
+    episode_run_time = series_details.get("episode_run_time") or []
+    runtime_min = _clean_runtime(episode_run_time[0]) if episode_run_time else None
+
+    return {
+        "tmdb_id": series_details["id"],
+        "imdb_id": series_ids.get("imdb_id"),
+        "media_type": "series",
+        "title": series_details["name"],
+        "original_title": series_details["original_name"],
+        "production_status": series_details.get("status"),
+        "release_date": _clean_date(series_details.get("first_air_date")),
+        "runtime_min": runtime_min,
+
+        "genres": _format_genres(series_details.get("genres", []), "series"),
+        "spoken_languages": spoken_languages,
+        "origin_language": _format_origin_language(
+            series_details.get("original_language"),
+            spoken_languages,
+        ),
+        "production_countries": _format_production_countries(
+            series_details.get("production_countries", [])
+        ),
+        "production_companies": _format_production_companies(
+            series_details.get("production_companies", [])
+        ),
+        "directors": _format_crew(series_credits.get("crew", []), {"Director"}),
+        "creators": _format_people(series_details.get("created_by", [])),
+        "writers": _format_crew(
+            series_credits.get("crew", []),
+            WRITER_JOBS,
+            include_job=True,
+        ),
+        "actors": _format_cast(series_credits.get("cast", [])),
+
+        "series_summary": {
+            "season_count": series_details.get("number_of_seasons"),
+            "episode_count": series_details.get("number_of_episodes"),
+            "first_air_date": _clean_date(series_details.get("first_air_date")),
+            "last_air_date": _clean_date(series_details.get("last_air_date")),
+            "total_runtime_min": None,
+        },
+        "episode_details": None,
+    }
+
+
+def _get_tmdb_episode_metadata(tmdb_id_match):
+    series_tmdb_id = tmdb_id_match.get("series_tmdb_id")
+    season_num = tmdb_id_match.get("season_num")
+    episode_num = tmdb_id_match.get("episode_num")
+
+    if not series_tmdb_id or season_num is None or episode_num is None:
+        raise ValueError(
+            "Episode TMDB metadata requires series_tmdb_id, season_num, "
+            "and episode_num."
+        )
+
+    series_details = _tmdb_get(f"tv/{series_tmdb_id}")
+    series_ids = _tmdb_get(f"tv/{series_tmdb_id}/external_ids")
+    episode_details = _tmdb_get(
+        f"tv/{series_tmdb_id}/season/{season_num}/episode/{episode_num}"
+    )
+    episode_ids = _tmdb_get(
+        f"tv/{series_tmdb_id}/season/{season_num}/episode/{episode_num}/external_ids"
+    )
+    episode_credits = _tmdb_get(
+        f"tv/{series_tmdb_id}/season/{season_num}/episode/{episode_num}/credits"
+    )
+
+    spoken_languages = _format_spoken_languages(
+        series_details.get("spoken_languages", [])
+    )
+    episode_cast = (
+        episode_credits.get("cast", [])
+        + episode_credits.get("guest_stars", [])
+    )
+
+    return {
+        "tmdb_id": episode_details["id"],
+        "imdb_id": episode_ids.get("imdb_id"),
+        "media_type": "episode",
+        "title": episode_details.get("name"),
+        "original_title": episode_details.get("name"),
+        "production_status": series_details.get("status"),
+        "release_date": _clean_date(episode_details.get("air_date")),
+        "runtime_min": _clean_runtime(episode_details.get("runtime")),
+
+        "genres": _format_genres(series_details.get("genres", []), "series"),
+        "spoken_languages": spoken_languages,
+        "origin_language": _format_origin_language(
+            series_details.get("original_language"),
+            spoken_languages,
+        ),
+        "production_countries": _format_production_countries(
+            series_details.get("production_countries", [])
+        ),
+        "production_companies": _format_production_companies(
+            series_details.get("production_companies", [])
+        ),
+        "directors": _format_crew(episode_credits.get("crew", []), {"Director"}),
+        "creators": _format_people(series_details.get("created_by", [])),
+        "writers": _format_crew(
+            episode_credits.get("crew", []),
+            WRITER_JOBS,
+            include_job=True,
+        ),
+        "actors": _format_cast(episode_cast),
+
+        "series_summary": None,
+        "episode_details": {
+            "series_tmdb_id": series_details["id"],
+            "series_imdb_id": series_ids.get("imdb_id"),
+            "series_title": series_details.get("name"),
+            "season_num": season_num,
+            "episode_num": episode_num,
+        },
+    }
+
 
 def get_tmdb_movie_watch_providers(tmdb_id, country_code="AT"):
     url_movie_watch_providers = f"https://api.themoviedb.org/3/movie/{tmdb_id}/watch/providers"
@@ -222,125 +547,17 @@ def get_tmdb_movie_posters(tmdb_id):
 
 
 
-#def get_tmdb_metadata(tmdb_id, media_type):
-#    pass
+def get_tmdb_infos(tmdb_id, media_type):
+    if media_type == "episode":
+        raise ValueError(
+            "Episode metadata requires a resolved TMDB match with "
+            "series_tmdb_id, season_num, and episode_num."
+        )
 
-#def get_tmdb_watch_providers(tmdb_id, media_type):
-#    pass
-
-#def get_tmdb_posters(tmdb_id, media_type):
-#    pass
-
-def get_tmdb_infos(tmdb_id, media_type): #melhor get_tmdb_metadata(tmdb_id, media_type) e separar a parte dos posters? tb o watch_providers separado p eventualmente tb deixar atualizar dentro do movie card?
-    if media_type == "movie":
-        url_movie_details = f"https://api.themoviedb.org/3/movie/{tmdb_id}?language=en-US"
-        response_movie_details = requests.get(url_movie_details, headers=headers)
-        movie_details = json.loads(response_movie_details.text)
-
-        url_movie_images = f"https://api.themoviedb.org/3/movie/{tmdb_id}/images"
-        response_movie_images = requests.get(url_movie_images, headers=headers)
-        movie_images = json.loads(response_movie_images.text)
-
-        url_movie_watch_providers = f"https://api.themoviedb.org/3/movie/{tmdb_id}/watch/providers"
-        response_movie_watch_providers = requests.get(url_movie_watch_providers, headers=headers)
-        movie_watch_providers = json.loads(response_movie_watch_providers.text)
-
-        url_movie_credits = f"https://api.themoviedb.org/3/movie/{tmdb_id}/credits?language=en-US"
-        response_movie_credits = requests.get(url_movie_credits, headers=headers)
-        movie_credits = json.loads(response_movie_credits.text)
-
-        return get_tmdb_movie_metadata(movie_details, movie_images, movie_watch_providers, movie_credits)
-
-    elif media_type == "series":
-        url_series_details = f"https://api.themoviedb.org/3/tv/{tmdb_id}?language=en-US"
-        response_series_details = requests.get(url_series_details, headers=headers)
-        series_details = json.loads(response_series_details.text)
-
-        url_series_ids = f"https://api.themoviedb.org/3/tv/{tmdb_id}/external_ids"
-        response_series_ids = requests.get(url_series_ids, headers=headers)
-        series_ids = json.loads(response_series_ids.text)
-
-        #f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/3/images"
-        #f"https://api.themoviedb.org/3/tv/{tmdb_id}/images"
-        #f"https://api.themoviedb.org/3/movie/{tmdb_id}/images"
-        url_series_images = f"https://api.themoviedb.org/3/tv/{tmdb_id}/images"
-        response_series_images = requests.get(url_series_images, headers=headers)
-        series_images = json.loads(response_series_images.text)
-
-        url_series_watch_providers = f"https://api.themoviedb.org/3/tv/{tmdb_id}/watch/providers"
-        response_series_watch_providers = requests.get(url_series_watch_providers, headers=headers)
-        series_watch_providers = json.loads(response_series_watch_providers.text)
-
-        url_series_credits = f"https://api.themoviedb.org/3/movie/{tmdb_id}/credits?language=en-US"
-        response_series_credits = requests.get(url_series_credits, headers=headers)
-        series_credits = json.loads(response_series_credits.text)
-
-        return get_tmdb_movie_metadata(series_details, series_ids, series_images, series_watch_providers, series_credits)
-
-    elif media_type == "episode":
-        return None
-    else:
-        return "type not found"
-
-
-
-def get_tmdb_series_infos(series_details, series_ids, series_images, series_watch_providers, series_credits):
-    return {
-        "tmdb_id": series_details["id"],
-        "imdb_id": series_ids.get("imdb_id"),
-        "media_type": "series",
-        "title": series_details["name"],
-        "original_title": series_details["original_name"],
-        "first_air_date": series_details.get("first_air_date") or None,
-        "last_air_date": series_details.get("last_air_date") or None,
-        "season_count": series_details.get("number_of_seasons") or None,
-        "episode_count": series_details.get("number_of_episodes") or None,
-        "genres": [
-            genre["id"]
-            for genre in series_details["genres"]
-        ],
-        "poster_filenames": [
-            poster["file_path"].removeprefix("/")
-            for poster in series_images.get("posters", [])
-            if poster.get("file_path")
-                and poster.get("iso_639_1") in {"en", None, series_details.get("original_language")}
-                and 0.64 <= poster.get("aspect_ratio", 0) <= 0.72
-                and poster.get("width", 0) >= 500
-                and poster.get("height", 0) >= 750
-        ],
-        "streaming_providers": [
-            {
-                "provider_tmdb_id": provider["provider_id"],
-                "provider_name": provider["provider_name"],
-                "country_code": "AT",
-            }
-            for provider in (
-                series_watch_providers.get("results", {}).get("AT", {}).get("flatrate", [])
-            )
-        ],
-        "spoken_languages": [
-            spoken_language["iso_639_1"]
-            for spoken_language in series_details["spoken_languages"]
-        ],
-        "production_countries": [
-            production_country["iso_3166_1"]
-            for production_country in series_details["production_countries"]
-        ],
-        "production_companies": [
-            {
-                "company_tmdb_id": production_company["id"],
-                "name": production_company["name"]
-            }
-            for production_company in series_details["production_companies"]
-        ],
-        "creators": [
-            {
-                "people_tmdb_id": creator["id"],
-                "name": creator["name"],
-            }
-            for creator in series_details["created_by"]
-        ],
-    }
+    return get_tmdb_media_metadata({
+        "media_type": media_type,
+        "tmdb_id": tmdb_id,
+    })
 
 
 #test_infos = get_tmdb_infos(194662, "movie")
