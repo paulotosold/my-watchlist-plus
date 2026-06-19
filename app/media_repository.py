@@ -372,8 +372,138 @@ def get_db_media_watch_providers(conn, metadata):
         for row in cursor.fetchall()
     ]
 
+def _format_db_poster_row(row, scope, series_tmdb_id=None, season_num=None):
+    return {
+        "scope": scope,
+        "filename": row["filename"],
+        "source": row["source"],
+        "curation_status": row["curation_status"],
+        "is_default": bool(row["is_default"]),
+        "series_tmdb_id": series_tmdb_id,
+        "season_num": season_num,
+    }
+
+def _get_db_media_posters_by_media(conn, media_type, tmdb_id, scope="media"):
+    cursor = conn.execute(
+        """
+        SELECT
+            mp.filename,
+            mp.source,
+            mp.curation_status,
+            mp.is_default
+        FROM media_posters mp
+        JOIN media m
+            ON m.id = mp.media_id
+        WHERE m.tmdb_id = ?
+          AND m.media_type = ?
+        ORDER BY
+            mp.is_default DESC,
+            CASE mp.curation_status
+                WHEN 'selected' THEN 1
+                WHEN 'pending' THEN 2
+                WHEN 'failed' THEN 3
+                WHEN 'discarded' THEN 4
+                ELSE 5
+            END,
+            mp.filename
+        """,
+        (
+            tmdb_id,
+            media_type,
+        ),
+    )
+
+    return [
+        _format_db_poster_row(row, scope)
+        for row in cursor.fetchall()
+    ]
+
+def _get_db_season_posters(conn, series_tmdb_id, season_num):
+    cursor = conn.execute(
+        """
+        SELECT
+            sp.filename,
+            sp.source,
+            sp.curation_status,
+            sp.is_default
+        FROM season_posters sp
+        JOIN media s
+            ON s.id = sp.series_id
+        WHERE s.tmdb_id = ?
+          AND s.media_type = 'series'
+          AND sp.season_num = ?
+        ORDER BY
+            sp.is_default DESC,
+            CASE sp.curation_status
+                WHEN 'selected' THEN 1
+                WHEN 'pending' THEN 2
+                WHEN 'failed' THEN 3
+                WHEN 'discarded' THEN 4
+                ELSE 5
+            END,
+            sp.filename
+        """,
+        (
+            series_tmdb_id,
+            season_num,
+        ),
+    )
+
+    return [
+        _format_db_poster_row(
+            row,
+            scope="season",
+            series_tmdb_id=series_tmdb_id,
+            season_num=season_num,
+        )
+        for row in cursor.fetchall()
+    ]
+
 def get_db_media_posters(conn, metadata):
-    pass
+    media_type = metadata["media_type"]
+
+    if media_type in {"movie", "series"}:
+        return _get_db_media_posters_by_media(
+            conn,
+            media_type=media_type,
+            tmdb_id=metadata["tmdb_id"],
+        )
+
+    if media_type == "episode":
+        episode_details = metadata.get("episode_details") or {}
+        series_tmdb_id = episode_details.get("series_tmdb_id")
+        season_num = episode_details.get("season_num")
+
+        media_posters = _get_db_media_posters_by_media(
+            conn,
+            media_type="episode",
+            tmdb_id=metadata["tmdb_id"],
+        )
+
+        season_posters = []
+        series_posters = []
+
+        if series_tmdb_id and season_num is not None:
+            season_posters = _get_db_season_posters(
+                conn,
+                series_tmdb_id=series_tmdb_id,
+                season_num=season_num,
+            )
+
+        if series_tmdb_id:
+            series_posters = _get_db_media_posters_by_media(
+                conn,
+                media_type="series",
+                tmdb_id=series_tmdb_id,
+                scope="series",
+            )
+
+            for poster in series_posters:
+                poster["series_tmdb_id"] = series_tmdb_id
+
+        return media_posters + season_posters + series_posters
+
+    raise ValueError(f"Unsupported media_type: {media_type}")
 
 def get_db_media_user_data(conn, metadata):
     pass
