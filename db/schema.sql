@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS media (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     tmdb_id INTEGER NOT NULL,
-    imdb_id TEXT NOT NULL,
+    imdb_id TEXT,
     media_type TEXT NOT NULL,
     title TEXT NOT NULL,
     original_title TEXT,

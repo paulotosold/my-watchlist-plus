@@ -1,6 +1,8 @@
 [tmdb]
 language = "en-US"
 watch_region = "AT"
+poster_size = "w500"
+max_posters_per_media = 12
 
 [watch_providers]
 access_types = ["flatrate", "rent", "buy"]
