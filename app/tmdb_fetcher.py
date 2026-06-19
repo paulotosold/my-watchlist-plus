@@ -665,6 +665,158 @@ def get_tmdb_media_user_data(tmdb_id_match=None):
     }
 
 
+def get_tmdb_series_episode_matches(series_tmdb_id):
+    series_details = _tmdb_get(f"tv/{series_tmdb_id}")
+    episode_matches = []
+
+    for season in series_details.get("seasons", []):
+        season_num = season.get("season_number")
+
+        if season_num is None or season_num < 1:
+            continue
+
+        if season.get("episode_count") == 0:
+            continue
+
+        season_details = _tmdb_get(
+            f"tv/{series_tmdb_id}/season/{season_num}"
+        )
+
+        for episode in season_details.get("episodes", []):
+            episode_num = episode.get("episode_number")
+            episode_tmdb_id = episode.get("id")
+
+            if episode_num is None or episode_tmdb_id is None:
+                continue
+
+            episode_matches.append({
+                "media_type": "episode",
+                "tmdb_id": episode_tmdb_id,
+                "title": episode.get("name"),
+                "release_date": episode.get("air_date"),
+                "series_tmdb_id": series_tmdb_id,
+                "season_num": season_num,
+                "episode_num": episode_num,
+            })
+
+    return sorted(
+        episode_matches,
+        key=lambda match: (match["season_num"], match["episode_num"]),
+    )
+
+
+def get_tmdb_series_episode_metadata_list(
+    series_tmdb_id,
+    include_episode_imdb_ids=True,
+):
+    series_details = _tmdb_get(f"tv/{series_tmdb_id}")
+    series_ids = _tmdb_get(f"tv/{series_tmdb_id}/external_ids")
+
+    spoken_languages = _format_spoken_languages(
+        series_details.get("spoken_languages", [])
+    )
+    episode_metadata_list = []
+
+    for season in series_details.get("seasons", []):
+        season_num = season.get("season_number")
+
+        if season_num is None or season_num < 1:
+            continue
+
+        if season.get("episode_count") == 0:
+            continue
+
+        season_details = _tmdb_get(
+            f"tv/{series_tmdb_id}/season/{season_num}"
+        )
+
+        for episode in season_details.get("episodes", []):
+            episode_metadata = _format_series_episode_seed_metadata(
+                series_details=series_details,
+                series_ids=series_ids,
+                spoken_languages=spoken_languages,
+                episode=episode,
+                include_episode_imdb_id=include_episode_imdb_ids,
+            )
+
+            if episode_metadata is not None:
+                episode_metadata_list.append(episode_metadata)
+
+    return sorted(
+        episode_metadata_list,
+        key=lambda metadata: (
+            metadata["episode_details"]["season_num"],
+            metadata["episode_details"]["episode_num"],
+        ),
+    )
+
+
+def _format_series_episode_seed_metadata(
+    series_details,
+    series_ids,
+    spoken_languages,
+    episode,
+    include_episode_imdb_id,
+):
+    episode_tmdb_id = episode.get("id")
+    season_num = episode.get("season_number")
+    episode_num = episode.get("episode_number")
+
+    if episode_tmdb_id is None or season_num is None or episode_num is None:
+        return None
+
+    title = episode.get("name") or f"Episode {episode_num}"
+    imdb_id = None
+
+    if include_episode_imdb_id:
+        episode_ids = _tmdb_get(
+            "tv/{series_tmdb_id}/season/{season_num}/episode/"
+            "{episode_num}/external_ids".format(
+                series_tmdb_id=series_details["id"],
+                season_num=season_num,
+                episode_num=episode_num,
+            )
+        )
+        imdb_id = episode_ids.get("imdb_id")
+
+    return {
+        "tmdb_id": episode_tmdb_id,
+        "imdb_id": imdb_id,
+        "media_type": "episode",
+        "title": title,
+        "original_title": title,
+        "production_status": series_details.get("status"),
+        "release_date": _clean_date(episode.get("air_date")),
+        "runtime_min": _clean_runtime(episode.get("runtime")),
+
+        "genres": _format_genres(series_details.get("genres", []), "series"),
+        "spoken_languages": spoken_languages,
+        "origin_language": _format_origin_language(
+            series_details.get("original_language"),
+            spoken_languages,
+        ),
+        "production_countries": _format_production_countries(
+            series_details.get("production_countries", [])
+        ),
+        "production_companies": _format_production_companies(
+            series_details.get("production_companies", [])
+        ),
+        "directors": [],
+        "creators": _format_people(series_details.get("created_by", [])),
+        "writers": [],
+        "actors": [],
+
+        "series_summary": None,
+        "episode_details": {
+            "series_tmdb_id": series_details["id"],
+            "series_imdb_id": series_ids.get("imdb_id"),
+            "series_title": series_details.get("name"),
+            "season_num": season_num,
+            "episode_num": episode_num,
+        },
+    }
+
+
 def _get_tmdb_movie_posters(tmdb_id):
     movie_details = _tmdb_get(f"movie/{tmdb_id}")
     movie_images = _tmdb_get(f"movie/{tmdb_id}/images")

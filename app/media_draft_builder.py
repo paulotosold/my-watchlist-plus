@@ -22,7 +22,18 @@ def build_media_draft_from_tmdb(imdb_id):
     if tmdb_match["status"] != "resolved":
         raise ValueError(tmdb_match.get("reason") or "TMDB match was not resolved.")
 
+    media_draft = build_media_draft_from_tmdb_match(tmdb_match)
+    metadata = media_draft["metadata"]
+
+    if not metadata.get("imdb_id"):
+        metadata["imdb_id"] = imdb_id
+
+    return media_draft
+
+
+def build_media_draft_from_tmdb_match(tmdb_match):
     metadata = app.tmdb_fetcher.get_tmdb_media_metadata(tmdb_match)
+
     watch_providers = app.tmdb_fetcher.get_tmdb_media_watch_providers(tmdb_match)
     posters = app.tmdb_fetcher.get_tmdb_media_posters(tmdb_match)
     user_data = app.tmdb_fetcher.get_tmdb_media_user_data(tmdb_match)
