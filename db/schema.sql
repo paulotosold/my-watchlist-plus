@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS episode_details (
 CREATE VIEW IF NOT EXISTS series_summary AS
 SELECT
     s.id AS series_id,
+    s.title AS series_title,
 
     COUNT(DISTINCT ed.season_num) AS season_count,
     COUNT(ed.media_id) AS episode_count,
@@ -74,7 +75,9 @@ LEFT JOIN media e
 
 WHERE s.media_type = 'series'
 
-GROUP BY s.id;
+GROUP BY
+    s.id,
+    s.title;
 -- ----------------------------------------------------------
 
 -- ----------------------------------------------------------
@@ -141,21 +144,6 @@ CREATE TABLE IF NOT EXISTS season_posters (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_season_posters_one_default
 ON season_posters (series_id, season_num)
 WHERE is_default = 1;
--- ----------------------------------------------------------
-
--- ----------------------------------------------------------
--- raw_input_history table (only confirmed inputs are recorded)
-CREATE TABLE IF NOT EXISTS raw_input_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    user_input TEXT NOT NULL,
-    media_id INTEGER,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (media_id)
-        REFERENCES media(id)
-        ON DELETE SET NULL
-);
 -- ----------------------------------------------------------
 
 -- ----------------------------------------------------------

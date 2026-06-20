@@ -460,8 +460,6 @@ def _get_tmdb_series_metadata(tmdb_id):
     spoken_languages = _format_spoken_languages(
         series_details.get("spoken_languages", [])
     )
-    episode_run_time = series_details.get("episode_run_time") or []
-    runtime_min = _clean_runtime(episode_run_time[0]) if episode_run_time else None
 
     return {
         "tmdb_id": series_details["id"],
@@ -471,7 +469,7 @@ def _get_tmdb_series_metadata(tmdb_id):
         "original_title": series_details["original_name"],
         "production_status": series_details.get("status"),
         "release_date": _clean_date(series_details.get("first_air_date")),
-        "runtime_min": runtime_min,
+        "runtime_min": None,
 
         "genres": _format_genres(series_details.get("genres", []), "series"),
         "spoken_languages": spoken_languages,

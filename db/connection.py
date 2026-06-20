@@ -20,6 +20,8 @@ def initialize_database() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     with get_connection() as conn:
+        drop_database_views(conn)
+
         with open(SCHEMA_PATH, "r", encoding="utf-8") as schema_file:
             conn.executescript(schema_file.read())
 
@@ -32,6 +34,10 @@ def initialize_database() -> None:
             conn.executescript(seed_file.read())
 
         conn.commit()
+
+
+def drop_database_views(conn: sqlite3.Connection) -> None:
+    conn.execute("DROP VIEW IF EXISTS series_summary;")
 
 
 def migrate_database(conn: sqlite3.Connection) -> None:
