@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QGridLayout, QMainWindow, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QGridLayout, QWidget
 
 from app.media_card import MediaCard
 
@@ -31,11 +31,19 @@ class MediaBoard(QWidget):
             self.layout.setRowStretch(row, 1)
 
     def load_media(self, filtered_media):
-        for i, card in enumerate(self.cards):
-                if len(filtered_media.media_list) <= i:
-                    break
-                if not card.is_pinned:
-                    card.init_card_session(filtered_media)
+        media_count = len(filtered_media.media_list)
+        loaded_cards = 0
+
+        for card in self.cards:
+            if card.is_pinned:
+                continue
+
+            if media_count == 0 or loaded_cards >= media_count:
+                card.clear_card()
+                continue
+
+            card.init_card_session(filtered_media)
+            loaded_cards += 1
 
     def _clear_grid(self) -> None:
         while self.layout.count():

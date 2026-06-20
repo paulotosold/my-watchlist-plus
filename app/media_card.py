@@ -1,5 +1,8 @@
 from app.media_card_info_panel import MediaCardInfoPanel
 
+from pathlib import Path
+import random
+
 from PIL import Image
 import numpy as np
 
@@ -83,6 +86,9 @@ class MediaCard(QFrame):
         self.current_media = None
         self.media_index_history = []
         self.current_index_in_history = -1
+        self.poster_index = 0
+        self.poster_filenames = []
+        self.poster_index_by_media_key = {}
 
         # layer 1 – poster
         self.poster_pixmap = QPixmap()
@@ -164,17 +170,28 @@ class MediaCard(QFrame):
 
     def init_card_session(self, filtered_media):
         self.is_disabled = False
+        self.is_hidden = False
         self.filtered_media = filtered_media
+        self.media_index_history = []
+        self.current_index_in_history = -1
+        self.poster_index = 0
+        self.poster_filenames = []
+        self.poster_index_by_media_key = {}
+        self.show_card_elements()
+        self.info_panel.hide()
         self.load_next_media()
 
     def load_next_media(self):
+        media_list = self.filtered_media.media_list if self.filtered_media else []
+
+        if not media_list:
+            self.clear_card()
+            return
+
         if self.current_index_in_history + 1 == len(self.media_index_history):
-            next_media_index = self.filtered_media.next_media_index
+            next_media_index = self._take_next_media_index(media_list)
             self.media_index_history.append(next_media_index)
             self.current_index_in_history += 1
-
-            media_list = self.filtered_media.media_list
-            self.filtered_media.next_media_index = (self.filtered_media.next_media_index + 1) % len(media_list)
 
         else:
             self.current_index_in_history += 1
@@ -183,54 +200,79 @@ class MediaCard(QFrame):
         self.load_card_at_index(next_media_index)
 
     def load_previous_media(self):
-        if self.current_index_in_history <= 0 and not self.poster_pixmap.isNull():
+        if self.is_hidden:
+            current_media_index = self.media_index_history[self.current_index_in_history]
+            self.load_card_at_index(current_media_index)
             return
 
-        if not self.poster_pixmap.isNull():
-            self.current_index_in_history -= 1
+        if self.current_index_in_history <= 0:
+            return
+
+        self.current_index_in_history -= 1
 
         previous_media_index = self.media_index_history[self.current_index_in_history]
         self.load_card_at_index(previous_media_index)
 
     def load_card_at_index(self, filtered_media_index):
         self.current_media = self.filtered_media.media_list[filtered_media_index]
+        self.is_hidden = False
+        self.poster_filenames = self._get_poster_filenames()
+        self.poster_index = self._get_initial_poster_index()
+        self._save_current_poster_index()
+        self.show_card_elements()
+        self.info_panel.hide()
 
         # set poster image
         self.update_poster_image()
 
         # set info panel
         poster_slots = [self.info_panel.poster_1, self.info_panel.poster_2, self.info_panel.poster_3]
-        media_posters = self.current_media["posters"]
 
         for i, poster_slot in enumerate(poster_slots):
-            if i < len(media_posters):
-                pixmap = QPixmap("data/media_posters/" + media_posters[i])
-                poster_slot.setPixmap(pixmap)
+            if i < len(self.poster_filenames):
+                pixmap = QPixmap(str(self._poster_path(self.poster_filenames[i])))
+                if pixmap.isNull():
+                    poster_slot.clear()
+                else:
+                    poster_slot.setPixmap(pixmap)
             else:
                 poster_slot.clear()
 
-        self.info_panel.title_value.setText(self.current_media["title"])
-        self.info_panel.year_value.setText(self.current_media["year"])
-        self.info_panel.duration_value.setText(self.current_media["duration"])
-        self.info_panel.status_value.setText(self.current_media["status"])
-        if self.current_media["rating"]:
+        self.info_panel.title_value.setText(self._get_title())
+        self.info_panel.year_value.setText(self._get_year())
+        self.info_panel.duration_value.setText(self._get_duration())
+        self.info_panel.status_value.setText(self._get_watch_state())
+
+        rating = self._get_rating()
+        if rating:
             self.info_panel.rating_label.show()
-            self.info_panel.rating_value.setText(self.current_media["rating"])
+            self.info_panel.rating_value.setText(rating)
         else:
             self.info_panel.rating_label.hide()
             self.info_panel.rating_value.clear()
-        self.info_panel.streaming_value.setText(self.current_media["streaming_at"])
+        self.info_panel.streaming_value.setText(self._get_streaming_at())
+        self._update_navigation_buttons()
 
         #media_list = self.filtered_media.media_list
         #current_index = self.filtered_media.next_media_index
         #self.filtered_media.next_media_index = (current_index + 1) % len(media_list)
 
     def update_poster_image(self):
-        poster_index = self.current_media["poster_index"]
-        poster_filename = self.current_media["posters"][poster_index]
-        poster_path = "data/media_posters/" + poster_filename
+        if not self.poster_filenames:
+            self.poster_layer.clear()
+            self.poster_pixmap = QPixmap()
+            return
 
-        self.poster_pixmap = load_pixmap_with_red_fix(poster_path, 0.9)
+        poster_filename = self.poster_filenames[self.poster_index]
+        poster_path = self._poster_path(poster_filename)
+
+        try:
+            self.poster_pixmap = load_pixmap_with_red_fix(poster_path, 0.9)
+        except (FileNotFoundError, OSError):
+            self.poster_layer.clear()
+            self.poster_pixmap = QPixmap()
+            return
+
         #self.poster_pixmap = QPixmap("images/posters/" + poster_filename)
         self.poster_layer.setPixmap(
            self.poster_pixmap.scaledToWidth(
@@ -244,9 +286,11 @@ class MediaCard(QFrame):
         if self.poster_pixmap.isNull():
             return
 
-        posters = self.current_media["posters"]
-        current_index = self.current_media["poster_index"]
-        self.current_media["poster_index"] = (current_index + 1) % len(posters)
+        if not self.poster_filenames:
+            return
+
+        self.poster_index = (self.poster_index + 1) % len(self.poster_filenames)
+        self._save_current_poster_index()
 
         self.update_poster_image()
 
@@ -258,16 +302,19 @@ class MediaCard(QFrame):
 
     def on_close_clicked(self):
         self.clear_pinned()
+        self.is_hidden = True
         self.hide_card_elements()
+        self._update_navigation_buttons()
 
     def on_previous_clicked(self):
+        if not self._can_go_previous():
+            return
+
         self.clear_pinned()
-        self.show_card_elements()
         self.load_previous_media()
 
     def on_next_clicked(self):
         self.clear_pinned()
-        self.show_card_elements()
         self.load_next_media()
 
     def clear_pinned(self):
@@ -297,7 +344,7 @@ class MediaCard(QFrame):
     def hide_info_panel(self):
         self.info_panel.hide()
 
-        if self.underMouse():
+        if self.underMouse() and not self.is_disabled:
             self.overlay_layer.show()
             self.overlay_layer.raise_()
 
@@ -305,15 +352,235 @@ class MediaCard(QFrame):
         self.btn_info.hide()
         self.btn_close.hide()
         self.btn_pin.hide()
+        self.info_panel.hide()
         self.poster_layer.clear()
         self.poster_pixmap = QPixmap()
+        self.btn_next.show()
+        self.overlay_layer.show()
+        self.overlay_layer.raise_()
+        self._update_navigation_buttons()
 
     def show_card_elements(self):
         self.btn_info.show()
         self.btn_close.show()
+        self.btn_next.show()
         self.btn_pin.show()
+        self._update_navigation_buttons()
+
+    def clear_card(self):
+        self.is_disabled = True
+        self.is_hidden = False
+        self.is_pinned = False
+        self.filtered_media = None
+        self.current_media = None
+        self.media_index_history = []
+        self.current_index_in_history = -1
+        self.poster_index = 0
+        self.poster_filenames = []
+        self.pin_layer.clear()
+        self.update_pin_status()
+        self.hide_card_elements()
+        self.btn_previous.hide()
+        self.btn_next.hide()
+        self.overlay_layer.hide()
+
+    def _update_navigation_buttons(self):
+        if self.is_disabled:
+            self.btn_previous.hide()
+            self.btn_next.hide()
+            return
+
+        self.btn_previous.show()
+        self._set_button_active(self.btn_previous, self._can_go_previous())
+
+        self.btn_next.show()
+        self._set_button_active(self.btn_next, True)
+
+    def _set_button_active(self, button, is_active):
+        button.setEnabled(True)
+        button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+            if is_active
+            else Qt.CursorShape.ArrowCursor
+        )
+
+        opacity = button.graphicsEffect()
+
+        if opacity is not None:
+            opacity.setOpacity(0.9 if is_active else 0.0)
+
+    def _can_go_previous(self):
+        return self.is_hidden or self.current_index_in_history > 0
+
+    def _get_metadata(self):
+        return self.current_media.get("metadata", {}) if self.current_media else {}
+
+    def _get_user_data(self):
+        return self.current_media.get("user_data", {}) if self.current_media else {}
+
+    def _get_title(self):
+        return self._get_metadata().get("title") or "Untitled"
+
+    def _get_year(self):
+        metadata = self._get_metadata()
+        release_date = metadata.get("release_date")
+
+        if not release_date and metadata.get("media_type") == "series":
+            series_summary = metadata.get("series_summary") or {}
+            release_date = series_summary.get("first_air_date")
+
+        if not release_date:
+            return ""
+
+        return str(release_date)[:4]
+
+    def _get_duration(self):
+        metadata = self._get_metadata()
+
+        if metadata.get("media_type") == "series":
+            series_summary = metadata.get("series_summary") or {}
+            episode_count = series_summary.get("episode_count")
+
+            if episode_count in (None, "", 0):
+                return ""
+
+            return f"{episode_count} eps"
+
+        runtime_min = metadata.get("runtime_min")
+
+        if runtime_min in (None, "", 0):
+            return ""
+
+        return f"{runtime_min} min"
+
+    def _get_watch_state(self):
+        watch_state = self._get_user_data().get("watch_state") or ""
+        return watch_state.replace("_", " ")
+
+    def _get_rating(self):
+        rating = self._get_user_data().get("rating")
+
+        if rating is None:
+            return ""
+
+        return str(rating)
+
+    def _get_streaming_at(self):
+        providers = self.current_media.get("watch_providers", []) if self.current_media else []
+        access_order = ("flatrate", "rent", "buy")
+        labels = {
+            "flatrate": "Flatrate",
+            "rent": "Rent",
+            "buy": "Buy",
+        }
+        grouped_providers = {access_type: [] for access_type in access_order}
+        seen = set()
+
+        for provider in providers:
+            access_type = provider.get("access_type")
+            provider_name = provider.get("provider_name")
+
+            if access_type not in grouped_providers or not provider_name:
+                continue
+
+            key = (access_type, provider_name)
+
+            if key in seen:
+                continue
+
+            grouped_providers[access_type].append(provider_name)
+            seen.add(key)
+
+        lines = [
+            f"{labels[access_type]}: {', '.join(grouped_providers[access_type])}"
+            for access_type in access_order
+            if grouped_providers[access_type]
+        ]
+
+        return "\n".join(lines)
+
+    def _get_poster_filenames(self):
+        posters = self.current_media.get("posters", []) if self.current_media else []
+        filenames = []
+        seen = set()
+
+        for poster in posters:
+            if poster.get("curation_status") not in {"selected", "pending"}:
+                continue
+
+            filename = poster.get("filename")
+
+            if not filename or filename in seen:
+                continue
+
+            if not self._poster_path(filename).exists():
+                continue
+
+            filenames.append(filename)
+            seen.add(filename)
+
+        return filenames
+
+    def _get_initial_poster_index(self):
+        if not self.poster_filenames:
+            return 0
+
+        saved_index = self.poster_index_by_media_key.get(self._get_media_key())
+
+        if saved_index is not None:
+            return min(saved_index, len(self.poster_filenames) - 1)
+
+        return random.randrange(len(self.poster_filenames))
+
+    def _take_next_media_index(self, media_list):
+        next_media_index = self.filtered_media.next_media_index
+        current_media_index = self._get_current_media_index()
+
+        if len(media_list) > 1 and next_media_index == current_media_index:
+            next_media_index = (next_media_index + 1) % len(media_list)
+
+        self.filtered_media.next_media_index = (next_media_index + 1) % len(media_list)
+        return next_media_index
+
+    def _get_current_media_index(self):
+        if self.current_index_in_history < 0:
+            return None
+
+        if self.current_index_in_history >= len(self.media_index_history):
+            return None
+
+        return self.media_index_history[self.current_index_in_history]
+
+    def _save_current_poster_index(self):
+        media_key = self._get_media_key()
+
+        if media_key is None:
+            return
+
+        self.poster_index_by_media_key[media_key] = self.poster_index
+
+    def _get_media_key(self):
+        if not self.current_media:
+            return None
+
+        metadata = self.current_media.get("metadata", {})
+        media_id = self.current_media.get("media_id")
+
+        if media_id is not None:
+            return ("db", media_id)
+
+        return (
+            metadata.get("media_type"),
+            metadata.get("tmdb_id"),
+        )
+
+    def _poster_path(self, filename):
+        return Path("data/media_posters") / filename.lstrip("/")
 
     def show_card(self):
+        if self.is_disabled:
+            return
+
         self.overlay_layer.show()
 
     def resizeEvent(self, event):
@@ -367,7 +634,7 @@ class MediaCard(QFrame):
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        if not self.info_panel.isVisible():
+        if not self.info_panel.isVisible() and not self.is_hidden:
             self.overlay_layer.hide()
         super().leaveEvent(event)
 
