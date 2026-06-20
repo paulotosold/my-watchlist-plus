@@ -1,4 +1,5 @@
 from app.media_card_info_panel import MediaCardInfoPanel
+from app.config import SUBSCRIBED_FLATRATE_PROVIDER_NAMES
 
 from pathlib import Path
 import random
@@ -225,18 +226,12 @@ class MediaCard(QFrame):
         # set poster image
         self.update_poster_image()
 
-        # set info panel
-        poster_slots = [self.info_panel.poster_1, self.info_panel.poster_2, self.info_panel.poster_3]
+        info_panel_poster = self._get_info_panel_poster_filename()
 
-        for i, poster_slot in enumerate(poster_slots):
-            if i < len(self.poster_filenames):
-                pixmap = QPixmap(str(self._poster_path(self.poster_filenames[i])))
-                if pixmap.isNull():
-                    poster_slot.clear()
-                else:
-                    poster_slot.setPixmap(pixmap)
-            else:
-                poster_slot.clear()
+        if info_panel_poster:
+            self._set_info_panel_poster_image(info_panel_poster)
+        else:
+            self._clear_info_panel_poster_image()
 
         self.info_panel.title_value.setText(self._get_title())
         self.info_panel.year_value.setText(self._get_year())
@@ -250,7 +245,10 @@ class MediaCard(QFrame):
         else:
             self.info_panel.rating_label.hide()
             self.info_panel.rating_value.clear()
-        self.info_panel.streaming_value.setText(self._get_streaming_at())
+
+        streaming_label, streaming_value = self._get_subscription_streaming_info()
+        self.info_panel.streaming_label.setText(streaming_label)
+        self.info_panel.streaming_value.setText(streaming_value)
         self._update_navigation_buttons()
 
         #media_list = self.filtered_media.media_list
@@ -465,39 +463,33 @@ class MediaCard(QFrame):
 
         return str(rating)
 
-    def _get_streaming_at(self):
+    def _get_subscription_streaming_info(self):
         providers = self.current_media.get("watch_providers", []) if self.current_media else []
-        access_order = ("flatrate", "rent", "buy")
-        labels = {
-            "flatrate": "Flatrate",
-            "rent": "Rent",
-            "buy": "Buy",
+        subscribed_provider_names = {
+            provider_name.strip().casefold()
+            for provider_name in SUBSCRIBED_FLATRATE_PROVIDER_NAMES
         }
-        grouped_providers = {access_type: [] for access_type in access_order}
+        matched_provider_names = []
         seen = set()
 
         for provider in providers:
-            access_type = provider.get("access_type")
             provider_name = provider.get("provider_name")
 
-            if access_type not in grouped_providers or not provider_name:
+            if provider.get("access_type") != "flatrate" or not provider_name:
                 continue
 
-            key = (access_type, provider_name)
+            normalized_name = provider_name.strip().casefold()
 
-            if key in seen:
+            if normalized_name not in subscribed_provider_names or normalized_name in seen:
                 continue
 
-            grouped_providers[access_type].append(provider_name)
-            seen.add(key)
+            matched_provider_names.append(provider_name)
+            seen.add(normalized_name)
 
-        lines = [
-            f"{labels[access_type]}: {', '.join(grouped_providers[access_type])}"
-            for access_type in access_order
-            if grouped_providers[access_type]
-        ]
+        if matched_provider_names:
+            return "Streaming for you:", ", ".join(matched_provider_names)
 
-        return "\n".join(lines)
+        return "Not in your subscriptions", ""
 
     def _get_poster_filenames(self):
         posters = self.current_media.get("posters", []) if self.current_media else []
@@ -531,6 +523,45 @@ class MediaCard(QFrame):
             return min(saved_index, len(self.poster_filenames) - 1)
 
         return random.randrange(len(self.poster_filenames))
+
+    def _get_info_panel_poster_filename(self):
+        posters = self.current_media.get("posters", []) if self.current_media else []
+        first_filename = None
+
+        for poster in posters:
+            if poster.get("curation_status") not in {"selected", "pending"}:
+                continue
+
+            filename = poster.get("filename")
+
+            if not filename or not self._poster_path(filename).exists():
+                continue
+
+            if first_filename is None:
+                first_filename = filename
+
+            if poster.get("is_default"):
+                return filename
+
+        return first_filename
+
+    def _set_info_panel_poster_image(self, filename):
+        pixmap = QPixmap(str(self._poster_path(filename)))
+
+        if pixmap.isNull():
+            self._clear_info_panel_poster_image()
+            return
+
+        scaled_pixmap = pixmap.scaledToHeight(
+            140,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.info_panel.poster_image.setFixedSize(scaled_pixmap.size())
+        self.info_panel.poster_image.setPixmap(scaled_pixmap)
+
+    def _clear_info_panel_poster_image(self):
+        self.info_panel.poster_image.clear()
+        self.info_panel.poster_image.setFixedSize(94, 140)
 
     def _take_next_media_index(self, media_list):
         next_media_index = self.filtered_media.next_media_index

@@ -316,6 +316,18 @@ def _format_tmdb_posters(
     return formatted_posters
 
 
+def _tmdb_image_params(original_language=None):
+    include_image_languages = ["en", "null"]
+
+    if original_language and original_language not in include_image_languages:
+        include_image_languages.append(original_language)
+
+    return {
+        "language": TMDB_LANGUAGE,
+        "include_image_language": ",".join(include_image_languages),
+    }
+
+
 # -----------------------------------------------------------------------
 
 def find_tmdb_match_by_imdb_id(imdb_id):
@@ -817,23 +829,31 @@ def _format_series_episode_seed_metadata(
 
 def _get_tmdb_movie_posters(tmdb_id):
     movie_details = _tmdb_get(f"movie/{tmdb_id}")
-    movie_images = _tmdb_get(f"movie/{tmdb_id}/images")
+    original_language = movie_details.get("original_language")
+    movie_images = _tmdb_get(
+        f"movie/{tmdb_id}/images",
+        params=_tmdb_image_params(original_language),
+    )
 
     return _format_tmdb_posters(
         movie_images,
         scope="media",
-        original_language=movie_details.get("original_language"),
+        original_language=original_language,
     )
 
 
 def _get_tmdb_series_posters(tmdb_id):
     series_details = _tmdb_get(f"tv/{tmdb_id}")
-    series_images = _tmdb_get(f"tv/{tmdb_id}/images")
+    original_language = series_details.get("original_language")
+    series_images = _tmdb_get(
+        f"tv/{tmdb_id}/images",
+        params=_tmdb_image_params(original_language),
+    )
 
     return _format_tmdb_posters(
         series_images,
         scope="media",
-        original_language=series_details.get("original_language"),
+        original_language=original_language,
     )
 
 
@@ -847,23 +867,28 @@ def _get_tmdb_episode_posters(tmdb_id_match):
         )
 
     series_details = _tmdb_get(f"tv/{series_tmdb_id}")
+    original_language = series_details.get("original_language")
     season_images = _tmdb_get(
-        f"tv/{series_tmdb_id}/season/{season_num}/images"
+        f"tv/{series_tmdb_id}/season/{season_num}/images",
+        params=_tmdb_image_params(original_language),
     )
-    series_images = _tmdb_get(f"tv/{series_tmdb_id}/images")
+    series_images = _tmdb_get(
+        f"tv/{series_tmdb_id}/images",
+        params=_tmdb_image_params(original_language),
+    )
 
     return (
         _format_tmdb_posters(
             season_images,
             scope="season",
-            original_language=series_details.get("original_language"),
+            original_language=original_language,
             series_tmdb_id=series_tmdb_id,
             season_num=season_num,
         )
         + _format_tmdb_posters(
             series_images,
             scope="series",
-            original_language=series_details.get("original_language"),
+            original_language=original_language,
             series_tmdb_id=series_tmdb_id,
             season_num=None,
         )

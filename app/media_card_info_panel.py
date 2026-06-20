@@ -21,17 +21,13 @@ class MediaCardInfoPanel(QFrame):
         self.setObjectName("infoPanel")
 
         self.title_value = QLabel(self)
+        self.title_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_value.setWordWrap(True)
 
-        self.posters_container = QWidget(self)
-        self.poster_1 = QLabel(self.posters_container)
-        self.poster_2 = QLabel(self.posters_container)
-        self.poster_3 = QLabel(self.posters_container)
-
-        for lbl in [self.poster_1, self.poster_2, self.poster_3]:
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setScaledContents(True)
-            lbl.setFixedHeight(102)
+        self.poster_image = QLabel(self)
+        self.poster_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.poster_image.setScaledContents(False)
+        self.poster_image.setFixedSize(94, 140)
 
         self.year_label = QLabel("Year:", self)
         self.year_value = QLabel(self)
@@ -44,23 +40,6 @@ class MediaCardInfoPanel(QFrame):
 
         self.rating_label = QLabel("Rating:", self)
         self.rating_value = QLabel(self)
-
-        #self.notes_label = QLabel("Notes:", self)
-        #self.notes_value = QLabel(self)
-        #self.notes_value.setToolTip(self.full_notes_text)
-        #self.notes_value.setToolTip(
-        #    f'<div style="width: 500px;">{self.full_notes_text}</div>'
-        #)
-        #self.notes_value.setWordWrap(True)
-        #self.notes_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        #self.notes_value.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        #metrics = self.notes_value.fontMetrics()
-        #elided = metrics.elidedText(full_text, Qt.ElideRight, self.notes_value.width())
-        #self.notes_value.setText(elided)
-        #self.notes_value.setToolTip(full_text)
-        #self.notes_value.setStyleSheet("""
-        #    font-size: 12px;
-        #""")
 
         self.streaming_label = QLabel("Streaming at:", self)
         self.streaming_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -89,19 +68,22 @@ class MediaCardInfoPanel(QFrame):
     def _build_layout(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(14, 14, 14, 14)
-        main_layout.setSpacing(10)
+        main_layout.setSpacing(8)
 
-        strip_layout = QHBoxLayout(self.posters_container)
-        strip_layout.setContentsMargins(0, 0, 0, 0)
-        strip_layout.setSpacing(10)
-        strip_layout.addWidget(self.poster_1)
-        strip_layout.addWidget(self.poster_2)
-        strip_layout.addWidget(self.poster_3)
+        poster_layout = QHBoxLayout()
+        poster_layout.setContentsMargins(0, 0, 0, 0)
+        poster_layout.addStretch()
+        poster_layout.addWidget(self.poster_image)
+        poster_layout.addStretch()
 
         info_layout = QVBoxLayout()
         info_layout.setContentsMargins(0, 0, 0, 0)
         info_layout.setSpacing(4)
 
+        self.info_top_gap = QWidget(self)
+        self.info_top_gap.setFixedHeight(8) #space between poster ↔ infos
+
+        info_layout.addWidget(self.info_top_gap)
         info_layout.addLayout(self._make_info_row(self.year_label, self.year_value))
         info_layout.addLayout(self._make_info_row(self.duration_label, self.duration_value))
         info_layout.addLayout(self._make_info_row(self.status_label, self.status_value))
@@ -121,10 +103,11 @@ class MediaCardInfoPanel(QFrame):
         buttons_row.addWidget(self.btn_close, 1)
 
         main_layout.addWidget(self.title_value)
-        main_layout.addWidget(self.posters_container)
+        main_layout.addLayout(poster_layout)
         main_layout.addLayout(info_layout)
         main_layout.addStretch()
         main_layout.addLayout(streaming_layout)
+        main_layout.addSpacing(12)
         main_layout.addLayout(buttons_row)
 
     def _connect_signals(self):
@@ -178,10 +161,9 @@ class MediaCardInfoPanel(QFrame):
             background: transparent;
         """)
 
-        for lbl in [self.poster_1, self.poster_2, self.poster_3]:
-            lbl.setStyleSheet("""
-                background-color: #dcdcdc;
-                color: #666666;
-                border: none;
-                border-radius: 0px;
-            """)
+        self.poster_image.setStyleSheet("""
+            background-color: #dcdcdc;
+            color: #666666;
+            border: none;
+            border-radius: 0px;
+        """)
