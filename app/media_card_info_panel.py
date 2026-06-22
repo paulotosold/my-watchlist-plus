@@ -21,7 +21,7 @@ class MediaCardInfoPanel(QFrame):
         self.setObjectName("infoPanel")
 
         self.title_value = QLabel(self)
-        self.title_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title_value.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.title_value.setWordWrap(True)
 
         self.poster_image = QLabel(self)
@@ -67,12 +67,11 @@ class MediaCardInfoPanel(QFrame):
 
     def _build_layout(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(14, 14, 14, 14)
+        main_layout.setContentsMargins(32, 16, 32, 16)
         main_layout.setSpacing(8)
 
         poster_layout = QHBoxLayout()
         poster_layout.setContentsMargins(0, 0, 0, 0)
-        poster_layout.addStretch()
         poster_layout.addWidget(self.poster_image)
         poster_layout.addStretch()
 
