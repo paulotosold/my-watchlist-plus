@@ -1,6 +1,7 @@
 from app.media_card_info_panel import MediaCardInfoPanel
 from app.config import SUBSCRIBED_FLATRATE_PROVIDER_NAMES
 
+from copy import deepcopy
 from pathlib import Path
 import random
 
@@ -75,7 +76,15 @@ class ColorCorrectionLayer(QLabel):
         painter.setCompositionMode(self.mode)
         painter.fillRect(self.rect(), self.tint)
 
+def get_media_key(media_draft):
+    if not media_draft:
+        return None
+
+    return media_draft.get("media_id")
+
 class MediaCard(QFrame):
+    state_changed = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -85,11 +94,13 @@ class MediaCard(QFrame):
 
         self.filtered_media = None
         self.current_media = None
-        self.media_index_history = []
+        self.media_history = []
         self.current_index_in_history = -1
         self.poster_index = 0
         self.poster_filenames = []
         self.poster_index_by_media_key = {}
+        self.next_media_provider = None
+        self.has_next_media_provider = None
 
         # layer 1 – poster
         self.poster_pixmap = QPixmap()
@@ -169,53 +180,83 @@ class MediaCard(QFrame):
 
         return btn
 
-    def init_card_session(self, filtered_media):
+    def set_media_provider_callbacks(
+        self,
+        next_media_provider,
+        has_next_media_provider,
+    ):
+        self.next_media_provider = next_media_provider
+        self.has_next_media_provider = has_next_media_provider
+
+    def set_filtered_media(self, filtered_media):
+        self.filtered_media = filtered_media
+        self._update_navigation_buttons()
+
+    def init_card_session(self, filtered_media, media_draft=None):
         self.is_disabled = False
         self.is_hidden = False
         self.filtered_media = filtered_media
-        self.media_index_history = []
+        self.media_history = []
         self.current_index_in_history = -1
         self.poster_index = 0
         self.poster_filenames = []
         self.poster_index_by_media_key = {}
         self.show_card_elements()
         self.info_panel.hide()
-        self.load_next_media()
+
+        if media_draft is None:
+            self.load_next_media()
+        else:
+            self.add_media_to_history(media_draft)
 
     def load_next_media(self):
-        media_list = self.filtered_media.media_list if self.filtered_media else []
-
-        if not media_list:
-            self.clear_card()
-            return
-
-        if self.current_index_in_history + 1 == len(self.media_index_history):
-            next_media_index = self._take_next_media_index(media_list)
-            self.media_index_history.append(next_media_index)
+        if self.has_next_in_history():
             self.current_index_in_history += 1
+            self.load_current_history_media()
+            return True
 
-        else:
-            self.current_index_in_history += 1
-            next_media_index = self.media_index_history[self.current_index_in_history]
+        if self.next_media_provider is None:
+            return False
 
-        self.load_card_at_index(next_media_index)
+        next_media = self.next_media_provider(self)
+
+        if next_media is None:
+            self._update_navigation_buttons()
+            return False
+
+        self.add_media_to_history(next_media)
+        return True
+
+    def add_media_to_history(self, media_draft):
+        if self.current_index_in_history < len(self.media_history) - 1:
+            self.media_history = self.media_history[:self.current_index_in_history + 1]
+
+        self.media_history.append(deepcopy(media_draft))
+        self.current_index_in_history = len(self.media_history) - 1
+        self.load_current_history_media()
+
+    def load_current_history_media(self):
+        if self.current_index_in_history < 0:
+            return False
+
+        if self.current_index_in_history >= len(self.media_history):
+            return False
+
+        self.load_card_media(self.media_history[self.current_index_in_history])
+        return True
 
     def load_previous_media(self):
         if self.is_hidden:
-            current_media_index = self.media_index_history[self.current_index_in_history]
-            self.load_card_at_index(current_media_index)
-            return
+            return self.load_current_history_media()
 
         if self.current_index_in_history <= 0:
-            return
+            return False
 
         self.current_index_in_history -= 1
+        return self.load_current_history_media()
 
-        previous_media_index = self.media_index_history[self.current_index_in_history]
-        self.load_card_at_index(previous_media_index)
-
-    def load_card_at_index(self, filtered_media_index):
-        self.current_media = self.filtered_media.media_list[filtered_media_index]
+    def load_card_media(self, media_draft):
+        self.current_media = deepcopy(media_draft)
         self.is_hidden = False
         self.poster_filenames = self._get_poster_filenames()
         self.poster_index = self._get_initial_poster_index()
@@ -303,17 +344,23 @@ class MediaCard(QFrame):
         self.is_hidden = True
         self.hide_card_elements()
         self._update_navigation_buttons()
+        self.state_changed.emit()
 
     def on_previous_clicked(self):
         if not self._can_go_previous():
             return
 
         self.clear_pinned()
-        self.load_previous_media()
+        if self.load_previous_media():
+            self.state_changed.emit()
 
     def on_next_clicked(self):
+        if not self._can_go_next():
+            return
+
         self.clear_pinned()
-        self.load_next_media()
+        if self.load_next_media():
+            self.state_changed.emit()
 
     def clear_pinned(self):
         self.is_pinned = False
@@ -322,6 +369,7 @@ class MediaCard(QFrame):
     def on_pin_clicked(self):
         self.is_pinned = not self.is_pinned
         self.update_pin_status()
+        self.state_changed.emit()
 
     def update_pin_status(self):
         if self.is_pinned:
@@ -371,7 +419,7 @@ class MediaCard(QFrame):
         self.is_pinned = False
         self.filtered_media = None
         self.current_media = None
-        self.media_index_history = []
+        self.media_history = []
         self.current_index_in_history = -1
         self.poster_index = 0
         self.poster_filenames = []
@@ -381,6 +429,22 @@ class MediaCard(QFrame):
         self.btn_previous.hide()
         self.btn_next.hide()
         self.overlay_layer.hide()
+
+    def refresh_navigation_buttons(self):
+        self._update_navigation_buttons()
+
+    def has_visible_media(self):
+        return (
+            not self.is_disabled
+            and not self.is_hidden
+            and self.current_media is not None
+        )
+
+    def get_current_media_key(self):
+        return get_media_key(self.current_media)
+
+    def has_next_in_history(self):
+        return self.current_index_in_history + 1 < len(self.media_history)
 
     def _update_navigation_buttons(self):
         if self.is_disabled:
@@ -392,7 +456,7 @@ class MediaCard(QFrame):
         self._set_button_active(self.btn_previous, self._can_go_previous())
 
         self.btn_next.show()
-        self._set_button_active(self.btn_next, True)
+        self._set_button_active(self.btn_next, self._can_go_next())
 
     def _set_button_active(self, button, is_active):
         button.setEnabled(True)
@@ -409,6 +473,15 @@ class MediaCard(QFrame):
 
     def _can_go_previous(self):
         return self.is_hidden or self.current_index_in_history > 0
+
+    def _can_go_next(self):
+        if self.has_next_in_history():
+            return True
+
+        if self.has_next_media_provider is None:
+            return False
+
+        return self.has_next_media_provider(self)
 
     def _get_metadata(self):
         return self.current_media.get("metadata", {}) if self.current_media else {}
@@ -563,25 +636,6 @@ class MediaCard(QFrame):
         self.info_panel.poster_image.clear()
         self.info_panel.poster_image.setFixedSize(94, 140)
 
-    def _take_next_media_index(self, media_list):
-        next_media_index = self.filtered_media.next_media_index
-        current_media_index = self._get_current_media_index()
-
-        if len(media_list) > 1 and next_media_index == current_media_index:
-            next_media_index = (next_media_index + 1) % len(media_list)
-
-        self.filtered_media.next_media_index = (next_media_index + 1) % len(media_list)
-        return next_media_index
-
-    def _get_current_media_index(self):
-        if self.current_index_in_history < 0:
-            return None
-
-        if self.current_index_in_history >= len(self.media_index_history):
-            return None
-
-        return self.media_index_history[self.current_index_in_history]
-
     def _save_current_poster_index(self):
         media_key = self._get_media_key()
 
@@ -591,19 +645,7 @@ class MediaCard(QFrame):
         self.poster_index_by_media_key[media_key] = self.poster_index
 
     def _get_media_key(self):
-        if not self.current_media:
-            return None
-
-        metadata = self.current_media.get("metadata", {})
-        media_id = self.current_media.get("media_id")
-
-        if media_id is not None:
-            return ("db", media_id)
-
-        return (
-            metadata.get("media_type"),
-            metadata.get("tmdb_id"),
-        )
+        return get_media_key(self.current_media)
 
     def _poster_path(self, filename):
         return Path("data/media_posters") / filename.lstrip("/")
