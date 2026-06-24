@@ -1354,12 +1354,13 @@ def _save_media_watch_providers(conn, media_id, watch_providers):
         )
 
 def _save_media_posters(conn, media_id, metadata, posters):
+    posters = _limit_posters(posters, TMDB_MAX_POSTERS_PER_MEDIA)
+
     media_posters = [
         poster
         for poster in posters
         if poster.get("scope", "media") == "media"
     ]
-    media_posters = _limit_posters(media_posters, TMDB_MAX_POSTERS_PER_MEDIA)
     _replace_media_posters(conn, media_id, media_posters)
 
     if metadata["media_type"] != "episode":
@@ -1375,7 +1376,6 @@ def _save_media_posters(conn, media_id, metadata, posters):
             for poster in posters
             if poster.get("scope") == "season"
         ]
-        season_posters = _limit_posters(season_posters, TMDB_MAX_POSTERS_PER_MEDIA)
         _replace_season_posters(
             conn,
             series_id,
@@ -1388,7 +1388,6 @@ def _save_media_posters(conn, media_id, metadata, posters):
         for poster in posters
         if poster.get("scope") == "series"
     ]
-    series_posters = _limit_posters(series_posters, TMDB_MAX_POSTERS_PER_MEDIA)
 
     if series_posters:
         _replace_media_posters(conn, series_id, series_posters)

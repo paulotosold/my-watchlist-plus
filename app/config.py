@@ -13,7 +13,7 @@ DEFAULT_SETTINGS = {
         "language": "en-US",
         "watch_region": "AT",
         "poster_size": "w500",
-        "max_posters_per_media": 12,
+        "max_posters_per_media": 1,
     },
     "watch_providers": {
         "access_types": ["flatrate", "rent", "buy"],
@@ -63,7 +63,7 @@ SETTINGS = _load_settings()
 TMDB_LANGUAGE = SETTINGS["tmdb"].get("language", "en-US")
 TMDB_WATCH_REGION = SETTINGS["tmdb"].get("watch_region", "AT")
 TMDB_POSTER_SIZE = SETTINGS["tmdb"].get("poster_size", "w500")
-TMDB_MAX_POSTERS_PER_MEDIA = SETTINGS["tmdb"].get("max_posters_per_media", 12)
+TMDB_MAX_POSTERS_PER_MEDIA = SETTINGS["tmdb"].get("max_posters_per_media", 1)
 WATCH_PROVIDER_ACCESS_TYPES = SETTINGS["watch_providers"].get(
     "access_types",
     ["flatrate", "rent", "buy"],

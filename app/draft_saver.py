@@ -367,48 +367,9 @@ def limit_draft_posters(media_draft, max_posters_per_media=TMDB_MAX_POSTERS_PER_
         media_draft["posters"] = []
         return media_draft
 
-    media_draft["posters"] = _limit_posters_by_entity(
-        media_draft.get("posters", []),
-        max_posters_per_media,
-    )
+    media_draft["posters"] = media_draft.get("posters", [])[:max_posters_per_media]
 
     return media_draft
-
-
-def _limit_posters_by_entity(posters, limit):
-    limited_posters = []
-    counts = {}
-
-    for poster in posters:
-        entity_key = _poster_entity_key(poster)
-        count = counts.get(entity_key, 0)
-
-        if count >= limit:
-            continue
-
-        counts[entity_key] = count + 1
-        limited_posters.append(poster)
-
-    return limited_posters
-
-
-def _poster_entity_key(poster):
-    scope = poster.get("scope", "media")
-
-    if scope == "season":
-        return (
-            scope,
-            poster.get("series_tmdb_id"),
-            poster.get("season_num"),
-        )
-
-    if scope == "series":
-        return (
-            scope,
-            poster.get("series_tmdb_id"),
-        )
-
-    return (scope,)
 
 
 def _build_seed_episode_draft(metadata):
