@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS media_state (
     media_id INTEGER PRIMARY KEY,
 
     watch_state TEXT NOT NULL,
-    rating INTEGER,
+    impression TEXT,
     is_collection_pick INTEGER,
 
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -190,7 +190,16 @@ CREATE TABLE IF NOT EXISTS media_state (
         'dropped'
     )),
 
-    CHECK (rating IS NULL OR rating BETWEEN 0 AND 10),
+    CHECK (
+        impression IS NULL
+        OR impression IN (
+            'loved',
+            'liked',
+            'meh',
+            'not_for_me',
+            'regret_watching'
+        )
+    ),
 
     CHECK (is_collection_pick IS NULL OR is_collection_pick IN (0, 1))
 );

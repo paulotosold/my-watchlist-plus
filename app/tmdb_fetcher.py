@@ -667,7 +667,7 @@ def get_tmdb_media_posters(tmdb_id_match):
 def get_tmdb_media_user_data(tmdb_id_match=None):
     return {
         "watch_state": "to_watch",
-        "rating": None,
+        "impression": None,
         "is_collection_pick": None,
         "watch_history": [],
         "notes": [],

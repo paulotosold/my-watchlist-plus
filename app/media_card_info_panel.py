@@ -38,8 +38,8 @@ class MediaCardInfoPanel(QFrame):
         self.status_label = QLabel("Status:", self)
         self.status_value = QLabel(self)
 
-        self.rating_label = QLabel("Rating:", self)
-        self.rating_value = QLabel(self)
+        self.impression_label = QLabel("Impression:", self)
+        self.impression_value = QLabel(self)
 
         self.streaming_label = QLabel("Streaming at:", self)
         self.streaming_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -86,7 +86,7 @@ class MediaCardInfoPanel(QFrame):
         info_layout.addLayout(self._make_info_row(self.year_label, self.year_value))
         info_layout.addLayout(self._make_info_row(self.duration_label, self.duration_value))
         info_layout.addLayout(self._make_info_row(self.status_label, self.status_value))
-        info_layout.addLayout(self._make_info_row(self.rating_label, self.rating_value))
+        info_layout.addLayout(self._make_info_row(self.impression_label, self.impression_value))
         #info_layout.addLayout(self._make_info_row(self.notes_label, self.notes_value))
 
         streaming_layout = QVBoxLayout()

@@ -419,7 +419,7 @@ def _build_seed_episode_draft(metadata):
         "posters": [],
         "user_data": {
             "watch_state": "to_watch",
-            "rating": None,
+            "impression": None,
             "is_collection_pick": None,
             "watch_history": [],
             "notes": [],

@@ -279,13 +279,13 @@ class MediaCard(QFrame):
         self.info_panel.duration_value.setText(self._get_duration())
         self.info_panel.status_value.setText(self._get_watch_state())
 
-        rating = self._get_rating()
-        if rating:
-            self.info_panel.rating_label.show()
-            self.info_panel.rating_value.setText(rating)
+        impression = self._get_impression()
+        if impression:
+            self.info_panel.impression_label.show()
+            self.info_panel.impression_value.setText(impression)
         else:
-            self.info_panel.rating_label.hide()
-            self.info_panel.rating_value.clear()
+            self.info_panel.impression_label.hide()
+            self.info_panel.impression_value.clear()
 
         streaming_label, streaming_value = self._get_subscription_streaming_info()
         self.info_panel.streaming_label.setText(streaming_label)
@@ -528,13 +528,13 @@ class MediaCard(QFrame):
         watch_state = self._get_user_data().get("watch_state") or ""
         return watch_state.replace("_", " ")
 
-    def _get_rating(self):
-        rating = self._get_user_data().get("rating")
+    def _get_impression(self):
+        impression = self._get_user_data().get("impression")
 
-        if rating is None:
+        if impression is None:
             return ""
 
-        return str(rating)
+        return str(impression).replace("_", " ")
 
     def _get_subscription_streaming_info(self):
         providers = self.current_media.get("watch_providers", []) if self.current_media else []

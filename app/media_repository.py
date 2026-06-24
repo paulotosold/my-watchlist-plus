@@ -545,7 +545,7 @@ def get_db_media_posters(conn, metadata):
 def get_empty_media_user_data():
     return {
         "watch_state": "to_watch",
-        "rating": None,
+        "impression": None,
         "is_collection_pick": None,
         "watch_history": [],
         "notes": [],
@@ -585,7 +585,7 @@ def get_db_media_user_data(conn, metadata):
         """
         SELECT
             watch_state,
-            rating,
+            impression,
             is_collection_pick
         FROM media_state
         WHERE media_id = ?
@@ -597,7 +597,7 @@ def get_db_media_user_data(conn, metadata):
 
     if state is not None:
         user_data["watch_state"] = state["watch_state"]
-        user_data["rating"] = state["rating"]
+        user_data["impression"] = state["impression"]
         user_data["is_collection_pick"] = (
             None
             if state["is_collection_pick"] is None
@@ -1500,20 +1500,20 @@ def _save_media_state(conn, media_id, user_data):
         INSERT INTO media_state (
             media_id,
             watch_state,
-            rating,
+            impression,
             is_collection_pick
         )
         VALUES (?, ?, ?, ?)
         ON CONFLICT (media_id) DO UPDATE SET
             watch_state = excluded.watch_state,
-            rating = excluded.rating,
+            impression = excluded.impression,
             is_collection_pick = excluded.is_collection_pick,
             updated_at = CURRENT_TIMESTAMP
         """,
         (
             media_id,
             user_data.get("watch_state") or "to_watch",
-            user_data.get("rating"),
+            user_data.get("impression"),
             _to_db_bool(user_data.get("is_collection_pick")),
         ),
     )

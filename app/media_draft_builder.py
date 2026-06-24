@@ -86,7 +86,7 @@ def _get_user_data(tmdb_id, intent):
 
     return {
         "watch_state": new_user_data["watch_state"],
-        "rating": new_user_data["rating"],
+        "impression": new_user_data.get("impression"),
         "is_collection_pick": new_user_data["is_collection_pick"],
         "watch_history": new_user_data.get(
             "watch_history",
