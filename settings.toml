@@ -6,4 +6,4 @@ max_posters_per_media = 1
 
 [watch_providers]
 access_types = ["flatrate", "rent", "buy"]
-subscribed_flatrate_provider_names = []
+subscribed_flatrate_provider_names = ["Netflix"]

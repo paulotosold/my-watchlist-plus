@@ -113,6 +113,11 @@ class MediaCardInfoPanel(QFrame):
         self.btn_close.clicked.connect(self.back_clicked.emit)
         self.btn_edit.clicked.connect(self.edit_clicked.emit)
 
+    def set_streaming_info(self, label_text, value_text, is_available):
+        self.streaming_label.setText(label_text)
+        self.streaming_value.setText(value_text)
+        self._apply_streaming_value_style(is_available)
+
     def _apply_styles(self):
         self.setStyleSheet("""
             #infoPanel {
@@ -154,15 +159,20 @@ class MediaCardInfoPanel(QFrame):
             background: transparent;
         """)
 
-        self.streaming_value.setStyleSheet("""
-            color: black;
-            font-size: 13px;
-            background: transparent;
-        """)
+        self._apply_streaming_value_style(True)
 
         self.poster_image.setStyleSheet("""
             background-color: #dcdcdc;
             color: #666666;
             border: none;
             border-radius: 0px;
+        """)
+
+    def _apply_streaming_value_style(self, is_available):
+        color = "black" if is_available else "#777777"
+
+        self.streaming_value.setStyleSheet(f"""
+            color: {color};
+            font-size: 13px;
+            background: transparent;
         """)

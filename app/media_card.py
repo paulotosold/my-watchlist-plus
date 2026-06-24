@@ -287,9 +287,8 @@ class MediaCard(QFrame):
             self.info_panel.impression_label.hide()
             self.info_panel.impression_value.clear()
 
-        streaming_label, streaming_value = self._get_subscription_streaming_info()
-        self.info_panel.streaming_label.setText(streaming_label)
-        self.info_panel.streaming_value.setText(streaming_value)
+        streaming_label, streaming_value, has_streaming = self._get_subscription_streaming_info()
+        self.info_panel.set_streaming_info(streaming_label, streaming_value, has_streaming)
         self._update_navigation_buttons()
 
         #media_list = self.filtered_media.media_list
@@ -560,9 +559,9 @@ class MediaCard(QFrame):
             seen.add(normalized_name)
 
         if matched_provider_names:
-            return "Streaming for you:", ", ".join(matched_provider_names)
+            return "Streaming for you:", ", ".join(matched_provider_names), True
 
-        return "Not in your subscriptions", ""
+        return "", "Not in your subscriptions", False
 
     def _get_poster_filenames(self):
         posters = self.current_media.get("posters", []) if self.current_media else []
