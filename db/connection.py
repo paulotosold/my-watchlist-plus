@@ -21,19 +21,22 @@ def initialize_database() -> None:
 
     with get_connection() as conn:
         drop_database_views(conn)
-
-        with open(SCHEMA_PATH, "r", encoding="utf-8") as schema_file:
-            conn.executescript(schema_file.read())
-
         migrate_database(conn)
-
-        with open(SCHEMA_PATH, "r", encoding="utf-8") as schema_file:
-            conn.executescript(schema_file.read())
-
-        with open(SEED_PATH, "r", encoding="utf-8") as seed_file:
-            conn.executescript(seed_file.read())
-
+        apply_database_schema(conn)
+        seed_database(conn)
         conn.commit()
+
+
+def apply_database_schema(conn: sqlite3.Connection) -> None:
+    run_sql_script(conn, SCHEMA_PATH)
+
+
+def seed_database(conn: sqlite3.Connection) -> None:
+    run_sql_script(conn, SEED_PATH)
+
+
+def run_sql_script(conn: sqlite3.Connection, script_path: Path) -> None:
+    conn.executescript(script_path.read_text(encoding="utf-8"))
 
 
 def drop_database_views(conn: sqlite3.Connection) -> None:
