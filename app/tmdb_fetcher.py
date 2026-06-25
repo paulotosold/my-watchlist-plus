@@ -510,6 +510,7 @@ def _get_tmdb_series_metadata(tmdb_id):
             "first_air_date": _clean_date(series_details.get("first_air_date")),
             "last_air_date": _clean_date(series_details.get("last_air_date")),
             "total_runtime_min": None,
+            "avg_episode_runtime_min": None,
         },
         "episode_details": None,
     }

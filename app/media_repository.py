@@ -285,12 +285,12 @@ def get_db_series_summary(conn, media_id):
     cursor = conn.execute(
         """
         SELECT
-            series_title,
             season_count,
             episode_count,
             first_air_date,
             last_air_date,
-            total_runtime_min
+            total_runtime_min,
+            avg_episode_runtime_min
         FROM series_summary
         WHERE series_id = ?
         """,

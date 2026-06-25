@@ -63,7 +63,15 @@ SELECT
     MIN(e.release_date) AS first_air_date,
     MAX(e.release_date) AS last_air_date,
 
-    COALESCE(SUM(e.runtime_min), 0) AS total_runtime_min
+    COALESCE(SUM(e.runtime_min), 0) AS total_runtime_min,
+    CASE
+        WHEN COUNT(ed.media_id) = 0 THEN NULL
+        ELSE CAST(
+            ROUND(
+                1.0 * COALESCE(SUM(e.runtime_min), 0) / COUNT(ed.media_id)
+            ) AS INTEGER
+        )
+    END AS avg_episode_runtime_min
 
 FROM media s
 
