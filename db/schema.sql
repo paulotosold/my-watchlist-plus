@@ -201,8 +201,8 @@ CREATE TABLE IF NOT EXISTS media_state (
     CHECK (
         impression IS NULL
         OR impression IN (
-            'loved',
-            'liked',
+            'very_good',
+            'good',
             'meh',
             'not_for_me',
             'regret_watching'
