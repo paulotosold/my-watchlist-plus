@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
 
 
 class MediaCardInfoPanel(QFrame):
-    edit_clicked = Signal()
+    details_clicked = Signal()
     back_clicked = Signal()
 
     def __init__(self, parent=None):
@@ -48,10 +48,10 @@ class MediaCardInfoPanel(QFrame):
         self.streaming_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.streaming_value.setWordWrap(True)
 
-        self.btn_edit = QPushButton("Edit", self)
+        self.btn_details = QPushButton("Details...", self)
         self.btn_close = QPushButton("Back", self)
 
-        self.btn_edit.setMinimumHeight(32)
+        self.btn_details.setMinimumHeight(32)
         self.btn_close.setMinimumHeight(32)
 
     def _make_info_row(self, label_widget, value_widget):
@@ -98,7 +98,7 @@ class MediaCardInfoPanel(QFrame):
         buttons_row = QHBoxLayout()
         buttons_row.setContentsMargins(0, 0, 0, 0)
         buttons_row.setSpacing(10)
-        buttons_row.addWidget(self.btn_edit, 1)
+        buttons_row.addWidget(self.btn_details, 1)
         buttons_row.addWidget(self.btn_close, 1)
 
         main_layout.addWidget(self.title_value)
@@ -111,7 +111,7 @@ class MediaCardInfoPanel(QFrame):
 
     def _connect_signals(self):
         self.btn_close.clicked.connect(self.back_clicked.emit)
-        self.btn_edit.clicked.connect(self.edit_clicked.emit)
+        self.btn_details.clicked.connect(self.details_clicked.emit)
 
     def set_streaming_info(self, label_text, value_text, is_available):
         self.streaming_label.setText(label_text)

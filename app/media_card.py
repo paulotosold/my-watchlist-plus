@@ -150,7 +150,7 @@ class MediaCard(QFrame):
         self.btn_pin.clicked.connect(self.on_pin_clicked)
 
         # info panel clicks
-        self.info_panel.edit_clicked.connect(self.show_edit_window)
+        self.info_panel.details_clicked.connect(self.show_details_window)
         self.info_panel.back_clicked.connect(self.hide_info_panel)
 
         # set layer order
@@ -383,8 +383,8 @@ class MediaCard(QFrame):
             self.btn_pin.setIcon(QIcon("app/assets/media_card_icons/pin.png"))
             self.pin_layer.clear()
 
-    def show_edit_window(self):
-        pass #opens edit window over main window
+    def show_details_window(self):
+        pass #opens details window over main window
 
     def hide_info_panel(self):
         self.info_panel.hide()
