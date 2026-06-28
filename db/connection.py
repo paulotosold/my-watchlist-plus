@@ -40,6 +40,7 @@ def run_sql_script(conn: sqlite3.Connection, script_path: Path) -> None:
 
 
 def drop_database_views(conn: sqlite3.Connection) -> None:
+    conn.execute("DROP VIEW IF EXISTS series_episode_watch_history;")
     conn.execute("DROP VIEW IF EXISTS series_summary;")
 
 
@@ -61,6 +62,7 @@ def _migrate_media_imdb_id_nullable(conn: sqlite3.Connection) -> None:
     try:
         conn.executescript(
             """
+            DROP VIEW IF EXISTS series_episode_watch_history;
             DROP VIEW IF EXISTS series_summary;
 
             CREATE TABLE media_new (

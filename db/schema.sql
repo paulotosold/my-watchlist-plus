@@ -257,6 +257,32 @@ ON watch_history (media_id);
 -- ----------------------------------------------------------
 
 -- ----------------------------------------------------------
+-- series_episode_watch_history view
+CREATE VIEW IF NOT EXISTS series_episode_watch_history AS
+SELECT
+    ed.series_id AS series_id,
+    e.id AS episode_id,
+    ed.season_num AS season_num,
+    ed.episode_num AS episode_num,
+    wh.id AS watch_history_id,
+    wh.date_earliest AS date_earliest,
+    wh.date_latest AS date_latest
+
+FROM watch_history wh
+
+JOIN media e
+    ON e.id = wh.media_id
+    AND e.media_type = 'episode'
+
+JOIN episode_details ed
+    ON ed.media_id = e.id
+
+JOIN media s
+    ON s.id = ed.series_id
+    AND s.media_type = 'series';
+-- ----------------------------------------------------------
+
+-- ----------------------------------------------------------
 -- media_watch_providers table
 CREATE TABLE IF NOT EXISTS media_watch_providers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
