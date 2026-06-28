@@ -4,6 +4,11 @@ import app.tmdb_fetcher
 
 def build_media_draft_from_db(conn, media_from_db):
     metadata = media_repo.get_db_media_metadata(conn, media_from_db)
+    series_view = media_repo.get_db_series_view(
+        conn,
+        media_from_db["id"],
+        metadata["media_type"],
+    )
     watch_providers = media_repo.get_db_media_watch_providers(conn, metadata)
     posters = media_repo.get_db_media_posters(conn, metadata)
     user_data = media_repo.get_db_media_user_data(conn, metadata)
@@ -11,6 +16,7 @@ def build_media_draft_from_db(conn, media_from_db):
     return {
             "media_id": media_from_db["id"],
             "metadata": metadata,
+            "series_view": series_view,
             "watch_providers": watch_providers,
             "posters": posters,
             "user_data": user_data
@@ -33,6 +39,7 @@ def build_media_draft_from_tmdb(imdb_id):
 
 def build_media_draft_from_tmdb_match(tmdb_match):
     metadata = app.tmdb_fetcher.get_tmdb_media_metadata(tmdb_match)
+    series_view = app.tmdb_fetcher.get_tmdb_media_series_view(tmdb_match)
 
     watch_providers = app.tmdb_fetcher.get_tmdb_media_watch_providers(tmdb_match)
     posters = app.tmdb_fetcher.get_tmdb_media_posters(tmdb_match)
@@ -41,6 +48,7 @@ def build_media_draft_from_tmdb_match(tmdb_match):
     return {
         "media_id": None,
         "metadata": metadata,
+        "series_view": series_view,
         "watch_providers": watch_providers,
         "posters": posters,
         "user_data": user_data,
@@ -107,7 +115,9 @@ def build_media_drafts(matches_by_intent):
         tmdb_id = match["match"]["tmdb_id"]
 
         media_draft = {
+            "media_id": None,
             "metadata": _get_media_metadata(media_type, tmdb_id),
+            "series_view": None,
             "posters": _get_media_posters(media_type, tmdb_id),
             "watch_providers": _get_media_watch_providers(media_type, tmdb_id),
             "user_data": _get_user_data(tmdb_id, match["intent"]),

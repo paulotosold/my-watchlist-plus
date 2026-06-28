@@ -485,6 +485,14 @@ class MediaCard(QFrame):
     def _get_metadata(self):
         return self.current_media.get("metadata", {}) if self.current_media else {}
 
+    def _get_series_summary(self):
+        series_view = (
+            self.current_media.get("series_view")
+            if self.current_media
+            else None
+        )
+        return (series_view or {}).get("summary") or {}
+
     def _get_user_data(self):
         return self.current_media.get("user_data", {}) if self.current_media else {}
 
@@ -496,7 +504,7 @@ class MediaCard(QFrame):
         release_date = metadata.get("release_date")
 
         if not release_date and metadata.get("media_type") == "series":
-            series_summary = metadata.get("series_summary") or {}
+            series_summary = self._get_series_summary()
             release_date = series_summary.get("first_air_date")
 
         if not release_date:
@@ -508,7 +516,7 @@ class MediaCard(QFrame):
         metadata = self._get_metadata()
 
         if metadata.get("media_type") == "series":
-            series_summary = metadata.get("series_summary") or {}
+            series_summary = self._get_series_summary()
             episode_count = series_summary.get("episode_count")
 
             if episode_count in (None, "", 0):

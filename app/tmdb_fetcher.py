@@ -420,6 +420,37 @@ def get_tmdb_media_metadata(tmdb_id_match):
     raise ValueError(f"Unsupported media_type: {media_type}")
 
 
+def get_tmdb_media_series_view(tmdb_id_match):
+    if tmdb_id_match.get("status"):
+        if tmdb_id_match.get("status") != "resolved" or not tmdb_id_match.get("match"):
+            raise ValueError(
+                "get_tmdb_media_series_view requires a resolved TMDB match."
+            )
+
+        tmdb_id_match = tmdb_id_match["match"]
+
+    if tmdb_id_match["media_type"] != "series":
+        return None
+
+    series_details = _tmdb_get(f"tv/{tmdb_id_match['tmdb_id']}")
+
+    return {
+        "summary": _format_tmdb_series_summary(series_details),
+        "episode_watch_history": [],
+    }
+
+
+def _format_tmdb_series_summary(series_details):
+    return {
+        "season_count": series_details.get("number_of_seasons"),
+        "episode_count": series_details.get("number_of_episodes"),
+        "first_air_date": _clean_date(series_details.get("first_air_date")),
+        "last_air_date": _clean_date(series_details.get("last_air_date")),
+        "total_runtime_min": None,
+        "avg_episode_runtime_min": None,
+    }
+
+
 def _get_tmdb_movie_metadata(tmdb_id):
     movie_details = _tmdb_get(f"movie/{tmdb_id}")
     movie_credits = _tmdb_get(f"movie/{tmdb_id}/credits")
@@ -459,7 +490,6 @@ def _get_tmdb_movie_metadata(tmdb_id):
         ),
         "actors": _format_cast(movie_credits.get("cast", [])),
 
-        "series_summary": None,
         "episode_details": None,
     }
 
@@ -504,14 +534,6 @@ def _get_tmdb_series_metadata(tmdb_id):
         ),
         "actors": _format_cast(series_credits.get("cast", [])),
 
-        "series_summary": {
-            "season_count": series_details.get("number_of_seasons"),
-            "episode_count": series_details.get("number_of_episodes"),
-            "first_air_date": _clean_date(series_details.get("first_air_date")),
-            "last_air_date": _clean_date(series_details.get("last_air_date")),
-            "total_runtime_min": None,
-            "avg_episode_runtime_min": None,
-        },
         "episode_details": None,
     }
 
@@ -578,7 +600,6 @@ def _get_tmdb_episode_metadata(tmdb_id_match):
         ),
         "actors": _format_cast(episode_cast),
 
-        "series_summary": None,
         "episode_details": {
             "series_tmdb_id": series_details["id"],
             "series_imdb_id": series_ids.get("imdb_id"),
@@ -817,7 +838,6 @@ def _format_series_episode_seed_metadata(
         "writers": [],
         "actors": [],
 
-        "series_summary": None,
         "episode_details": {
             "series_tmdb_id": series_details["id"],
             "series_imdb_id": series_ids.get("imdb_id"),

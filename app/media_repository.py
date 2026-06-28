@@ -304,6 +304,45 @@ def get_db_series_summary(conn, media_id):
 
     return dict(row)
 
+def get_db_series_episode_watch_history(conn, media_id):
+    cursor = conn.execute(
+        """
+        SELECT
+            series_id,
+            episode_id,
+            season_num,
+            episode_num,
+            watch_history_id,
+            date_earliest,
+            date_latest
+        FROM series_episode_watch_history
+        WHERE series_id = ?
+        ORDER BY
+            date_earliest IS NULL,
+            date_earliest,
+            date_latest IS NULL,
+            date_latest,
+            season_num,
+            episode_num,
+            watch_history_id
+        """,
+        (media_id,),
+    )
+
+    return [dict(row) for row in cursor.fetchall()]
+
+def get_db_series_view(conn, media_id, media_type):
+    if media_type != "series":
+        return None
+
+    return {
+        "summary": get_db_series_summary(conn, media_id),
+        "episode_watch_history": get_db_series_episode_watch_history(
+            conn,
+            media_id,
+        ),
+    }
+
 def get_db_episode_details(conn, media_id):
     cursor = conn.execute(
         """
@@ -352,7 +391,6 @@ def get_db_media_metadata(conn, media_from_db):
         "writers": get_db_writers(conn, media_id),
         "actors": get_db_actors(conn, media_id),
 
-        "series_summary": get_db_series_summary(conn, media_id) if media_type == "series" else None,
         "episode_details": get_db_episode_details(conn, media_id) if media_type == "episode" else None,
     }
 

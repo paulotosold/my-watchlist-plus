@@ -64,6 +64,7 @@ class MediaMetadata(QGroupBox):
 
         self.media_draft = media_draft
         self.metadata = media_draft.get("metadata") or {}
+        self.series_view = media_draft.get("series_view") or {}
 
         self.refresh_button = QPushButton("⟳")
         self.refresh_button.setFixedWidth(34)
@@ -102,7 +103,7 @@ class MediaMetadata(QGroupBox):
 
         row_index = 0
 
-        for label, value in iter_metadata_rows(self.metadata):
+        for label, value in iter_metadata_rows(self.metadata, self.series_view):
             if is_empty_metadata_value(value):
                 continue
 
@@ -122,7 +123,7 @@ class MediaMetadata(QGroupBox):
 
         self.content_layout.setRowStretch(row_index, 1)
 
-def iter_metadata_rows(metadata: dict):
+def iter_metadata_rows(metadata: dict, series_view: dict | None = None):
     media_type = metadata.get("media_type")
 
     yield "TMDB ID", metadata.get("tmdb_id")
@@ -144,7 +145,7 @@ def iter_metadata_rows(metadata: dict):
     yield "Production Status", metadata.get("production_status")
 
     if media_type == "series":
-        series_summary = metadata.get("series_summary") or {}
+        series_summary = (series_view or {}).get("summary") or {}
         yield "First Air Date", series_summary.get("first_air_date")
         yield "Last Air Date", series_summary.get("last_air_date")
         yield "Seasons", series_summary.get("season_count")
