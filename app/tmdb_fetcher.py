@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import requests
 
 from app.config import (
@@ -246,7 +248,11 @@ def _format_cast(cast):
     return formatted_cast
 
 
-def _format_watch_providers(watch_provider_data, country_code):
+def _current_sqlite_timestamp():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _format_watch_providers(watch_provider_data, country_code, checked_at):
     providers_by_region = watch_provider_data.get("results", {}).get(country_code, {})
     formatted_providers = []
     seen = set()
@@ -270,6 +276,7 @@ def _format_watch_providers(watch_provider_data, country_code):
                 "provider_name": provider_name,
                 "country_code": country_code,
                 "access_type": access_type,
+                "checked_at": checked_at,
             })
 
     return formatted_providers
@@ -654,7 +661,11 @@ def get_tmdb_media_watch_providers(tmdb_id_match, country_code=TMDB_WATCH_REGION
     else:
         raise ValueError(f"Unsupported media_type: {media_type}")
 
-    return _format_watch_providers(watch_provider_data, country_code)
+    return _format_watch_providers(
+        watch_provider_data,
+        country_code,
+        _current_sqlite_timestamp(),
+    )
 
 def get_tmdb_movie_posters(tmdb_id):
     return get_tmdb_media_posters({

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 
@@ -221,6 +221,45 @@ def group_watch_providers(providers):
         grouped[access_type].append(provider_name)
 
     return grouped
+
+
+def format_watch_provider_checked_at(providers):
+    checked_at_values = [
+        parse_watch_provider_checked_at(provider.get("checked_at"))
+        for provider in providers or []
+        if isinstance(provider, dict)
+    ]
+    valid_checked_at_values = [
+        checked_at
+        for checked_at in checked_at_values
+        if checked_at is not None
+    ]
+
+    if not valid_checked_at_values:
+        return None
+
+    latest_checked_at = max(valid_checked_at_values)
+    return f"{latest_checked_at.day} {latest_checked_at:%b %Y, %H:%M}"
+
+
+def parse_watch_provider_checked_at(value):
+    if value is None:
+        return None
+
+    text = str(value).strip()
+
+    if not text:
+        return None
+
+    try:
+        checked_at = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if checked_at.tzinfo is not None:
+        checked_at = checked_at.astimezone(timezone.utc).replace(tzinfo=None)
+
+    return checked_at
 
 
 def get_poster_curation_status(posters):

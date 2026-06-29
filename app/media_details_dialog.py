@@ -34,6 +34,7 @@ from app.media_details_formatters import (
     build_metadata_display_rows,
     build_tmdb_match_from_metadata,
     build_watch_history_display_lines,
+    format_watch_provider_checked_at,
     get_poster_curation_status,
     group_watch_providers,
 )
@@ -482,6 +483,17 @@ class MediaDetailsDialog(QDialog):
             provider_label.setWordWrap(False)
             provider_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self.providers_layout.addWidget(provider_label)
+
+        checked_at = format_watch_provider_checked_at(
+            self.media_draft.get("watch_providers", [])
+        )
+        checked_at_label = QLabel(
+            f"Checked at: {checked_at or 'None'}",
+            self.providers_block,
+        )
+        checked_at_label.setWordWrap(False)
+        checked_at_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.providers_layout.addWidget(checked_at_label)
 
         self.providers_layout.addStretch()
 

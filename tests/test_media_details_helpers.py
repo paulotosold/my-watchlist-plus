@@ -11,7 +11,9 @@ from app.media_details_formatters import (
     format_date_range,
     format_people_with_jobs,
     format_runtime_minutes,
+    format_watch_provider_checked_at,
     format_watch_history_entry,
+    group_watch_providers,
 )
 
 
@@ -147,6 +149,80 @@ class MediaDetailsHelperTests(unittest.TestCase):
 
         self.assertIn("Cast: None", row_texts)
         self.assertNotIn("Main Cast: None", row_texts)
+
+    def test_format_watch_provider_checked_at_missing(self):
+        self.assertIsNone(format_watch_provider_checked_at([]))
+        self.assertIsNone(format_watch_provider_checked_at([
+            {"provider_name": "Netflix"},
+        ]))
+
+    def test_format_watch_provider_checked_at_uses_latest_timestamp(self):
+        self.assertEqual(
+            format_watch_provider_checked_at([
+                {
+                    "provider_name": "Netflix",
+                    "checked_at": "2026-06-29 11:53:44",
+                },
+                {
+                    "provider_name": "Apple TV",
+                    "checked_at": "2026-06-29 12:01:05",
+                },
+            ]),
+            "29 Jun 2026, 12:01",
+        )
+
+    def test_format_watch_provider_checked_at_with_identical_timestamps(self):
+        self.assertEqual(
+            format_watch_provider_checked_at([
+                {
+                    "provider_name": "Netflix",
+                    "checked_at": "2026-06-29 11:53:44",
+                },
+                {
+                    "provider_name": "Disney Plus",
+                    "checked_at": "2026-06-29 11:53:44",
+                },
+            ]),
+            "29 Jun 2026, 11:53",
+        )
+
+    def test_format_watch_provider_checked_at_ignores_invalid_values(self):
+        self.assertEqual(
+            format_watch_provider_checked_at([
+                {"provider_name": "Broken", "checked_at": "not-a-date"},
+                {"provider_name": "Valid", "checked_at": "2026-06-29 11:53:44"},
+            ]),
+            "29 Jun 2026, 11:53",
+        )
+        self.assertIsNone(format_watch_provider_checked_at([
+            {"provider_name": "Broken", "checked_at": "not-a-date"},
+        ]))
+
+    def test_group_watch_providers_still_groups_by_access_type(self):
+        self.assertEqual(
+            group_watch_providers([
+                {
+                    "provider_name": "Netflix",
+                    "access_type": "flatrate",
+                    "checked_at": "2026-06-29 11:53:44",
+                },
+                {
+                    "provider_name": "Apple TV",
+                    "access_type": "rent",
+                    "checked_at": "2026-06-29 11:53:44",
+                },
+                {
+                    "provider_name": "Apple TV",
+                    "access_type": "rent",
+                    "checked_at": "2026-06-29 11:53:44",
+                },
+            ]),
+            {
+                "flatrate": ["Netflix"],
+                "buy": [],
+                "rent": ["Apple TV"],
+            },
+        )
 
     def test_format_watch_history_date_ranges(self):
         self.assertEqual(

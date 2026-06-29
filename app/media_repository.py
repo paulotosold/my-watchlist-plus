@@ -1,4 +1,10 @@
+from datetime import datetime, timezone
+
 from app.config import TMDB_MAX_POSTERS_PER_MEDIA
+
+
+def _current_sqlite_timestamp():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def get_media_by_imdb_id(conn, imdb_id):
@@ -412,7 +418,8 @@ def get_db_media_watch_providers(conn, metadata):
             provider_tmdb_id,
             provider_name,
             country_code,
-            access_type
+            access_type,
+            checked_at
         FROM media_watch_providers
         WHERE media_id = (
             SELECT id
@@ -441,6 +448,7 @@ def get_db_media_watch_providers(conn, metadata):
             "provider_name": row["provider_name"],
             "country_code": row["country_code"],
             "access_type": row["access_type"],
+            "checked_at": row["checked_at"],
         }
         for row in cursor.fetchall()
     ]
@@ -1410,6 +1418,7 @@ def _save_media_watch_providers(conn, media_id, watch_providers):
     )
 
     seen = set()
+    fallback_checked_at = _current_sqlite_timestamp()
 
     for provider in watch_providers:
         if (
@@ -1438,9 +1447,10 @@ def _save_media_watch_providers(conn, media_id, watch_providers):
                 provider_tmdb_id,
                 provider_name,
                 country_code,
-                access_type
+                access_type,
+                checked_at
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 media_id,
@@ -1448,6 +1458,7 @@ def _save_media_watch_providers(conn, media_id, watch_providers):
                 provider["provider_name"],
                 provider["country_code"],
                 provider["access_type"],
+                provider.get("checked_at") or fallback_checked_at,
             ),
         )
 
