@@ -42,13 +42,19 @@ class MainWindow(QMainWindow):
 
     def on_search_input(self, search_query):
         print("Search:", search_query)
-        self.filtered_media.refresh()
-        self.media_board.load_media(self.filtered_media)
-        self._update_status_bar()
+        self.refresh_media_view()
 
     def on_add_input(self, input_query):
         print("Add:", input_query)
-        handle_media_input(self, input_query)
+        result = handle_media_input(self, input_query)
+
+        if result and result.get("status") in {"saved", "deleted"}:
+            self.refresh_media_view()
+
+    def refresh_media_view(self):
+        self.filtered_media.refresh()
+        self.media_board.load_media(self.filtered_media)
+        self._update_status_bar()
 
     def _update_status_bar(self):
         self.status_bar.showMessage(f"{len(self.filtered_media.media_list)} filtered media")

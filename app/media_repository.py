@@ -314,17 +314,15 @@ def get_db_series_episode_watch_history(conn, media_id):
             episode_num,
             watch_history_id,
             date_earliest,
-            date_latest
+            date_latest,
+            created_at
         FROM series_episode_watch_history
         WHERE series_id = ?
         ORDER BY
-            date_earliest IS NULL,
-            date_earliest,
-            date_latest IS NULL,
-            date_latest,
+            created_at,
+            watch_history_id,
             season_num,
-            episode_num,
-            watch_history_id
+            episode_num
         """,
         (media_id,),
     )
@@ -647,12 +645,12 @@ def get_db_media_user_data(conn, metadata):
         SELECT
             id,
             date_earliest,
-            date_latest
+            date_latest,
+            created_at
         FROM watch_history
         WHERE media_id = ?
         ORDER BY
-            date_earliest IS NULL,
-            date_earliest,
+            created_at,
             id
         """,
         (media_id,),
@@ -663,6 +661,7 @@ def get_db_media_user_data(conn, metadata):
             "id": row["id"],
             "date_earliest": row["date_earliest"],
             "date_latest": row["date_latest"],
+            "created_at": row["created_at"],
         }
         for row in cursor.fetchall()
     ]
@@ -671,7 +670,8 @@ def get_db_media_user_data(conn, metadata):
         """
         SELECT
             id,
-            user_note
+            user_note,
+            created_at
         FROM user_notes
         WHERE media_id = ?
         ORDER BY created_at, id
@@ -683,6 +683,7 @@ def get_db_media_user_data(conn, metadata):
         {
             "id": row["id"],
             "user_note": row["user_note"],
+            "created_at": row["created_at"],
         }
         for row in cursor.fetchall()
     ]
@@ -712,6 +713,65 @@ def get_db_media_user_data(conn, metadata):
     ]
 
     return user_data
+
+
+def get_all_lists(conn):
+    cursor = conn.execute(
+        """
+        SELECT
+            id,
+            name,
+            description
+        FROM lists
+        ORDER BY name
+        """
+    )
+
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def replace_media_watch_providers(conn, media_id, watch_providers):
+    _save_media_watch_providers(conn, media_id, watch_providers)
+
+
+def delete_media(conn, media_id):
+    cursor = conn.execute(
+        """
+        SELECT
+            id,
+            media_type
+        FROM media
+        WHERE id = ?
+        """,
+        (media_id,),
+    )
+    media = cursor.fetchone()
+
+    if media is None:
+        return False
+
+    if media["media_type"] == "series":
+        conn.execute(
+            """
+            DELETE FROM media
+            WHERE id IN (
+                SELECT media_id
+                FROM episode_details
+                WHERE series_id = ?
+            )
+            """,
+            (media_id,),
+        )
+
+    conn.execute(
+        """
+        DELETE FROM media
+        WHERE id = ?
+        """,
+        (media_id,),
+    )
+
+    return True
 
 
 

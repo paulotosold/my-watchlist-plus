@@ -266,7 +266,8 @@ SELECT
     ed.episode_num AS episode_num,
     wh.id AS watch_history_id,
     wh.date_earliest AS date_earliest,
-    wh.date_latest AS date_latest
+    wh.date_latest AS date_latest,
+    wh.created_at AS created_at
 
 FROM watch_history wh
 
