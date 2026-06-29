@@ -46,7 +46,7 @@ DETAIL_ICON_DIR = Path("app/assets/details_dialog_icons")
 POSTER_DIR = Path("data/media_posters")
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 TMDB_POSTER_PREVIEW_SIZE = "w185"
-POSTER_PREVIEW_HEIGHT = 150
+POSTER_PREVIEW_HEIGHT = 232
 # Tweak this value to fine-tune vertical spacing in open dropdown menus.
 COMBO_POPUP_ITEM_HEIGHT = 28
 
@@ -274,7 +274,6 @@ class MediaDetailsDialog(QDialog):
         right_column.setSpacing(14)
 
         self.providers_block = DetailBlock("Watch Providers", "reload.png", self)
-        self.providers_block.setFixedHeight(142)
         self.providers_block.action_button.clicked.connect(self.reload_watch_providers)
         self.providers_layout = QVBoxLayout()
         self.providers_layout.setContentsMargins(0, 0, 0, 0)
@@ -282,7 +281,6 @@ class MediaDetailsDialog(QDialog):
         self.providers_block.body_layout.addLayout(self.providers_layout)
 
         self.posters_block = DetailBlock("Posters", "edit.png", self)
-        self.posters_block.setFixedHeight(250)
         self.posters_block.action_button.clicked.connect(self.edit_posters)
         self.poster_status_label = QLabel(self.posters_block)
         self.posters_block.body_layout.addWidget(self.poster_status_label)
@@ -292,7 +290,7 @@ class MediaDetailsDialog(QDialog):
         self.poster_scroll.setWidgetResizable(True)
         self.poster_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.poster_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.poster_scroll.setFixedHeight(170)
+        self.poster_scroll.setMinimumHeight(POSTER_PREVIEW_HEIGHT)
 
         self.poster_content = QWidget()
         self.poster_content.setObjectName("transparentContent")
@@ -300,11 +298,10 @@ class MediaDetailsDialog(QDialog):
         self.poster_layout.setContentsMargins(0, 0, 0, 0)
         self.poster_layout.setSpacing(12)
         self.poster_scroll.setWidget(self.poster_content)
-        self.posters_block.body_layout.addWidget(self.poster_scroll)
+        self.posters_block.body_layout.addWidget(self.poster_scroll, stretch=1)
 
         right_column.addWidget(self.providers_block)
-        right_column.addWidget(self.posters_block)
-        right_column.addStretch()
+        right_column.addWidget(self.posters_block, stretch=1)
         return right_column
 
     def _build_lower_block(self):
