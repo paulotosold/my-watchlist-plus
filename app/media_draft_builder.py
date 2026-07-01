@@ -2,6 +2,11 @@ import app.media_repository as media_repo
 from db.connection import get_connection
 import app.tmdb_fetcher
 
+
+def _current_watch_providers_checked_at():
+    return app.tmdb_fetcher.current_sqlite_timestamp()
+
+
 def build_media_draft_from_db(conn, media_from_db):
     metadata = media_repo.get_db_media_metadata(conn, media_from_db)
     series_view = media_repo.get_db_series_view(
@@ -42,7 +47,13 @@ def build_media_draft_from_tmdb_match(tmdb_match):
     series_view = app.tmdb_fetcher.get_tmdb_media_series_view(tmdb_match)
 
     watch_providers = app.tmdb_fetcher.get_tmdb_media_watch_providers(tmdb_match)
-    posters = app.tmdb_fetcher.get_tmdb_media_posters(tmdb_match)
+    metadata["last_tmdb_watch_providers_checked_at"] = (
+        _current_watch_providers_checked_at()
+    )
+    posters = app.tmdb_fetcher.get_tmdb_media_posters(tmdb_match)[:1]
+    metadata["last_tmdb_posters_checked_at"] = (
+        app.tmdb_fetcher.current_sqlite_timestamp()
+    )
     user_data = app.tmdb_fetcher.get_tmdb_media_user_data(tmdb_match)
 
     return {
@@ -80,7 +91,7 @@ def _get_media_posters(media_type, tmdb_id):
 
 def _get_media_watch_providers(media_type, tmdb_id):
     if media_type == "movie":
-        movie_watch_providers = app.tmdb_fetcher.get_tmdb_movie_watch_providers(tmdb_id)
+        return app.tmdb_fetcher.get_tmdb_movie_watch_providers(tmdb_id)
 
     elif media_type == "series":
         return None
@@ -113,13 +124,26 @@ def build_media_drafts(matches_by_intent):
     for match in matches_by_intent:
         media_type = match["match"]["media_type"]
         tmdb_id = match["match"]["tmdb_id"]
+        metadata = _get_media_metadata(media_type, tmdb_id)
+        posters = _get_media_posters(media_type, tmdb_id)
+        watch_providers = _get_media_watch_providers(media_type, tmdb_id)
+
+        if metadata is not None and posters is not None:
+            metadata["last_tmdb_posters_checked_at"] = (
+                app.tmdb_fetcher.current_sqlite_timestamp()
+            )
+
+        if metadata is not None and watch_providers is not None:
+            metadata["last_tmdb_watch_providers_checked_at"] = (
+                _current_watch_providers_checked_at()
+            )
 
         media_draft = {
             "media_id": None,
-            "metadata": _get_media_metadata(media_type, tmdb_id),
+            "metadata": metadata,
             "series_view": None,
-            "posters": _get_media_posters(media_type, tmdb_id),
-            "watch_providers": _get_media_watch_providers(media_type, tmdb_id),
+            "posters": posters,
+            "watch_providers": watch_providers,
             "user_data": _get_user_data(tmdb_id, match["intent"]),
         }
 

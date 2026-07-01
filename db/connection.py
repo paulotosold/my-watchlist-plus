@@ -46,6 +46,94 @@ def drop_database_views(conn: sqlite3.Connection) -> None:
 
 def migrate_database(conn: sqlite3.Connection) -> None:
     _migrate_media_imdb_id_nullable(conn)
+    _migrate_media_tmdb_freshness_columns(conn)
+    _migrate_media_watch_providers_checked_at_removed(conn)
+
+
+def _migrate_media_tmdb_freshness_columns(conn: sqlite3.Connection) -> None:
+    cursor = conn.execute("PRAGMA table_info(media)")
+    media_columns = {row["name"] for row in cursor.fetchall()}
+
+    if not media_columns:
+        return
+
+    freshness_columns = (
+        "last_tmdb_metadata_checked_at",
+        "last_tmdb_posters_checked_at",
+        "last_tmdb_watch_providers_checked_at",
+    )
+
+    for column_name in freshness_columns:
+        if column_name not in media_columns:
+            conn.execute(f"ALTER TABLE media ADD COLUMN {column_name} TEXT;")
+
+
+def _migrate_media_watch_providers_checked_at_removed(conn: sqlite3.Connection) -> None:
+    cursor = conn.execute("PRAGMA table_info(media_watch_providers)")
+    media_watch_provider_columns = {row["name"] for row in cursor.fetchall()}
+
+    if "checked_at" not in media_watch_provider_columns:
+        return
+
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = OFF;")
+
+    try:
+        conn.executescript(
+            """
+            DROP INDEX IF EXISTS idx_media_watch_providers_media_id;
+
+            CREATE TABLE media_watch_providers_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                media_id INTEGER NOT NULL,
+                provider_tmdb_id INTEGER NOT NULL,
+                provider_name TEXT NOT NULL,
+                country_code TEXT NOT NULL,
+                access_type TEXT NOT NULL,
+
+                FOREIGN KEY (media_id)
+                    REFERENCES media(id)
+                    ON DELETE CASCADE,
+
+                UNIQUE (
+                    media_id,
+                    provider_tmdb_id,
+                    country_code,
+                    access_type
+                ),
+
+                CHECK (country_code GLOB '[A-Z][A-Z]'),
+                CHECK (access_type IN ('flatrate', 'rent', 'buy'))
+            );
+
+            INSERT INTO media_watch_providers_new (
+                id,
+                media_id,
+                provider_tmdb_id,
+                provider_name,
+                country_code,
+                access_type
+            )
+            SELECT
+                id,
+                media_id,
+                provider_tmdb_id,
+                provider_name,
+                country_code,
+                access_type
+            FROM media_watch_providers;
+
+            DROP TABLE media_watch_providers;
+            ALTER TABLE media_watch_providers_new RENAME TO media_watch_providers;
+
+            CREATE INDEX idx_media_watch_providers_media_id
+                ON media_watch_providers (media_id);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON;")
 
 
 def _migrate_media_imdb_id_nullable(conn: sqlite3.Connection) -> None:

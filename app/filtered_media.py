@@ -102,7 +102,10 @@ def build_media_search_query(search_intent):
             m.original_title,
             m.production_status,
             m.release_date,
-            m.runtime_min
+            m.runtime_min,
+            m.last_tmdb_metadata_checked_at,
+            m.last_tmdb_posters_checked_at,
+            m.last_tmdb_watch_providers_checked_at
         FROM media m
         JOIN media_state ms
             ON ms.media_id = m.id

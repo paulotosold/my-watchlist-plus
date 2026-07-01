@@ -100,7 +100,7 @@ class DetailBlock(QFrame):
 
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(4)
+        header_layout.setSpacing(1) # <icon>(spacing)Metadata
 
         if icon_name:
             self.action_button = make_icon_button(icon_name, self)
@@ -481,8 +481,9 @@ class MediaDetailsDialog(QDialog):
             provider_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self.providers_layout.addWidget(provider_label)
 
+        metadata = self.media_draft.get("metadata") or {}
         checked_at = format_watch_provider_checked_at(
-            self.media_draft.get("watch_providers", [])
+            metadata.get("last_tmdb_watch_providers_checked_at"),
         )
         checked_at_label = QLabel(
             f"Checked at: {checked_at or 'None'}",
@@ -666,13 +667,21 @@ class MediaDetailsDialog(QDialog):
             QMessageBox.warning(self, "Watch Providers", str(exc))
             return
 
+        checked_at = tmdb_fetcher.current_sqlite_timestamp()
+        metadata = self.media_draft.setdefault("metadata", {})
+        metadata["last_tmdb_watch_providers_checked_at"] = checked_at
         self.media_draft["watch_providers"] = providers
         media_id = self.media_draft.get("media_id")
 
         if media_id is not None:
             try:
                 with get_connection() as conn:
-                    media_repo.replace_media_watch_providers(conn, media_id, providers)
+                    media_repo.replace_media_watch_providers(
+                        conn,
+                        media_id,
+                        providers,
+                        checked_at=checked_at,
+                    )
             except Exception as exc:
                 QMessageBox.warning(self, "Watch Providers", str(exc))
                 return

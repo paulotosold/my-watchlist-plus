@@ -248,11 +248,18 @@ def _format_cast(cast):
     return formatted_cast
 
 
-def _current_sqlite_timestamp():
+def current_sqlite_timestamp():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _format_watch_providers(watch_provider_data, country_code, checked_at):
+def _with_tmdb_metadata_checked_at(metadata):
+    metadata["last_tmdb_metadata_checked_at"] = current_sqlite_timestamp()
+    metadata.setdefault("last_tmdb_posters_checked_at", None)
+    metadata.setdefault("last_tmdb_watch_providers_checked_at", None)
+    return metadata
+
+
+def _format_watch_providers(watch_provider_data, country_code):
     providers_by_region = watch_provider_data.get("results", {}).get(country_code, {})
     formatted_providers = []
     seen = set()
@@ -276,7 +283,6 @@ def _format_watch_providers(watch_provider_data, country_code, checked_at):
                 "provider_name": provider_name,
                 "country_code": country_code,
                 "access_type": access_type,
-                "checked_at": checked_at,
             })
 
     return formatted_providers
@@ -401,7 +407,7 @@ def find_tmdb_match_by_imdb_id(imdb_id):
 # -----------------------------------------------------------------------
 
 def get_tmdb_movie_metadata(tmdb_id):
-    return _get_tmdb_movie_metadata(tmdb_id)
+    return _with_tmdb_metadata_checked_at(_get_tmdb_movie_metadata(tmdb_id))
 
 
 def get_tmdb_media_metadata(tmdb_id_match):
@@ -416,15 +422,18 @@ def get_tmdb_media_metadata(tmdb_id_match):
     media_type = tmdb_id_match["media_type"]
 
     if media_type == "movie":
-        return _get_tmdb_movie_metadata(tmdb_id_match["tmdb_id"])
+        metadata = _get_tmdb_movie_metadata(tmdb_id_match["tmdb_id"])
 
-    if media_type == "series":
-        return _get_tmdb_series_metadata(tmdb_id_match["tmdb_id"])
+    elif media_type == "series":
+        metadata = _get_tmdb_series_metadata(tmdb_id_match["tmdb_id"])
 
-    if media_type == "episode":
-        return _get_tmdb_episode_metadata(tmdb_id_match)
+    elif media_type == "episode":
+        metadata = _get_tmdb_episode_metadata(tmdb_id_match)
 
-    raise ValueError(f"Unsupported media_type: {media_type}")
+    else:
+        raise ValueError(f"Unsupported media_type: {media_type}")
+
+    return _with_tmdb_metadata_checked_at(metadata)
 
 
 def get_tmdb_media_series_view(tmdb_id_match):
@@ -614,6 +623,9 @@ def _get_tmdb_episode_metadata(tmdb_id_match):
             "season_num": season_num,
             "episode_num": episode_num,
         },
+        "last_tmdb_metadata_checked_at": current_sqlite_timestamp(),
+        "last_tmdb_posters_checked_at": None,
+        "last_tmdb_watch_providers_checked_at": None,
     }
 
 
@@ -664,7 +676,6 @@ def get_tmdb_media_watch_providers(tmdb_id_match, country_code=TMDB_WATCH_REGION
     return _format_watch_providers(
         watch_provider_data,
         country_code,
-        _current_sqlite_timestamp(),
     )
 
 def get_tmdb_movie_posters(tmdb_id):
@@ -856,6 +867,9 @@ def _format_series_episode_seed_metadata(
             "season_num": season_num,
             "episode_num": episode_num,
         },
+        "last_tmdb_metadata_checked_at": current_sqlite_timestamp(),
+        "last_tmdb_posters_checked_at": None,
+        "last_tmdb_watch_providers_checked_at": None,
     }
 
 

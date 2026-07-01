@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS media (
     production_status TEXT,
     release_date TEXT,
     runtime_min INTEGER,
+    last_tmdb_metadata_checked_at TEXT,
+    last_tmdb_posters_checked_at TEXT,
+    last_tmdb_watch_providers_checked_at TEXT,
 
     UNIQUE (tmdb_id, media_type),
     UNIQUE (imdb_id),
@@ -293,8 +296,6 @@ CREATE TABLE IF NOT EXISTS media_watch_providers (
     provider_name TEXT NOT NULL,
     country_code TEXT NOT NULL,
     access_type TEXT NOT NULL,
-
-    checked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (media_id)
         REFERENCES media(id)

@@ -1,10 +1,11 @@
-from datetime import datetime, timezone
-
 from app.config import TMDB_MAX_POSTERS_PER_MEDIA
 
 
-def _current_sqlite_timestamp():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+TMDB_FRESHNESS_COLUMNS = (
+    "last_tmdb_metadata_checked_at",
+    "last_tmdb_posters_checked_at",
+    "last_tmdb_watch_providers_checked_at",
+)
 
 
 def get_media_by_imdb_id(conn, imdb_id):
@@ -22,7 +23,10 @@ def get_media_by_imdb_id(conn, imdb_id):
             original_title,
             production_status,
             release_date,
-            runtime_min
+            runtime_min,
+            last_tmdb_metadata_checked_at,
+            last_tmdb_posters_checked_at,
+            last_tmdb_watch_providers_checked_at
         FROM media
         WHERE imdb_id = ?
         """,
@@ -48,7 +52,10 @@ def get_media_by_tmdb_id(conn, tmdb_id, media_type):
             original_title,
             production_status,
             release_date,
-            runtime_min
+            runtime_min,
+            last_tmdb_metadata_checked_at,
+            last_tmdb_posters_checked_at,
+            last_tmdb_watch_providers_checked_at
         FROM media
         WHERE tmdb_id = ?
           AND media_type = ?
@@ -384,6 +391,18 @@ def get_db_media_metadata(conn, media_from_db):
         "production_status": media_from_db["production_status"],
         "release_date": media_from_db["release_date"],
         "runtime_min": media_from_db["runtime_min"],
+        "last_tmdb_metadata_checked_at": _row_get(
+            media_from_db,
+            "last_tmdb_metadata_checked_at",
+        ),
+        "last_tmdb_posters_checked_at": _row_get(
+            media_from_db,
+            "last_tmdb_posters_checked_at",
+        ),
+        "last_tmdb_watch_providers_checked_at": _row_get(
+            media_from_db,
+            "last_tmdb_watch_providers_checked_at",
+        ),
 
         "genres": get_db_genres(conn, media_id),
         "spoken_languages": get_db_spoken_languages(conn, media_id),
@@ -397,6 +416,16 @@ def get_db_media_metadata(conn, media_from_db):
 
         "episode_details": get_db_episode_details(conn, media_id) if media_type == "episode" else None,
     }
+
+
+def _row_get(row, key, default=None):
+    if hasattr(row, "keys") and key not in row.keys():
+        return default
+
+    try:
+        return row[key]
+    except (IndexError, KeyError, TypeError):
+        return default
 
 def get_db_media_watch_providers(conn, metadata):
     cursor = conn.execute(
@@ -418,8 +447,7 @@ def get_db_media_watch_providers(conn, metadata):
             provider_tmdb_id,
             provider_name,
             country_code,
-            access_type,
-            checked_at
+            access_type
         FROM media_watch_providers
         WHERE media_id = (
             SELECT id
@@ -448,7 +476,6 @@ def get_db_media_watch_providers(conn, metadata):
             "provider_name": row["provider_name"],
             "country_code": row["country_code"],
             "access_type": row["access_type"],
-            "checked_at": row["checked_at"],
         }
         for row in cursor.fetchall()
     ]
@@ -738,8 +765,51 @@ def get_all_lists(conn):
     return [dict(row) for row in cursor.fetchall()]
 
 
-def replace_media_watch_providers(conn, media_id, watch_providers):
+def replace_media_watch_providers(conn, media_id, watch_providers, checked_at=None):
     _save_media_watch_providers(conn, media_id, watch_providers)
+    update_media_tmdb_watch_providers_checked_at(
+        conn,
+        media_id,
+        checked_at,
+    )
+
+
+def update_media_tmdb_watch_providers_checked_at(conn, media_id, checked_at):
+    _update_media_tmdb_freshness(
+        conn,
+        media_id,
+        "last_tmdb_watch_providers_checked_at",
+        checked_at,
+    )
+
+
+def update_media_tmdb_posters_checked_at(conn, media_id, checked_at):
+    _update_media_tmdb_freshness(
+        conn,
+        media_id,
+        "last_tmdb_posters_checked_at",
+        checked_at,
+    )
+
+
+def _update_media_tmdb_freshness(conn, media_id, column_name, checked_at):
+    if column_name not in TMDB_FRESHNESS_COLUMNS:
+        raise ValueError(f"Unsupported TMDB freshness column: {column_name}")
+
+    if checked_at is None:
+        return
+
+    conn.execute(
+        f"""
+        UPDATE media
+        SET {column_name} = ?
+        WHERE id = ?
+        """,
+        (
+            checked_at,
+            media_id,
+        ),
+    )
 
 
 def delete_media(conn, media_id):
@@ -841,16 +911,31 @@ def _save_media_row(conn, metadata):
             original_title,
             production_status,
             release_date,
-            runtime_min
+            runtime_min,
+            last_tmdb_metadata_checked_at,
+            last_tmdb_posters_checked_at,
+            last_tmdb_watch_providers_checked_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (tmdb_id, media_type) DO UPDATE SET
             imdb_id = excluded.imdb_id,
             title = excluded.title,
             original_title = excluded.original_title,
             production_status = excluded.production_status,
             release_date = excluded.release_date,
-            runtime_min = excluded.runtime_min
+            runtime_min = excluded.runtime_min,
+            last_tmdb_metadata_checked_at = COALESCE(
+                excluded.last_tmdb_metadata_checked_at,
+                media.last_tmdb_metadata_checked_at
+            ),
+            last_tmdb_posters_checked_at = COALESCE(
+                excluded.last_tmdb_posters_checked_at,
+                media.last_tmdb_posters_checked_at
+            ),
+            last_tmdb_watch_providers_checked_at = COALESCE(
+                excluded.last_tmdb_watch_providers_checked_at,
+                media.last_tmdb_watch_providers_checked_at
+            )
         """,
         (
             metadata["tmdb_id"],
@@ -861,6 +946,9 @@ def _save_media_row(conn, metadata):
             metadata.get("production_status"),
             metadata.get("release_date"),
             metadata.get("runtime_min"),
+            metadata.get("last_tmdb_metadata_checked_at"),
+            metadata.get("last_tmdb_posters_checked_at"),
+            metadata.get("last_tmdb_watch_providers_checked_at"),
         ),
     )
 
@@ -1418,7 +1506,6 @@ def _save_media_watch_providers(conn, media_id, watch_providers):
     )
 
     seen = set()
-    fallback_checked_at = _current_sqlite_timestamp()
 
     for provider in watch_providers:
         if (
@@ -1447,10 +1534,9 @@ def _save_media_watch_providers(conn, media_id, watch_providers):
                 provider_tmdb_id,
                 provider_name,
                 country_code,
-                access_type,
-                checked_at
+                access_type
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
                 media_id,
@@ -1458,12 +1544,15 @@ def _save_media_watch_providers(conn, media_id, watch_providers):
                 provider["provider_name"],
                 provider["country_code"],
                 provider["access_type"],
-                provider.get("checked_at") or fallback_checked_at,
             ),
         )
 
+
 def _save_media_posters(conn, media_id, metadata, posters):
     posters = _limit_posters(posters, TMDB_MAX_POSTERS_PER_MEDIA)
+    posters_checked_at = metadata.get("last_tmdb_posters_checked_at")
+
+    update_media_tmdb_posters_checked_at(conn, media_id, posters_checked_at)
 
     media_posters = [
         poster
@@ -1500,6 +1589,7 @@ def _save_media_posters(conn, media_id, metadata, posters):
 
     if series_posters:
         _replace_media_posters(conn, series_id, series_posters)
+        update_media_tmdb_posters_checked_at(conn, series_id, posters_checked_at)
 
 def _limit_posters(posters, limit):
     if limit is None:

@@ -223,23 +223,17 @@ def group_watch_providers(providers):
     return grouped
 
 
-def format_watch_provider_checked_at(providers):
-    checked_at_values = [
-        parse_watch_provider_checked_at(provider.get("checked_at"))
-        for provider in providers or []
-        if isinstance(provider, dict)
-    ]
-    valid_checked_at_values = [
-        checked_at
-        for checked_at in checked_at_values
-        if checked_at is not None
-    ]
+def format_watch_provider_checked_at(checked_at=None):
+    media_checked_at = parse_watch_provider_checked_at(checked_at)
 
-    if not valid_checked_at_values:
-        return None
+    if media_checked_at is not None:
+        return format_checked_at_datetime(media_checked_at)
 
-    latest_checked_at = max(valid_checked_at_values)
-    return f"{latest_checked_at.day} {latest_checked_at:%b %Y, %H:%M}"
+    return None
+
+
+def format_checked_at_datetime(checked_at):
+    return f"{checked_at.day} {checked_at:%b %Y, %H:%M}"
 
 
 def parse_watch_provider_checked_at(value):
