@@ -233,7 +233,18 @@ def format_watch_provider_checked_at(checked_at=None):
 
 
 def format_checked_at_datetime(checked_at):
-    return f"{checked_at.day} {checked_at:%b %Y, %H:%M}"
+    local_checked_at = to_local_datetime(checked_at)
+    timezone_name = local_checked_at.strftime("%Z")
+    timezone_suffix = f" {timezone_name}" if timezone_name else ""
+
+    return f"{local_checked_at.day} {local_checked_at:%b %Y, %H:%M}{timezone_suffix}"
+
+
+def to_local_datetime(value):
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+
+    return value.astimezone()
 
 
 def parse_watch_provider_checked_at(value):
@@ -249,9 +260,6 @@ def parse_watch_provider_checked_at(value):
         checked_at = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
         return None
-
-    if checked_at.tzinfo is not None:
-        checked_at = checked_at.astimezone(timezone.utc).replace(tzinfo=None)
 
     return checked_at
 
