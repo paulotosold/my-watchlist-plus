@@ -727,8 +727,7 @@ def get_db_media_user_data(conn, metadata):
         """
         SELECT
             l.id,
-            l.name,
-            ml.entry_note
+            l.name
         FROM media_lists ml
         JOIN lists l
             ON l.id = ml.list_id
@@ -742,7 +741,6 @@ def get_db_media_user_data(conn, metadata):
         {
             "id": row["id"],
             "name": row["name"],
-            "entry_note": row["entry_note"],
         }
         for row in cursor.fetchall()
     ]
@@ -1826,17 +1824,14 @@ def _sync_media_lists(conn, media_id, lists):
             """
             INSERT INTO media_lists (
                 media_id,
-                list_id,
-                entry_note
+                list_id
             )
-            VALUES (?, ?, ?)
-            ON CONFLICT (media_id, list_id) DO UPDATE SET
-                entry_note = excluded.entry_note
+            VALUES (?, ?)
+            ON CONFLICT (media_id, list_id) DO NOTHING
             """,
             (
                 media_id,
                 list_id,
-                list_item.get("entry_note"),
             ),
         )
         kept_list_ids.append(list_id)

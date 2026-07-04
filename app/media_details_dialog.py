@@ -779,31 +779,15 @@ class MediaDetailsDialog(QDialog):
         self.media_draft["user_data"] = user_data
 
     def _collect_selected_lists(self, current_lists):
-        current_by_id = {
-            item.get("id"): item
-            for item in current_lists
-            if item.get("id") is not None
-        }
-        current_by_name = {
-            item.get("name"): item
-            for item in current_lists
-            if item.get("name")
-        }
         selected_lists = []
 
         for checkbox, list_item in self.list_checkboxes:
             if not checkbox.isChecked():
                 continue
 
-            current = (
-                current_by_id.get(list_item.get("id"))
-                or current_by_name.get(list_item.get("name"))
-                or {}
-            )
             selected_lists.append({
                 "id": list_item.get("id"),
                 "name": list_item.get("name"),
-                "entry_note": current.get("entry_note"),
             })
 
         return selected_lists

@@ -400,7 +400,6 @@ CREATE TABLE IF NOT EXISTS media_lists (
     media_id INTEGER NOT NULL,
     list_id INTEGER NOT NULL,
 
-    entry_note TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (media_id, list_id),

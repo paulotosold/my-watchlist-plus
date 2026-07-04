@@ -48,6 +48,7 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     _migrate_media_imdb_id_nullable(conn)
     _migrate_media_tmdb_freshness_columns(conn)
     _migrate_media_watch_providers_checked_at_removed(conn)
+    _migrate_media_lists_entry_note_removed(conn)
 
 
 def _migrate_media_tmdb_freshness_columns(conn: sqlite3.Connection) -> None:
@@ -129,6 +130,56 @@ def _migrate_media_watch_providers_checked_at_removed(conn: sqlite3.Connection) 
 
             CREATE INDEX idx_media_watch_providers_media_id
                 ON media_watch_providers (media_id);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON;")
+
+
+def _migrate_media_lists_entry_note_removed(conn: sqlite3.Connection) -> None:
+    cursor = conn.execute("PRAGMA table_info(media_lists)")
+    media_list_columns = {row["name"] for row in cursor.fetchall()}
+
+    if "entry_note" not in media_list_columns:
+        return
+
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = OFF;")
+
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE media_lists_new (
+                media_id INTEGER NOT NULL,
+                list_id INTEGER NOT NULL,
+
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+                PRIMARY KEY (media_id, list_id),
+
+                FOREIGN KEY (media_id)
+                    REFERENCES media(id)
+                    ON DELETE CASCADE,
+
+                FOREIGN KEY (list_id)
+                    REFERENCES lists(id)
+                    ON DELETE CASCADE
+            );
+
+            INSERT INTO media_lists_new (
+                media_id,
+                list_id,
+                created_at
+            )
+            SELECT
+                media_id,
+                list_id,
+                created_at
+            FROM media_lists;
+
+            DROP TABLE media_lists;
+            ALTER TABLE media_lists_new RENAME TO media_lists;
             """
         )
         conn.commit()
