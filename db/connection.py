@@ -47,6 +47,8 @@ def drop_database_views(conn: sqlite3.Connection) -> None:
 def migrate_database(conn: sqlite3.Connection) -> None:
     _migrate_media_imdb_id_nullable(conn)
     _migrate_media_tmdb_freshness_columns(conn)
+    _migrate_user_notes_table_renamed(conn)
+    _migrate_media_notes_user_note_renamed(conn)
     _migrate_media_watch_providers_checked_at_removed(conn)
     _migrate_media_lists_entry_note_removed(conn)
 
@@ -67,6 +69,40 @@ def _migrate_media_tmdb_freshness_columns(conn: sqlite3.Connection) -> None:
     for column_name in freshness_columns:
         if column_name not in media_columns:
             conn.execute(f"ALTER TABLE media ADD COLUMN {column_name} TEXT;")
+
+
+def _migrate_user_notes_table_renamed(conn: sqlite3.Connection) -> None:
+    cursor = conn.execute(
+        """
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name IN ('user_notes', 'media_notes')
+        """
+    )
+    table_names = {row["name"] for row in cursor.fetchall()}
+
+    if "user_notes" not in table_names or "media_notes" in table_names:
+        return
+
+    conn.execute("DROP INDEX IF EXISTS idx_user_notes_media_id;")
+    conn.execute("ALTER TABLE user_notes RENAME TO media_notes;")
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_media_notes_media_id
+            ON media_notes (media_id);
+        """
+    )
+
+
+def _migrate_media_notes_user_note_renamed(conn: sqlite3.Connection) -> None:
+    cursor = conn.execute("PRAGMA table_info(media_notes)")
+    media_note_columns = {row["name"] for row in cursor.fetchall()}
+
+    if "user_note" not in media_note_columns or "note" in media_note_columns:
+        return
+
+    conn.execute("ALTER TABLE media_notes RENAME COLUMN user_note TO note;")
 
 
 def _migrate_media_watch_providers_checked_at_removed(conn: sqlite3.Connection) -> None:

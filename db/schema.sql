@@ -158,12 +158,12 @@ WHERE is_default = 1;
 -- ----------------------------------------------------------
 
 -- ----------------------------------------------------------
--- user_notes table
-CREATE TABLE IF NOT EXISTS user_notes (
+-- media_notes table
+CREATE TABLE IF NOT EXISTS media_notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     media_id INTEGER NOT NULL,
-    user_note TEXT NOT NULL,
+    note TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT,
 
@@ -172,8 +172,8 @@ CREATE TABLE IF NOT EXISTS user_notes (
         ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_notes_media_id
-    ON user_notes (media_id);
+CREATE INDEX IF NOT EXISTS idx_media_notes_media_id
+    ON media_notes (media_id);
 -- ----------------------------------------------------------
 
 -- ----------------------------------------------------------

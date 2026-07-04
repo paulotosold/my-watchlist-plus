@@ -560,7 +560,7 @@ class MediaDetailsDialog(QDialog):
             self.notes_layout.addLayout(
                 self._make_action_line(
                     "edit.png",
-                    note.get("user_note") or "",
+                    note.get("note") or "",
                     self.edit_note,
                 )
             )

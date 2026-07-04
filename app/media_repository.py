@@ -705,9 +705,9 @@ def get_db_media_user_data(conn, metadata):
         """
         SELECT
             id,
-            user_note,
+            note,
             created_at
-        FROM user_notes
+        FROM media_notes
         WHERE media_id = ?
         ORDER BY created_at, id
         """,
@@ -717,7 +717,7 @@ def get_db_media_user_data(conn, metadata):
     user_data["notes"] = [
         {
             "id": row["id"],
-            "user_note": row["user_note"],
+            "note": row["note"],
             "created_at": row["created_at"],
         }
         for row in cursor.fetchall()
@@ -1687,7 +1687,7 @@ def _replace_season_posters(conn, series_id, season_num, posters):
 def _save_media_user_data(conn, media_id, user_data):
     _save_media_state(conn, media_id, user_data)
     _sync_watch_history(conn, media_id, user_data.get("watch_history", []))
-    _sync_user_notes(conn, media_id, user_data.get("notes", []))
+    _sync_media_notes(conn, media_id, user_data.get("notes", []))
     _sync_media_lists(conn, media_id, user_data.get("lists", []))
 
 def _save_media_state(conn, media_id, user_data):
@@ -1764,25 +1764,25 @@ def _sync_watch_history(conn, media_id, watch_history):
 
     _delete_missing_ids(conn, "watch_history", media_id, kept_ids)
 
-def _sync_user_notes(conn, media_id, notes):
+def _sync_media_notes(conn, media_id, notes):
     kept_ids = []
 
     for note in notes:
         note_id = note.get("id")
-        user_note = note.get("user_note") or ""
+        note_text = note.get("note") or ""
 
         if note_id is None:
             cursor = conn.execute(
                 """
-                INSERT INTO user_notes (
+                INSERT INTO media_notes (
                     media_id,
-                    user_note
+                    note
                 )
                 VALUES (?, ?)
                 """,
                 (
                     media_id,
-                    user_note,
+                    note_text,
                 ),
             )
             kept_ids.append(cursor.lastrowid)
@@ -1790,26 +1790,26 @@ def _sync_user_notes(conn, media_id, notes):
 
         cursor = conn.execute(
             """
-            UPDATE user_notes
+            UPDATE media_notes
             SET
-                user_note = ?,
+                note = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
               AND media_id = ?
             """,
             (
-                user_note,
+                note_text,
                 note_id,
                 media_id,
             ),
         )
 
         if cursor.rowcount == 0:
-            raise ValueError(f"user_notes id {note_id} does not belong to media.")
+            raise ValueError(f"media_notes id {note_id} does not belong to media.")
 
         kept_ids.append(note_id)
 
-    _delete_missing_ids(conn, "user_notes", media_id, kept_ids)
+    _delete_missing_ids(conn, "media_notes", media_id, kept_ids)
 
 def _sync_media_lists(conn, media_id, lists):
     kept_list_ids = []
