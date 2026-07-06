@@ -42,7 +42,7 @@ from app.media_lookup import resolve_media_draft_from_query
 from db.connection import get_connection
 
 
-DETAIL_ICON_DIR = Path("app/assets/details_dialog_icons")
+DETAIL_ICON_DIR = Path("app/assets")
 POSTER_DIR = Path("data/media_posters")
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 TMDB_POSTER_PREVIEW_SIZE = "w185"
@@ -249,7 +249,7 @@ class MediaDetailsDialog(QDialog):
         main_layout.addLayout(footer_layout)
 
     def _build_metadata_block(self):
-        block = DetailBlock("Metadata", "reload.png", self)
+        block = DetailBlock("Metadata", "details_reload.png", self)
         block.action_button.clicked.connect(self.reload_metadata)
 
         self.metadata_scroll = QScrollArea(block)
@@ -273,14 +273,14 @@ class MediaDetailsDialog(QDialog):
         right_column.setContentsMargins(0, 0, 0, 0)
         right_column.setSpacing(14)
 
-        self.providers_block = DetailBlock("Watch Providers", "reload.png", self)
+        self.providers_block = DetailBlock("Watch Providers", "details_reload.png", self)
         self.providers_block.action_button.clicked.connect(self.reload_watch_providers)
         self.providers_layout = QVBoxLayout()
         self.providers_layout.setContentsMargins(0, 0, 0, 0)
         self.providers_layout.setSpacing(4)
         self.providers_block.body_layout.addLayout(self.providers_layout)
 
-        self.posters_block = DetailBlock("Posters", "edit.png", self)
+        self.posters_block = DetailBlock("Posters", "details_edit.png", self)
         self.posters_block.action_button.clicked.connect(self.edit_posters)
         self.poster_status_label = QLabel(self.posters_block)
         self.posters_block.body_layout.addWidget(self.poster_status_label)
@@ -545,11 +545,11 @@ class MediaDetailsDialog(QDialog):
 
         for line in build_watch_history_display_lines(self.media_draft):
             self.watch_history_layout.addLayout(
-                self._make_action_line("edit.png", line, self.edit_watch_history)
+                self._make_action_line("details_edit.png", line, self.edit_watch_history)
             )
 
         self.watch_history_layout.addWidget(
-            make_icon_button("add.png", self, self.add_watch_history)
+            make_icon_button("details_add.png", self, self.add_watch_history)
         )
         self.watch_history_layout.addStretch()
 
@@ -559,13 +559,13 @@ class MediaDetailsDialog(QDialog):
         for note in self.media_draft.get("user_data", {}).get("notes", []):
             self.notes_layout.addLayout(
                 self._make_action_line(
-                    "edit.png",
+                    "details_edit.png",
                     note.get("note") or "",
                     self.edit_note,
                 )
             )
 
-        self.notes_layout.addWidget(make_icon_button("add.png", self, self.add_note))
+        self.notes_layout.addWidget(make_icon_button("details_add.png", self, self.add_note))
         self.notes_layout.addStretch()
 
     def render_lists(self):
@@ -605,7 +605,7 @@ class MediaDetailsDialog(QDialog):
             self.list_checkboxes.append((checkbox, list_item))
             self.lists_layout.addWidget(checkbox)
 
-        self.lists_layout.addWidget(make_icon_button("add.png", self, self.add_list))
+        self.lists_layout.addWidget(make_icon_button("details_add.png", self, self.add_list))
         self.lists_layout.addStretch()
 
     def _make_action_line(self, icon_name, text, callback):
@@ -875,7 +875,7 @@ class MediaDetailsDialog(QDialog):
             }
 
             QComboBox::down-arrow {
-                image: url(app/assets/details_dialog_icons/dropdown_arrow.svg);
+                image: url(app/assets/dropdown_arrow.svg);
                 width: 10px;
                 height: 10px;
             }
