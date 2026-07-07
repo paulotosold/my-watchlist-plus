@@ -49,6 +49,10 @@ TMDB_POSTER_PREVIEW_SIZE = "w185"
 POSTER_PREVIEW_HEIGHT = 232
 # Tweak this value to fine-tune vertical spacing in open dropdown menus.
 COMBO_POPUP_ITEM_HEIGHT = 28
+DETAIL_HEADER_ICON_TEXT_SPACING = 1
+DETAIL_ACTION_LINE_ICON_TEXT_SPACING = 1
+DETAIL_ICON_BUTTON_SIZE = 20
+DETAIL_ICON_SIZE = 18
 
 STATUS_OPTIONS = (
     ("to_watch", "To Watch"),
@@ -100,7 +104,7 @@ class DetailBlock(QFrame):
 
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(1) # <icon>(spacing)Metadata
+        header_layout.setSpacing(DETAIL_HEADER_ICON_TEXT_SPACING)
 
         if icon_name:
             self.action_button = make_icon_button(icon_name, self)
@@ -611,7 +615,7 @@ class MediaDetailsDialog(QDialog):
     def _make_action_line(self, icon_name, text, callback):
         line_layout = QHBoxLayout()
         line_layout.setContentsMargins(0, 0, 0, 0)
-        line_layout.setSpacing(8)
+        line_layout.setSpacing(DETAIL_ACTION_LINE_ICON_TEXT_SPACING)
 
         line_layout.addWidget(make_icon_button(icon_name, self, callback))
 
@@ -930,9 +934,9 @@ class MediaDetailsDialog(QDialog):
 
 def make_icon_button(icon_name, parent=None, callback=None):
     button = QToolButton(parent)
-    button.setFixedSize(22, 22)
+    button.setFixedSize(DETAIL_ICON_BUTTON_SIZE, DETAIL_ICON_BUTTON_SIZE)
     button.setIcon(QIcon(str(DETAIL_ICON_DIR / icon_name)))
-    button.setIconSize(QSize(18, 18))
+    button.setIconSize(QSize(DETAIL_ICON_SIZE, DETAIL_ICON_SIZE))
     button.setCursor(Qt.CursorShape.PointingHandCursor)
 
     if callback is not None:
