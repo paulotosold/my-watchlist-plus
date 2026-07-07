@@ -53,6 +53,7 @@ DETAIL_HEADER_ICON_TEXT_SPACING = 1
 DETAIL_ACTION_LINE_ICON_TEXT_SPACING = 1
 DETAIL_ICON_BUTTON_SIZE = 20
 DETAIL_ICON_SIZE = 18
+DETAIL_BUTTON_WIDTH = 100
 
 STATUS_OPTIONS = (
     ("to_watch", "To Watch"),
@@ -223,9 +224,9 @@ class MediaDetailsDialog(QDialog):
         self.search_input.setText(input_query or "")
         self.search_input.setFixedHeight(32)
 
-        self.search_button = QPushButton("Search Media", self)
+        self.search_button = QPushButton("Find Media", self)
         self.search_button.setMinimumHeight(32)
-        self.search_button.setFixedWidth(115)
+        self.search_button.setFixedWidth(DETAIL_BUTTON_WIDTH)
         self.search_button.clicked.connect(self.search_media)
 
         search_layout = QHBoxLayout()
@@ -325,7 +326,7 @@ class MediaDetailsDialog(QDialog):
         self.smart_input.setFixedHeight(32)
         self.smart_button = QPushButton("Smart Fill", lower_block)
         self.smart_button.setMinimumHeight(32)
-        self.smart_button.setFixedWidth(115)
+        self.smart_button.setFixedWidth(DETAIL_BUTTON_WIDTH)
         self.smart_button.clicked.connect(self.smart_fill)
 
         smart_layout.addWidget(self.smart_input, stretch=1)
@@ -360,7 +361,7 @@ class MediaDetailsDialog(QDialog):
 
         for button in (self.delete_button, self.cancel_button, self.save_button):
             button.setMinimumHeight(32)
-            button.setFixedWidth(115)
+            button.setFixedWidth(DETAIL_BUTTON_WIDTH)
             footer_layout.addWidget(button)
 
         footer_layout.addStretch()
@@ -643,7 +644,7 @@ class MediaDetailsDialog(QDialog):
             result = QMessageBox.question(
                 self,
                 "Discard changes?",
-                "Search Media will replace the current draft and discard unsaved changes.",
+                "Find Media will replace the current draft and discard unsaved changes.",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
