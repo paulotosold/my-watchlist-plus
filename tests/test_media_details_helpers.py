@@ -68,11 +68,40 @@ class MediaDetailsHelperTests(unittest.TestCase):
         self.assertEqual(row_texts[0], "IMDb ID: None")
         self.assertIn("TMDB ID: <a", row_texts[1])
         self.assertEqual(row_texts[2], "Type: Movie")
+        self.assertEqual(row_texts[-1], "Last Sync: None")
         self.assertIn("IMDb ID: None", row_texts)
         self.assertIn("Original Title: None", row_texts)
         self.assertIn("Runtime: None", row_texts)
         self.assertIn("Genres: None", row_texts)
         self.assertNotIn("Season Count: None", row_texts)
+
+    def test_metadata_rows_show_last_sync_when_available(self):
+        rows = build_metadata_display_rows({
+            "metadata": {
+                "tmdb_id": 1,
+                "imdb_id": None,
+                "media_type": "movie",
+                "title": "Example",
+                "original_title": "Example",
+                "production_status": None,
+                "release_date": None,
+                "runtime_min": None,
+                "last_tmdb_metadata_checked_at": "2026-06-29 11:53:44",
+                "genres": [],
+                "spoken_languages": [],
+                "origin_language": None,
+                "production_countries": [],
+                "production_companies": [],
+                "directors": [],
+                "writers": [],
+                "actors": [],
+            },
+            "series_view": None,
+        })
+        row_texts = [row["text"] for row in rows]
+
+        self.assertIn("29 Jun 2026", row_texts[-1])
+        self.assertRegex(row_texts[-1], r"Last Sync: .*\d{2}:\d{2}")
 
     def test_imdb_row_has_external_link_marker_and_tooltip(self):
         rows = build_metadata_display_rows({

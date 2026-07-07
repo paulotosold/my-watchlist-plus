@@ -253,7 +253,7 @@ class MediaDetailsDialog(QDialog):
         main_layout.addLayout(footer_layout)
 
     def _build_metadata_block(self):
-        block = DetailBlock("Metadata", "details_reload.png", self)
+        block = DetailBlock("Metadata (via TMDB API)", "details_reload.png", self)
         block.action_button.clicked.connect(self.reload_metadata)
 
         self.metadata_scroll = QScrollArea(block)
@@ -277,7 +277,7 @@ class MediaDetailsDialog(QDialog):
         right_column.setContentsMargins(0, 0, 0, 0)
         right_column.setSpacing(14)
 
-        self.providers_block = DetailBlock("Watch Providers", "details_reload.png", self)
+        self.providers_block = DetailBlock("Watch Providers (via TMDB API / JustWatch)", "details_reload.png", self)
         self.providers_block.action_button.clicked.connect(self.reload_watch_providers)
         self.providers_layout = QVBoxLayout()
         self.providers_layout.setContentsMargins(0, 0, 0, 0)
@@ -490,7 +490,7 @@ class MediaDetailsDialog(QDialog):
             metadata.get("last_tmdb_watch_providers_checked_at"),
         )
         checked_at_label = QLabel(
-            f"Checked at: {checked_at or 'None'}",
+            f"Last Sync: {checked_at or 'None'}",
             self.providers_block,
         )
         checked_at_label.setWordWrap(False)

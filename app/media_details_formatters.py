@@ -87,6 +87,11 @@ def build_metadata_display_rows(media_draft):
 
     cast_label = "Main Cast" if media_type == "series" else "Cast"
     add_metadata_row(rows, cast_label, format_name_list(metadata.get("actors")))
+    add_metadata_row(
+        rows,
+        "Last Sync",
+        format_watch_provider_checked_at(metadata.get("last_tmdb_metadata_checked_at")),
+    )
 
     return rows
 
