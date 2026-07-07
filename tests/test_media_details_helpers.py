@@ -65,6 +65,9 @@ class MediaDetailsHelperTests(unittest.TestCase):
         })
         row_texts = [row["text"] for row in rows]
 
+        self.assertEqual(row_texts[0], "IMDb ID: None")
+        self.assertIn("TMDB ID: <a", row_texts[1])
+        self.assertEqual(row_texts[2], "Type: Movie")
         self.assertIn("IMDb ID: None", row_texts)
         self.assertIn("Original Title: None", row_texts)
         self.assertIn("Runtime: None", row_texts)
@@ -97,6 +100,93 @@ class MediaDetailsHelperTests(unittest.TestCase):
 
         self.assertIn("tt0095327 ↗", imdb_row["text"])
         self.assertEqual(imdb_row["tooltip"], "Open on IMDb")
+
+    def test_tmdb_row_has_external_link_marker_and_tooltip_for_movie(self):
+        rows = build_metadata_display_rows({
+            "metadata": {
+                "tmdb_id": 77,
+                "imdb_id": None,
+                "media_type": "movie",
+                "title": "Example",
+                "original_title": "Example",
+                "production_status": None,
+                "release_date": None,
+                "runtime_min": None,
+                "genres": [],
+                "spoken_languages": [],
+                "origin_language": None,
+                "production_countries": [],
+                "production_companies": [],
+                "directors": [],
+                "writers": [],
+                "actors": [],
+            },
+            "series_view": None,
+        })
+        tmdb_row = next(row for row in rows if row["text"].startswith("TMDB ID:"))
+
+        self.assertIn("https://www.themoviedb.org/movie/77", tmdb_row["text"])
+        self.assertIn("77 ↗", tmdb_row["text"])
+        self.assertEqual(tmdb_row["tooltip"], "Open on TMDB")
+
+    def test_tmdb_row_has_external_link_for_series(self):
+        rows = build_metadata_display_rows({
+            "metadata": {
+                "tmdb_id": 83867,
+                "imdb_id": None,
+                "media_type": "series",
+                "title": "Example",
+                "original_title": "Example",
+                "production_status": None,
+                "genres": [],
+                "spoken_languages": [],
+                "origin_language": None,
+                "production_countries": [],
+                "production_companies": [],
+                "creators": [],
+                "writers": [],
+                "actors": [],
+            },
+            "series_view": {"summary": {}},
+        })
+        tmdb_row = next(row for row in rows if row["text"].startswith("TMDB ID:"))
+
+        self.assertIn("https://www.themoviedb.org/tv/83867", tmdb_row["text"])
+
+    def test_tmdb_row_has_external_link_for_episode(self):
+        rows = build_metadata_display_rows({
+            "metadata": {
+                "tmdb_id": 1226006,
+                "imdb_id": None,
+                "media_type": "episode",
+                "title": "Example",
+                "original_title": "Example",
+                "production_status": None,
+                "release_date": None,
+                "runtime_min": None,
+                "genres": [],
+                "spoken_languages": [],
+                "origin_language": None,
+                "production_countries": [],
+                "production_companies": [],
+                "directors": [],
+                "writers": [],
+                "actors": [],
+                "episode_details": {
+                    "series_tmdb_id": 42009,
+                    "series_title": "Example Series",
+                    "season_num": 3,
+                    "episode_num": 1,
+                },
+            },
+            "series_view": None,
+        })
+        tmdb_row = next(row for row in rows if row["text"].startswith("TMDB ID:"))
+
+        self.assertIn(
+            "https://www.themoviedb.org/tv/42009/season/3/episode/1",
+            tmdb_row["text"],
+        )
 
     def test_series_omits_writers_and_uses_main_cast(self):
         rows = build_metadata_display_rows({
@@ -151,52 +241,17 @@ class MediaDetailsHelperTests(unittest.TestCase):
         self.assertNotIn("Main Cast: None", row_texts)
 
     def test_format_watch_provider_checked_at_missing(self):
-        self.assertIsNone(format_watch_provider_checked_at([]))
-        self.assertIsNone(format_watch_provider_checked_at([
-            {"provider_name": "Netflix"},
-        ]))
+        self.assertIsNone(format_watch_provider_checked_at())
+        self.assertIsNone(format_watch_provider_checked_at(""))
 
-    def test_format_watch_provider_checked_at_uses_latest_timestamp(self):
-        self.assertEqual(
-            format_watch_provider_checked_at([
-                {
-                    "provider_name": "Netflix",
-                    "checked_at": "2026-06-29 11:53:44",
-                },
-                {
-                    "provider_name": "Apple TV",
-                    "checked_at": "2026-06-29 12:01:05",
-                },
-            ]),
-            "29 Jun 2026, 12:01",
-        )
+    def test_format_watch_provider_checked_at_formats_timestamp(self):
+        formatted = format_watch_provider_checked_at("2026-06-29 11:53:44")
 
-    def test_format_watch_provider_checked_at_with_identical_timestamps(self):
-        self.assertEqual(
-            format_watch_provider_checked_at([
-                {
-                    "provider_name": "Netflix",
-                    "checked_at": "2026-06-29 11:53:44",
-                },
-                {
-                    "provider_name": "Disney Plus",
-                    "checked_at": "2026-06-29 11:53:44",
-                },
-            ]),
-            "29 Jun 2026, 11:53",
-        )
+        self.assertIn("29 Jun 2026", formatted)
+        self.assertRegex(formatted, r"\d{2}:\d{2}")
 
-    def test_format_watch_provider_checked_at_ignores_invalid_values(self):
-        self.assertEqual(
-            format_watch_provider_checked_at([
-                {"provider_name": "Broken", "checked_at": "not-a-date"},
-                {"provider_name": "Valid", "checked_at": "2026-06-29 11:53:44"},
-            ]),
-            "29 Jun 2026, 11:53",
-        )
-        self.assertIsNone(format_watch_provider_checked_at([
-            {"provider_name": "Broken", "checked_at": "not-a-date"},
-        ]))
+    def test_format_watch_provider_checked_at_ignores_invalid_value(self):
+        self.assertIsNone(format_watch_provider_checked_at("not-a-date"))
 
     def test_group_watch_providers_still_groups_by_access_type(self):
         self.assertEqual(

@@ -17,8 +17,8 @@ def build_metadata_display_rows(media_draft):
     media_type = metadata.get("media_type")
     series_view = media_draft.get("series_view") or {}
 
-    add_metadata_row(rows, "TMDB ID", metadata.get("tmdb_id"))
     add_imdb_row(rows, metadata.get("imdb_id"))
+    add_tmdb_row(rows, metadata)
     add_metadata_row(rows, "Type", format_media_type(media_type))
 
     if media_type == "episode":
@@ -105,6 +105,54 @@ def add_imdb_row(rows, imdb_id):
         "text": f'IMDb ID: <a href="{url}">{imdb_id} ↗</a>',
         "tooltip": "Open on IMDb",
     })
+
+
+def add_tmdb_row(rows, metadata):
+    tmdb_id = metadata.get("tmdb_id")
+    url = build_tmdb_url(metadata)
+
+    if is_empty_metadata_value(tmdb_id) or not url:
+        rows.append({"text": "TMDB ID: None"})
+        return
+
+    rows.append({
+        "text": f'TMDB ID: <a href="{url}">{tmdb_id} ↗</a>',
+        "tooltip": "Open on TMDB",
+    })
+
+
+def build_tmdb_url(metadata):
+    tmdb_id = metadata.get("tmdb_id")
+    media_type = metadata.get("media_type")
+
+    if is_empty_metadata_value(tmdb_id):
+        return None
+
+    if media_type == "movie":
+        return f"https://www.themoviedb.org/movie/{tmdb_id}"
+
+    if media_type == "series":
+        return f"https://www.themoviedb.org/tv/{tmdb_id}"
+
+    if media_type == "episode":
+        episode_details = metadata.get("episode_details") or {}
+        series_tmdb_id = episode_details.get("series_tmdb_id")
+        season_num = episode_details.get("season_num")
+        episode_num = episode_details.get("episode_num")
+
+        if (
+            is_empty_metadata_value(series_tmdb_id)
+            or is_empty_metadata_value(season_num)
+            or is_empty_metadata_value(episode_num)
+        ):
+            return None
+
+        return (
+            f"https://www.themoviedb.org/tv/{series_tmdb_id}"
+            f"/season/{season_num}/episode/{episode_num}"
+        )
+
+    return None
 
 
 def format_empty_metadata_value(value):
