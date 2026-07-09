@@ -7,6 +7,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 from app.media_details_formatters import (
     build_metadata_display_rows,
     build_series_watch_history_lines,
+    build_watch_history_display_entries,
     format_code_or_name_list,
     format_date_range,
     format_people_with_jobs,
@@ -362,28 +363,34 @@ class MediaDetailsHelperTests(unittest.TestCase):
                 "summary": {"first_air_date": "2022-06-01"},
                 "episode_watch_history": [
                     {
+                        "series_id": 10,
+                        "episode_id": 104,
                         "watch_history_id": 1,
-                        "date_earliest": "2022-06-15",
-                        "date_latest": "2022-06-15",
-                        "created_at": "2022-06-16 10:00:00",
+                        "date_earliest": "2026-05-01",
+                        "date_latest": "2026-05-01",
+                        "created_at": "2026-05-01 20:00:00",
                         "season_num": 1,
-                        "episode_num": 1,
+                        "episode_num": 4,
                     },
                     {
-                        "watch_history_id": 1,
-                        "date_earliest": "2022-06-15",
-                        "date_latest": "2022-06-15",
-                        "created_at": "2022-06-16 10:00:00",
+                        "series_id": 10,
+                        "episode_id": 105,
+                        "watch_history_id": 2,
+                        "date_earliest": "2026-05-01",
+                        "date_latest": "2026-05-01",
+                        "created_at": "2026-05-01 20:01:00",
                         "season_num": 1,
-                        "episode_num": 2,
+                        "episode_num": 5,
                     },
                     {
-                        "watch_history_id": 1,
-                        "date_earliest": "2022-06-15",
-                        "date_latest": "2022-06-15",
-                        "created_at": "2022-06-16 10:00:00",
+                        "series_id": 10,
+                        "episode_id": 106,
+                        "watch_history_id": 3,
+                        "date_earliest": "2026-05-01",
+                        "date_latest": "2026-05-01",
+                        "created_at": "2026-05-01 20:02:00",
                         "season_num": 1,
-                        "episode_num": 3,
+                        "episode_num": 6,
                     },
                 ],
             },
@@ -391,7 +398,43 @@ class MediaDetailsHelperTests(unittest.TestCase):
 
         self.assertEqual(
             build_series_watch_history_lines(media_draft),
-            ["15 Jun 2022, Wed · S1:E1-3"],
+            ["1 May 2026, Fri · S1:E4-6"],
+        )
+
+        entries = build_watch_history_display_entries(media_draft)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["kind"], "episode_group")
+        self.assertEqual(entries[0]["date_earliest"], "2026-05-01")
+        self.assertEqual(entries[0]["date_latest"], "2026-05-01")
+        self.assertEqual(entries[0]["watch_history_ids"], [1, 2, 3])
+        self.assertEqual(
+            entries[0]["episodes"],
+            [
+                {
+                    "series_id": 10,
+                    "episode_id": 104,
+                    "watch_history_id": 1,
+                    "season_num": 1,
+                    "episode_num": 4,
+                    "created_at": "2026-05-01 20:00:00",
+                },
+                {
+                    "series_id": 10,
+                    "episode_id": 105,
+                    "watch_history_id": 2,
+                    "season_num": 1,
+                    "episode_num": 5,
+                    "created_at": "2026-05-01 20:01:00",
+                },
+                {
+                    "series_id": 10,
+                    "episode_id": 106,
+                    "watch_history_id": 3,
+                    "season_num": 1,
+                    "episode_num": 6,
+                    "created_at": "2026-05-01 20:02:00",
+                },
+            ],
         )
 
 

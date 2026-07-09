@@ -342,63 +342,127 @@ def build_tmdb_match_from_metadata(metadata):
     return match
 
 
-def build_watch_history_display_lines(media_draft):
+def build_watch_history_display_entries(media_draft):
     metadata = media_draft.get("metadata") or {}
 
     if metadata.get("media_type") == "series":
-        return build_series_watch_history_lines(media_draft)
+        return build_series_watch_history_entries(media_draft)
 
     return [
-        format_watch_history_entry(
+        build_media_watch_history_entry(
             event,
             release_date=metadata.get("release_date"),
+            index=index,
         )
-        for event in sorted(
-            media_draft.get("user_data", {}).get("watch_history", []),
-            key=watch_history_sort_key,
+        for index, event in sorted(
+            enumerate(media_draft.get("user_data", {}).get("watch_history", [])),
+            key=lambda item: watch_history_sort_key(item[1]),
         )
     ]
 
 
-def build_series_watch_history_lines(media_draft):
+def build_watch_history_display_lines(media_draft):
+    return [
+        entry["text"]
+        for entry in build_watch_history_display_entries(media_draft)
+    ]
+
+
+def build_series_watch_history_entries(media_draft):
     metadata = media_draft.get("metadata") or {}
     series_view = media_draft.get("series_view") or {}
     summary = series_view.get("summary") or {}
     release_date = summary.get("first_air_date") or metadata.get("release_date")
-    lines = []
+    entries = []
 
-    for event in sorted(
-        media_draft.get("user_data", {}).get("watch_history", []),
-        key=watch_history_sort_key,
+    for index, event in sorted(
+        enumerate(media_draft.get("user_data", {}).get("watch_history", [])),
+        key=lambda item: watch_history_sort_key(item[1]),
     ):
-        lines.append({
-            "created_at": event.get("created_at"),
-            "text": (
-                f"{format_watch_history_entry(event, release_date=release_date)}"
-                " · no episode info"
-            ),
-        })
+        entries.append(
+            build_media_watch_history_entry(
+                event,
+                release_date=release_date,
+                index=index,
+                text_suffix=" · no episode info",
+            )
+        )
 
     for group in group_episode_watch_history(
         series_view.get("episode_watch_history", [])
     ):
-        representative = group[0]
-        date_label = format_watch_history_entry(
-            representative,
-            release_date=release_date,
-        )
-        lines.append({
-            "created_at": representative.get("created_at"),
-            "text": f"{date_label} · {format_episode_ranges(group)}",
-        })
+        entries.append(build_episode_group_watch_history_entry(group, release_date))
 
+    return sorted(entries, key=lambda item: item.get("created_at") or "")
+
+
+def build_series_watch_history_lines(media_draft):
     return [
-        line["text"]
-        for line in sorted(
-            lines,
-            key=lambda item: item.get("created_at") or "",
-        )
+        entry["text"]
+        for entry in build_series_watch_history_entries(media_draft)
     ]
+
+
+def build_media_watch_history_entry(
+    event,
+    release_date=None,
+    index=None,
+    text_suffix="",
+):
+    text = format_watch_history_entry(event, release_date=release_date)
+
+    return {
+        "kind": "media_event",
+        "text": f"{text}{text_suffix}",
+        "date_earliest": event.get("date_earliest"),
+        "date_latest": event.get("date_latest"),
+        "created_at": event.get("created_at"),
+        "watch_history_id": event.get("id") or event.get("watch_history_id"),
+        "watch_history_index": index,
+        "watch_history": dict(event),
+    }
+
+
+def build_episode_group_watch_history_entry(group, release_date=None):
+    representative = group[0]
+    date_label = format_watch_history_entry(
+        representative,
+        release_date=release_date,
+    )
+
+    return {
+        "kind": "episode_group",
+        "text": f"{date_label} · {format_episode_ranges(group)}",
+        "date_earliest": representative.get("date_earliest"),
+        "date_latest": representative.get("date_latest"),
+        "created_at": earliest_created_at(group),
+        "watch_history_ids": [
+            row.get("watch_history_id")
+            for row in group
+            if row.get("watch_history_id") is not None
+        ],
+        "episodes": [
+            {
+                "series_id": row.get("series_id"),
+                "episode_id": row.get("episode_id"),
+                "watch_history_id": row.get("watch_history_id"),
+                "season_num": row.get("season_num"),
+                "episode_num": row.get("episode_num"),
+                "created_at": row.get("created_at"),
+            }
+            for row in group
+        ],
+    }
+
+
+def earliest_created_at(rows):
+    created_at_values = [
+        row.get("created_at")
+        for row in rows
+        if row.get("created_at")
+    ]
+
+    return min(created_at_values) if created_at_values else None
 
 
 def group_episode_watch_history(rows):
@@ -406,10 +470,8 @@ def group_episode_watch_history(rows):
 
     for row in rows or []:
         key = (
-            row.get("watch_history_id"),
             row.get("date_earliest"),
             row.get("date_latest"),
-            row.get("created_at"),
         )
         groups.setdefault(key, []).append(row)
 
@@ -424,8 +486,8 @@ def group_episode_watch_history(rows):
         for _, group in sorted(
             groups.items(),
             key=lambda item: (
-                item[0][3] or "",
-                item[0][0] or 0,
+                item[0][0] or "",
+                item[0][1] or "",
             ),
         )
     ]

@@ -33,7 +33,7 @@ from app.media_details_formatters import (
     WATCH_PROVIDER_GROUPS,
     build_metadata_display_rows,
     build_tmdb_match_from_metadata,
-    build_watch_history_display_lines,
+    build_watch_history_display_entries,
     format_watch_provider_checked_at,
     get_poster_curation_status,
     group_watch_providers,
@@ -548,9 +548,13 @@ class MediaDetailsDialog(QDialog):
     def render_watch_history(self):
         clear_layout(self.watch_history_layout)
 
-        for line in build_watch_history_display_lines(self.media_draft):
+        for entry in build_watch_history_display_entries(self.media_draft):
             self.watch_history_layout.addLayout(
-                self._make_action_line("details_edit.png", line, self.edit_watch_history)
+                self._make_action_line(
+                    "details_edit.png",
+                    entry["text"],
+                    lambda checked=False, entry=entry: self.edit_watch_history(entry),
+                )
             )
 
         self.watch_history_layout.addWidget(
@@ -702,8 +706,8 @@ class MediaDetailsDialog(QDialog):
     def smart_fill(self):
         print("Smart Fill clicked")
 
-    def edit_watch_history(self):
-        print("Watch history edit clicked")
+    def edit_watch_history(self, entry=None):
+        print("Watch history edit clicked", entry)
 
     def add_watch_history(self):
         print("Watch history add clicked")
