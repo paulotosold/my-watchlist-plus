@@ -246,7 +246,15 @@ def _save_series_draft_with_episode_context(
     )
     poster_downloads = series_save_result["poster_downloads"]
 
-    if watch_state in SERIES_COMPLETION_SKIP_STATES:
+    if (
+        watch_state in SERIES_COMPLETION_SKIP_STATES
+        and not _draft_has_series_episode_watch_history(media_draft)
+    ):
+        _sync_series_episode_watch_history_for_draft(
+            conn,
+            series_save_result["media_id"],
+            media_draft,
+        )
         return {
             "media_id": series_save_result["media_id"],
             "poster_downloads": poster_downloads,
@@ -271,6 +279,11 @@ def _save_series_draft_with_episode_context(
         poster_downloads,
         episode_seed_result["poster_downloads"],
     )
+    _sync_series_episode_watch_history_for_draft(
+        conn,
+        series_save_result["media_id"],
+        media_draft,
+    )
 
     return {
         "media_id": series_save_result["media_id"],
@@ -282,6 +295,25 @@ def _save_series_draft_with_episode_context(
         "episode_seed_count": episode_seed_result["saved_count"],
         "episode_seed_skip_count": episode_seed_result["skipped_existing_count"],
     }
+
+
+def _sync_series_episode_watch_history_for_draft(conn, series_id, media_draft):
+    series_view = media_draft.get("series_view") or {}
+
+    if "episode_watch_history" not in series_view:
+        return
+
+    media_repository.sync_series_episode_watch_history(
+        conn,
+        series_id,
+        series_view.get("episode_watch_history", []),
+    )
+
+
+def _draft_has_series_episode_watch_history(media_draft):
+    return bool(
+        (media_draft.get("series_view") or {}).get("episode_watch_history")
+    )
 
 
 def _save_series_episode_seeds(

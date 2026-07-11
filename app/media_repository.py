@@ -342,12 +342,37 @@ def get_db_series_episode_watch_history(conn, media_id):
 
     return [dict(row) for row in cursor.fetchall()]
 
+def get_db_series_episodes(conn, media_id):
+    cursor = conn.execute(
+        """
+        SELECT
+            ed.series_id AS series_id,
+            e.id AS episode_id,
+            e.tmdb_id AS tmdb_id,
+            ed.season_num AS season_num,
+            ed.episode_num AS episode_num,
+            e.title AS title,
+            e.release_date AS release_date
+        FROM episode_details ed
+        JOIN media e
+            ON e.id = ed.media_id
+        WHERE ed.series_id = ?
+        ORDER BY
+            ed.season_num,
+            ed.episode_num
+        """,
+        (media_id,),
+    )
+
+    return [dict(row) for row in cursor.fetchall()]
+
 def get_db_series_view(conn, media_id, media_type):
     if media_type != "series":
         return None
 
     return {
         "summary": get_db_series_summary(conn, media_id),
+        "episodes": get_db_series_episodes(conn, media_id),
         "episode_watch_history": get_db_series_episode_watch_history(
             conn,
             media_id,
@@ -1763,6 +1788,143 @@ def _sync_watch_history(conn, media_id, watch_history):
         kept_ids.append(event_id)
 
     _delete_missing_ids(conn, "watch_history", media_id, kept_ids)
+
+def sync_series_episode_watch_history(conn, series_id, episode_watch_history):
+    kept_ids = []
+
+    for event in episode_watch_history or []:
+        episode_id = _resolve_series_episode_id(conn, series_id, event)
+        event_id = event.get("watch_history_id") or event.get("id")
+
+        if event_id is None:
+            cursor = conn.execute(
+                """
+                INSERT INTO watch_history (
+                    media_id,
+                    date_earliest,
+                    date_latest
+                )
+                VALUES (?, ?, ?)
+                """,
+                (
+                    episode_id,
+                    event.get("date_earliest"),
+                    event.get("date_latest"),
+                ),
+            )
+            event["episode_id"] = episode_id
+            event["series_id"] = series_id
+            event["watch_history_id"] = cursor.lastrowid
+            kept_ids.append(cursor.lastrowid)
+            continue
+
+        cursor = conn.execute(
+            """
+            UPDATE watch_history
+            SET
+                date_earliest = ?,
+                date_latest = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+              AND media_id = ?
+            """,
+            (
+                event.get("date_earliest"),
+                event.get("date_latest"),
+                event_id,
+                episode_id,
+            ),
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError(
+                f"watch_history id {event_id} does not belong to episode."
+            )
+
+        event["episode_id"] = episode_id
+        event["series_id"] = series_id
+        kept_ids.append(event_id)
+
+    _delete_missing_series_episode_watch_history(conn, series_id, kept_ids)
+
+
+def _resolve_series_episode_id(conn, series_id, event):
+    episode_id = event.get("episode_id")
+
+    if episode_id is not None:
+        cursor = conn.execute(
+            """
+            SELECT media_id
+            FROM episode_details
+            WHERE series_id = ?
+              AND media_id = ?
+            """,
+            (
+                series_id,
+                episode_id,
+            ),
+        )
+        row = cursor.fetchone()
+
+        if row is not None:
+            return row["media_id"]
+
+    season_num = event.get("season_num")
+    episode_num = event.get("episode_num")
+
+    cursor = conn.execute(
+        """
+        SELECT media_id
+        FROM episode_details
+        WHERE series_id = ?
+          AND season_num = ?
+          AND episode_num = ?
+        """,
+        (
+            series_id,
+            season_num,
+            episode_num,
+        ),
+    )
+    row = cursor.fetchone()
+
+    if row is None:
+        raise ValueError(
+            "Could not resolve episode "
+            f"S{season_num}:E{episode_num} for series {series_id}."
+        )
+
+    return row["media_id"]
+
+
+def _delete_missing_series_episode_watch_history(conn, series_id, kept_ids):
+    if kept_ids:
+        placeholders = ", ".join("?" for _ in kept_ids)
+        conn.execute(
+            f"""
+            DELETE FROM watch_history
+            WHERE media_id IN (
+                SELECT media_id
+                FROM episode_details
+                WHERE series_id = ?
+            )
+              AND id NOT IN ({placeholders})
+            """,
+            (series_id, *kept_ids),
+        )
+        return
+
+    conn.execute(
+        """
+        DELETE FROM watch_history
+        WHERE media_id IN (
+            SELECT media_id
+            FROM episode_details
+            WHERE series_id = ?
+        )
+        """,
+        (series_id,),
+    )
 
 def _sync_media_notes(conn, media_id, notes):
     kept_ids = []

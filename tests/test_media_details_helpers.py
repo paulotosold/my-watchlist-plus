@@ -413,7 +413,9 @@ class MediaDetailsHelperTests(unittest.TestCase):
                 {
                     "series_id": 10,
                     "episode_id": 104,
+                    "tmdb_id": None,
                     "watch_history_id": 1,
+                    "draft_id": None,
                     "season_num": 1,
                     "episode_num": 4,
                     "created_at": "2026-05-01 20:00:00",
@@ -421,7 +423,9 @@ class MediaDetailsHelperTests(unittest.TestCase):
                 {
                     "series_id": 10,
                     "episode_id": 105,
+                    "tmdb_id": None,
                     "watch_history_id": 2,
+                    "draft_id": None,
                     "season_num": 1,
                     "episode_num": 5,
                     "created_at": "2026-05-01 20:01:00",
@@ -429,7 +433,9 @@ class MediaDetailsHelperTests(unittest.TestCase):
                 {
                     "series_id": 10,
                     "episode_id": 106,
+                    "tmdb_id": None,
                     "watch_history_id": 3,
+                    "draft_id": None,
                     "season_num": 1,
                     "episode_num": 6,
                     "created_at": "2026-05-01 20:02:00",

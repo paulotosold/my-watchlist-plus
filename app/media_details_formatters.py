@@ -441,11 +441,18 @@ def build_episode_group_watch_history_entry(group, release_date=None):
             for row in group
             if row.get("watch_history_id") is not None
         ],
+        "draft_ids": [
+            row.get("draft_id")
+            for row in group
+            if row.get("draft_id") is not None
+        ],
         "episodes": [
             {
                 "series_id": row.get("series_id"),
                 "episode_id": row.get("episode_id"),
+                "tmdb_id": row.get("tmdb_id"),
                 "watch_history_id": row.get("watch_history_id"),
+                "draft_id": row.get("draft_id"),
                 "season_num": row.get("season_num"),
                 "episode_num": row.get("episode_num"),
                 "created_at": row.get("created_at"),

@@ -34,11 +34,33 @@ from app.media_details_formatters import (
     build_metadata_display_rows,
     build_tmdb_match_from_metadata,
     build_watch_history_display_entries,
+    format_episode_ranges,
+    format_watch_history_entry,
     format_watch_provider_checked_at,
     get_poster_curation_status,
     group_watch_providers,
 )
 from app.media_lookup import resolve_media_draft_from_query
+from app.watch_history_editor import (
+    WATCH_ENTRY_DATE_INPUT_WIDTH,
+    WATCH_ENTRY_EPISODE_BUTTON_BORDER_RADIUS,
+    WATCH_ENTRY_EPISODE_BUTTON_FONT_SIZE,
+    WATCH_ENTRY_EPISODE_BUTTON_HEIGHT,
+    WATCH_ENTRY_EPISODE_BUTTON_SPACING,
+    WATCH_ENTRY_EPISODE_BUTTON_SELECTED_COLOR,
+    WATCH_ENTRY_EPISODE_BUTTON_WATCHED_COLOR,
+    WATCH_ENTRY_EPISODE_BUTTON_WIDTH,
+    WATCH_ENTRY_EPISODES_TO_BUTTONS_SPACING,
+    WATCH_ENTRY_HEADER_TO_BUTTONS_SPACING,
+    WATCH_ENTRY_HEADER_TO_EPISODES_SPACING,
+    WATCH_ENTRY_SEASON_ROW_SPACING,
+    apply_watch_entry_result,
+    episode_key,
+    get_series_episodes,
+    selected_episode_keys,
+    validate_watch_dates,
+    watched_episode_keys,
+)
 from db.connection import get_connection
 
 
@@ -54,6 +76,13 @@ DETAIL_ACTION_LINE_ICON_TEXT_SPACING = 1
 DETAIL_ICON_BUTTON_SIZE = 20
 DETAIL_ICON_SIZE = 18
 DETAIL_BUTTON_WIDTH = 100
+WATCH_ENTRY_BACKGROUND_COLOR = "#f1f1f1"
+WATCH_ENTRY_DIALOG_DEFAULT_WIDTH = 960
+WATCH_ENTRY_DIALOG_MAX_HEIGHT = 750
+WATCH_ENTRY_EPISODE_SELECTOR_MAX_HEIGHT = 520
+WATCH_ENTRY_DATE_GROUP_SPACING = 2
+WATCH_ENTRY_SEASON_LABEL_WIDTH = 60
+WATCH_ENTRY_SEASON_LABEL_BUTTON_SPACING = 20
 
 STATUS_OPTIONS = (
     ("to_watch", "To Watch"),
@@ -194,6 +223,361 @@ class ComboPopupItemDelegate(QStyledItemDelegate):
             str(index.data(Qt.ItemDataRole.DisplayRole)),
         )
         painter.restore()
+
+
+class WatchEntryDetailsDialog(QDialog):
+    def __init__(self, parent, media_draft, entry=None):
+        super().__init__(parent)
+
+        self.media_draft = deepcopy(media_draft)
+        self.entry = deepcopy(entry) if entry is not None else None
+        self.result_payload = {"action": "cancel"}
+        self.episode_buttons = {}
+        self.initial_signature = None
+
+        self.setWindowTitle("Watch Entry Details")
+        self.setMinimumWidth(WATCH_ENTRY_DIALOG_DEFAULT_WIDTH)
+        self.setMaximumHeight(WATCH_ENTRY_DIALOG_MAX_HEIGHT)
+        self._apply_parent_styles(parent)
+        self._build_ui()
+        self.resize(
+            WATCH_ENTRY_DIALOG_DEFAULT_WIDTH,
+            min(self.sizeHint().height(), WATCH_ENTRY_DIALOG_MAX_HEIGHT),
+        )
+        self._populate_initial_values()
+        self.initial_signature = self._current_signature()
+        self._refresh_state()
+
+    def _apply_parent_styles(self, parent):
+        parent_style = parent.styleSheet() if parent is not None else ""
+        self.setStyleSheet(parent_style + f"""
+            QLabel#errorLabel {{
+                color: #b00020;
+            }}
+
+            QScrollArea#episodeSelectorScroll,
+            QScrollArea#episodeSelectorScroll > QWidget,
+            QScrollArea#episodeSelectorScroll > QWidget > QWidget,
+            QWidget#episodeSelectorContent,
+            QFrame#dialogButtonBar {{
+                background-color: {WATCH_ENTRY_BACKGROUND_COLOR};
+                border: none;
+            }}
+
+            QPushButton#episodeButton {{
+                min-width: {WATCH_ENTRY_EPISODE_BUTTON_WIDTH}px;
+                max-width: {WATCH_ENTRY_EPISODE_BUTTON_WIDTH}px;
+                min-height: {WATCH_ENTRY_EPISODE_BUTTON_HEIGHT}px;
+                max-height: {WATCH_ENTRY_EPISODE_BUTTON_HEIGHT}px;
+                padding: 0px;
+                border: 1px solid #bcbcbc;
+                border-radius: {WATCH_ENTRY_EPISODE_BUTTON_BORDER_RADIUS}px;
+                background-color: white;
+                color: black;
+                font-size: {WATCH_ENTRY_EPISODE_BUTTON_FONT_SIZE}px;
+            }}
+
+            QPushButton#episodeButton[watchState="watched"] {{
+                background-color: {WATCH_ENTRY_EPISODE_BUTTON_WATCHED_COLOR};
+            }}
+
+            QPushButton#episodeButton[watchState="selected"] {{
+                background-color: {WATCH_ENTRY_EPISODE_BUTTON_SELECTED_COLOR};
+            }}
+        """)
+
+    def _build_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 16, 20, 16)
+        main_layout.setSpacing(0)
+
+        date_layout = QHBoxLayout()
+        date_layout.setContentsMargins(0, 0, 0, 0)
+        date_layout.setSpacing(16)
+
+        self.date_earliest_input = self._make_date_input()
+        self.date_latest_input = self._make_date_input()
+        self.preview_label = QLabel(self)
+        self.preview_label.setWordWrap(False)
+
+        date_layout.addWidget(QLabel("Earliest Date:", self))
+        date_layout.addWidget(self.date_earliest_input)
+        date_layout.addSpacing(WATCH_ENTRY_DATE_GROUP_SPACING)
+        date_layout.addWidget(QLabel("Latest Date:", self))
+        date_layout.addWidget(self.date_latest_input)
+        date_layout.addSpacing(WATCH_ENTRY_DATE_GROUP_SPACING)
+        date_layout.addWidget(self.preview_label, stretch=1)
+        main_layout.addLayout(date_layout)
+
+        if self._is_series():
+            main_layout.addSpacing(WATCH_ENTRY_HEADER_TO_EPISODES_SPACING)
+            main_layout.addWidget(self._build_episode_selector())
+            main_layout.addSpacing(WATCH_ENTRY_EPISODES_TO_BUTTONS_SPACING)
+        else:
+            main_layout.addSpacing(WATCH_ENTRY_HEADER_TO_BUTTONS_SPACING)
+
+        self.error_label = QLabel(self)
+        self.error_label.setObjectName("errorLabel")
+        self.error_label.setWordWrap(True)
+        main_layout.addWidget(self.error_label)
+
+        main_layout.addWidget(self._build_button_bar())
+
+    def _make_date_input(self):
+        input_widget = QLineEdit(self)
+        input_widget.setFixedHeight(32)
+        input_widget.setFixedWidth(WATCH_ENTRY_DATE_INPUT_WIDTH)
+        input_widget.textChanged.connect(self._refresh_state)
+        return input_widget
+
+    def _build_episode_selector(self):
+        scroll = QScrollArea(self)
+        scroll.setObjectName("episodeSelectorScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setMaximumHeight(WATCH_ENTRY_EPISODE_SELECTOR_MAX_HEIGHT)
+
+        content = QWidget(scroll)
+        content.setObjectName("episodeSelectorContent")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(WATCH_ENTRY_SEASON_ROW_SPACING)
+
+        episodes_by_season = {}
+
+        for episode in self._selectable_episodes():
+            episodes_by_season.setdefault(episode.get("season_num"), []).append(episode)
+
+        if not episodes_by_season:
+            content_layout.addWidget(QLabel("No episodes available.", self))
+        else:
+            selected_keys = selected_episode_keys(self.entry)
+
+            for season_num in sorted(episodes_by_season):
+                row_layout = QHBoxLayout()
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.setSpacing(WATCH_ENTRY_SEASON_LABEL_BUTTON_SPACING)
+
+                season_label = QLabel(f"Season {season_num}:", self)
+                season_label.setFixedWidth(WATCH_ENTRY_SEASON_LABEL_WIDTH)
+                row_layout.addWidget(season_label)
+
+                episode_buttons_layout = QHBoxLayout()
+                episode_buttons_layout.setContentsMargins(0, 0, 0, 0)
+                episode_buttons_layout.setSpacing(WATCH_ENTRY_EPISODE_BUTTON_SPACING)
+
+                for episode in sorted(
+                    episodes_by_season[season_num],
+                    key=lambda item: item.get("episode_num") or 0,
+                ):
+                    key = episode_key(episode)
+                    button = QPushButton(f"E{episode.get('episode_num')}", self)
+                    button.setObjectName("episodeButton")
+                    button.setCheckable(True)
+                    button.setFixedSize(
+                        WATCH_ENTRY_EPISODE_BUTTON_WIDTH,
+                        WATCH_ENTRY_EPISODE_BUTTON_HEIGHT,
+                    )
+                    button.setChecked(key in selected_keys)
+                    button.clicked.connect(
+                        lambda checked=False, key=key: self._episode_toggled(key)
+                    )
+                    self.episode_buttons[key] = (button, episode)
+                    episode_buttons_layout.addWidget(button)
+
+                row_layout.addLayout(episode_buttons_layout)
+                row_layout.addStretch()
+                content_layout.addLayout(row_layout)
+
+        content_layout.addStretch()
+        scroll.setWidget(content)
+        return scroll
+
+    def _build_button_bar(self):
+        bar = QFrame(self)
+        bar.setObjectName("dialogButtonBar")
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(10)
+        layout.addStretch()
+
+        self.delete_entry_button = QPushButton("DELETE", bar)
+        self.delete_entry_button.setObjectName("deleteButton")
+        self.cancel_entry_button = QPushButton("Cancel", bar)
+        self.save_entry_button = QPushButton("Save", bar)
+
+        for button in (
+            self.delete_entry_button,
+            self.cancel_entry_button,
+            self.save_entry_button,
+        ):
+            button.setMinimumHeight(32)
+            button.setFixedWidth(DETAIL_BUTTON_WIDTH)
+            layout.addWidget(button)
+
+        layout.addStretch()
+
+        self.delete_entry_button.clicked.connect(self._delete_entry)
+        self.cancel_entry_button.clicked.connect(self.reject)
+        self.save_entry_button.clicked.connect(self._save_entry)
+
+        return bar
+
+    def _populate_initial_values(self):
+        self.date_earliest_input.setText(
+            (self.entry or {}).get("date_earliest") or ""
+        )
+        self.date_latest_input.setText(
+            (self.entry or {}).get("date_latest") or ""
+        )
+
+    def _selectable_episodes(self):
+        episodes_by_key = {
+            episode_key(episode): deepcopy(episode)
+            for episode in get_series_episodes(self.media_draft)
+            if episode_key(episode) != (None, None)
+        }
+
+        for row in (
+            (self.media_draft.get("series_view") or {})
+            .get("episode_watch_history", [])
+        ):
+            key = episode_key(row)
+
+            if key != (None, None) and key not in episodes_by_key:
+                episodes_by_key[key] = deepcopy(row)
+
+        for episode in (self.entry or {}).get("episodes", []):
+            key = episode_key(episode)
+
+            if key != (None, None) and key not in episodes_by_key:
+                episodes_by_key[key] = deepcopy(episode)
+
+        return sorted(
+            episodes_by_key.values(),
+            key=lambda item: (
+                item.get("season_num") or 0,
+                item.get("episode_num") or 0,
+            ),
+        )
+
+    def _episode_toggled(self, key):
+        self._refresh_episode_button(key)
+        self._refresh_state()
+
+    def _refresh_state(self):
+        validation = self._validated_dates()
+        self.error_label.setText(validation["error"] or "")
+        self.error_label.setVisible(bool(validation["error"]))
+        self.preview_label.setText(f"Preview: {self._preview_text(validation)}")
+
+        for key in self.episode_buttons:
+            self._refresh_episode_button(key)
+
+        is_changed = self._current_signature() != self.initial_signature
+        self.save_entry_button.setEnabled(validation["is_valid"] and is_changed)
+        self.delete_entry_button.setEnabled(self.entry is not None)
+
+    def _refresh_episode_button(self, key):
+        button, _episode = self.episode_buttons[key]
+        watched_keys = watched_episode_keys(self.media_draft, self.entry)
+        watch_state = "selected" if button.isChecked() else ""
+
+        if not watch_state and key in watched_keys:
+            watch_state = "watched"
+
+        button.setProperty("watchState", watch_state)
+        button.style().unpolish(button)
+        button.style().polish(button)
+        button.update()
+
+    def _validated_dates(self):
+        return validate_watch_dates(
+            self.date_earliest_input.text(),
+            self.date_latest_input.text(),
+        )
+
+    def _preview_text(self, validation=None):
+        validation = validation or self._validated_dates()
+
+        if not validation["is_valid"]:
+            return "Invalid date"
+
+        event = {
+            "date_earliest": validation["date_earliest"],
+            "date_latest": validation["date_latest"],
+        }
+        release_date = self._watch_history_release_date()
+        preview = format_watch_history_entry(event, release_date=release_date)
+
+        if not self._is_series():
+            return preview
+
+        selected_episodes = self._selected_episodes()
+
+        if selected_episodes:
+            return f"{preview} · {format_episode_ranges(selected_episodes)}"
+
+        return f"{preview} · no episode info"
+
+    def _current_signature(self):
+        validation = self._validated_dates()
+
+        if not validation["is_valid"]:
+            return None
+
+        return (
+            validation["date_earliest"],
+            validation["date_latest"],
+            tuple(
+                sorted(
+                    episode_key(episode)
+                    for episode in self._selected_episodes()
+                )
+            ),
+        )
+
+    def _selected_episodes(self):
+        return [
+            deepcopy(episode)
+            for button, episode in self.episode_buttons.values()
+            if button.isChecked()
+        ]
+
+    def _watch_history_release_date(self):
+        metadata = self.media_draft.get("metadata") or {}
+
+        if metadata.get("media_type") == "series":
+            series_view = self.media_draft.get("series_view") or {}
+            summary = series_view.get("summary") or {}
+            return summary.get("first_air_date") or metadata.get("release_date")
+
+        return metadata.get("release_date")
+
+    def _is_series(self):
+        return (self.media_draft.get("metadata") or {}).get("media_type") == "series"
+
+    def _save_entry(self):
+        validation = self._validated_dates()
+
+        if not validation["is_valid"]:
+            return
+
+        self.result_payload = {
+            "action": "save",
+            "date_earliest": validation["date_earliest"],
+            "date_latest": validation["date_latest"],
+            "selected_episodes": self._selected_episodes(),
+        }
+        self.accept()
+
+    def _delete_entry(self):
+        if self.entry is None:
+            return
+
+        self.result_payload = {"action": "delete"}
+        self.accept()
 
 
 class MediaDetailsDialog(QDialog):
@@ -707,10 +1091,24 @@ class MediaDetailsDialog(QDialog):
         print("Smart Fill clicked")
 
     def edit_watch_history(self, entry=None):
-        print("Watch history edit clicked", entry)
+        self._open_watch_entry_details(entry)
 
     def add_watch_history(self):
-        print("Watch history add clicked")
+        self._open_watch_entry_details()
+
+    def _open_watch_entry_details(self, entry=None):
+        dialog = WatchEntryDetailsDialog(self, self.media_draft, entry)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        apply_watch_entry_result(
+            self.media_draft,
+            entry,
+            dialog.result_payload,
+        )
+        self.mark_dirty()
+        self.render_watch_history()
 
     def edit_note(self):
         print("Note edit clicked")

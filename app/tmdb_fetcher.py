@@ -448,12 +448,29 @@ def get_tmdb_media_series_view(tmdb_id_match):
     if tmdb_id_match["media_type"] != "series":
         return None
 
-    series_details = _tmdb_get(f"tv/{tmdb_id_match['tmdb_id']}")
+    series_tmdb_id = tmdb_id_match["tmdb_id"]
+    series_details = _tmdb_get(f"tv/{series_tmdb_id}")
 
     return {
         "summary": _format_tmdb_series_summary(series_details),
+        "episodes": _format_tmdb_series_episodes(series_tmdb_id),
         "episode_watch_history": [],
     }
+
+
+def _format_tmdb_series_episodes(series_tmdb_id):
+    return [
+        {
+            "series_id": None,
+            "episode_id": None,
+            "tmdb_id": match.get("tmdb_id"),
+            "season_num": match.get("season_num"),
+            "episode_num": match.get("episode_num"),
+            "title": match.get("title"),
+            "release_date": _clean_date(match.get("release_date")),
+        }
+        for match in get_tmdb_series_episode_matches(series_tmdb_id)
+    ]
 
 
 def _format_tmdb_series_summary(series_details):
