@@ -38,11 +38,30 @@ class MediaBoard(QWidget):
 
     def load_media(self, filtered_media):
         self.filtered_media = filtered_media
-        reserved_keys = self._visible_media_keys(pinned_only=True)
+        media_list = filtered_media.media_list if filtered_media else []
+        media_by_key = {
+            get_media_key(media_draft): media_draft
+            for media_draft in media_list
+            if get_media_key(media_draft) is not None
+        }
+        reserved_keys = set()
+
+        for card in self.cards:
+            if not card.is_pinned:
+                continue
+
+            media_key = card.get_current_media_key()
+            refreshed_media = media_by_key.get(media_key)
+
+            if refreshed_media is None or media_key in reserved_keys:
+                card.clear_pinned()
+                continue
+
+            card.init_card_session(filtered_media, refreshed_media)
+            reserved_keys.add(media_key)
 
         for card in self.cards:
             if card.is_pinned:
-                card.set_filtered_media(filtered_media)
                 continue
 
             media_draft = self._take_next_unique_media(filtered_media, reserved_keys)

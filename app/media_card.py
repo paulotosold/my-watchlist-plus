@@ -557,8 +557,15 @@ class MediaCard(QFrame):
         return f"{runtime_min} min"
 
     def _get_watch_state(self):
-        watch_state = self._get_user_data().get("watch_state") or ""
-        return watch_state.replace("_", " ")
+        watch_state = self._get_user_data().get("watch_state")
+
+        if watch_state is None:
+            if self._get_metadata().get("media_type") == "episode":
+                return "No individual status"
+
+            return "Not in watchlist"
+
+        return str(watch_state).replace("_", " ").title()
 
     def _get_impression(self):
         impression = self._get_user_data().get("impression")

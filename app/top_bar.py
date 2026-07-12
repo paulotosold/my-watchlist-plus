@@ -30,7 +30,7 @@ ADD_INPUT_EXAMPLES = [
     "Watched 'Project Hail Mary' in the theater yesterday. Great movie!",
     "Add 'Dune: Part Two' to my watchlist.",
     "Watched 'The Batman' last night and loved the atmosphere.",
-    "Started watching 'Severance' yesterday. Add it as currently watching.",
+    "Add 'Severance' to my series watchlist.",
     "Finished season 1 of 'The Bear' this weekend.",
     "Add 'Blade Runner 2049' to rewatch later.",
     "Watched 'Arrival' again yesterday. Still amazing.",
@@ -69,7 +69,7 @@ ADD_INPUT_EXAMPLES = [
     "Add 'The Nice Guys' to my comedy list.",
     "Watched 'The Social Network' yesterday and give it 4.5 stars.",
     "Add 'Children of Men' to rewatch soon.",
-    "Started watching 'Silo' on Apple TV+.",
+    "Add 'Silo' to my series watchlist.",
     "Watched 'Toy Story' with Benji this afternoon.",
     "Add 'The Incredibles' for family movie night.",
     "Finished 'Blue Eye Samurai' and loved the animation.",
@@ -96,7 +96,7 @@ class TopBar(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.search_label = QLabel("Search Watchlist:")
+        self.search_label = QLabel("Search Library:")
 
         self.search_input = QLineEdit()
         self.search_input.setFixedHeight(input_box_height)

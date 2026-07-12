@@ -23,7 +23,7 @@ class MainWindow(QMainWindow):
 
         self.top_bar = TopBar()
         self.top_bar.search_input.setPlaceholderText(
-            "all suggested, to watch, or watching media in random order"
+            "title, parent series, or S01E02"
         )
         self.top_bar.search_submitted.connect(self.on_search_input)
         self.top_bar.add_submitted.connect(self.on_add_input)
@@ -42,6 +42,16 @@ class MainWindow(QMainWindow):
 
     def on_search_input(self, search_query):
         print("Search:", search_query)
+        search_query = (search_query or "").strip()
+
+        if search_query:
+            self.filtered_media = FilteredMedia({
+                "library_query": search_query,
+                "order_by": [{"field": "title"}],
+            })
+        else:
+            self.filtered_media = FilteredMedia()
+
         self.refresh_media_view()
 
     def on_add_input(self, input_query):

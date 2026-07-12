@@ -10,7 +10,6 @@ from app.config import BASE_DIR, TMDB_MAX_POSTERS_PER_MEDIA, TMDB_POSTER_SIZE
 
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 DEFAULT_POSTER_DIR = BASE_DIR / "data" / "media_posters"
-SERIES_COMPLETION_SKIP_STATES = {"dropped", "not_interested"}
 
 
 def build_and_save_media_drafts_from_imdb_ids(
@@ -128,11 +127,7 @@ def _save_episode_draft_with_series_context(
     if series_tmdb_id is None:
         raise ValueError("Episode draft requires episode_details.series_tmdb_id.")
 
-    original_watch_state = (
-        media_draft.get("user_data", {}).get("watch_state") or "to_watch"
-    )
     poster_downloads = _empty_poster_downloads()
-    series_completed = False
     series_created = False
 
     series = media_repository.get_media_by_tmdb_id(
@@ -146,12 +141,7 @@ def _save_episode_draft_with_series_context(
             "media_type": "series",
             "tmdb_id": series_tmdb_id,
         })
-        series_draft["user_data"]["watch_state"] = (
-            original_watch_state
-            if original_watch_state in SERIES_COMPLETION_SKIP_STATES
-            else "watching"
-        )
-        series_save_result = _save_single_media_draft_with_posters(
+        series_save_result = _save_catalog_media_draft_with_posters(
             conn,
             series_draft,
             poster_dir=poster_dir,
@@ -163,39 +153,21 @@ def _save_episode_draft_with_series_context(
             poster_downloads,
             series_save_result["poster_downloads"],
         )
-        series = media_repository.get_media_by_tmdb_id(
-            conn,
-            series_tmdb_id,
-            "series",
-        )
         series_created = True
 
-    if original_watch_state in SERIES_COMPLETION_SKIP_STATES:
-        return {
-            "media_id": series["id"],
-            "poster_downloads": poster_downloads,
-            "series_completed": False,
-            "saved_original_episode": False,
-            "series_created": series_created,
-            "saved_media_type": "series",
-            "saved_title": series["title"],
-        }
-
-    if series_created:
-        episode_seed_result = _save_series_episode_seeds(
-            conn,
-            series_tmdb_id,
-            poster_dir=poster_dir,
-            poster_size=poster_size,
-            max_posters_per_media=max_posters_per_media,
-            fail_on_poster_error=fail_on_poster_error,
-            fetch_episode_imdb_ids=fetch_episode_imdb_ids,
-        )
-        _merge_poster_downloads(
-            poster_downloads,
-            episode_seed_result["poster_downloads"],
-        )
-        series_completed = True
+    episode_seed_result = _save_series_episode_seeds(
+        conn,
+        series_tmdb_id,
+        poster_dir=poster_dir,
+        poster_size=poster_size,
+        max_posters_per_media=max_posters_per_media,
+        fail_on_poster_error=fail_on_poster_error,
+        fetch_episode_imdb_ids=fetch_episode_imdb_ids,
+    )
+    _merge_poster_downloads(
+        poster_downloads,
+        episode_seed_result["poster_downloads"],
+    )
 
     original_save_result = _save_single_media_draft_with_posters(
         conn,
@@ -213,7 +185,7 @@ def _save_episode_draft_with_series_context(
     return {
         "media_id": original_save_result["media_id"],
         "poster_downloads": poster_downloads,
-        "series_completed": series_completed,
+        "series_completed": True,
         "saved_original_episode": True,
         "series_created": series_created,
         "saved_media_type": "episode",
@@ -235,7 +207,6 @@ def _save_series_draft_with_episode_context(
     if series_tmdb_id is None:
         raise ValueError("Series draft requires metadata.tmdb_id.")
 
-    watch_state = media_draft.get("user_data", {}).get("watch_state") or "to_watch"
     series_save_result = _save_single_media_draft_with_posters(
         conn,
         media_draft,
@@ -245,26 +216,6 @@ def _save_series_draft_with_episode_context(
         fail_on_poster_error=fail_on_poster_error,
     )
     poster_downloads = series_save_result["poster_downloads"]
-
-    if (
-        watch_state in SERIES_COMPLETION_SKIP_STATES
-        and not _draft_has_series_episode_watch_history(media_draft)
-    ):
-        _sync_series_episode_watch_history_for_draft(
-            conn,
-            series_save_result["media_id"],
-            media_draft,
-        )
-        return {
-            "media_id": series_save_result["media_id"],
-            "poster_downloads": poster_downloads,
-            "series_completed": False,
-            "saved_original_episode": True,
-            "saved_media_type": "series",
-            "saved_title": media_draft["metadata"].get("title"),
-            "episode_seed_count": 0,
-            "episode_seed_skip_count": 0,
-        }
 
     episode_seed_result = _save_series_episode_seeds(
         conn,
@@ -310,12 +261,6 @@ def _sync_series_episode_watch_history_for_draft(conn, series_id, media_draft):
     )
 
 
-def _draft_has_series_episode_watch_history(media_draft):
-    return bool(
-        (media_draft.get("series_view") or {}).get("episode_watch_history")
-    )
-
-
 def _save_series_episode_seeds(
     conn,
     series_tmdb_id,
@@ -347,8 +292,7 @@ def _save_series_episode_seeds(
             continue
 
         episode_draft = _build_seed_episode_draft(episode_metadata)
-        episode_draft["user_data"]["watch_state"] = "to_watch"
-        episode_save_result = _save_single_media_draft_with_posters(
+        episode_save_result = _save_catalog_media_draft_with_posters(
             conn,
             episode_draft,
             poster_dir=poster_dir,
@@ -391,6 +335,32 @@ def _save_single_media_draft_with_posters(
     }
 
 
+def _save_catalog_media_draft_with_posters(
+    conn,
+    media_draft,
+    poster_dir=DEFAULT_POSTER_DIR,
+    poster_size=TMDB_POSTER_SIZE,
+    max_posters_per_media=TMDB_MAX_POSTERS_PER_MEDIA,
+    fail_on_poster_error=False,
+):
+    limit_draft_posters(media_draft, max_posters_per_media)
+
+    poster_downloads = download_missing_draft_posters(
+        media_draft,
+        poster_dir=poster_dir,
+        poster_size=poster_size,
+        fail_on_error=fail_on_poster_error,
+    )
+    media_id = media_repository.save_media_catalog_draft(conn, media_draft)
+
+    return {
+        "media_id": media_id,
+        "poster_downloads": poster_downloads,
+        "saved_media_type": media_draft["metadata"].get("media_type"),
+        "saved_title": media_draft["metadata"].get("title"),
+    }
+
+
 def limit_draft_posters(media_draft, max_posters_per_media=TMDB_MAX_POSTERS_PER_MEDIA):
     if max_posters_per_media is None:
         return media_draft
@@ -410,14 +380,6 @@ def _build_seed_episode_draft(metadata):
         "metadata": metadata,
         "watch_providers": [],
         "posters": [],
-        "user_data": {
-            "watch_state": "to_watch",
-            "impression": None,
-            "is_collection_pick": None,
-            "watch_history": [],
-            "notes": [],
-            "lists": [],
-        },
     }
 
 

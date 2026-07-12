@@ -181,7 +181,7 @@ CREATE INDEX IF NOT EXISTS idx_media_notes_media_id
 CREATE TABLE IF NOT EXISTS media_state (
     media_id INTEGER PRIMARY KEY,
 
-    watch_state TEXT NOT NULL,
+    watch_state TEXT,
     impression TEXT,
     is_collection_pick INTEGER,
 
@@ -192,14 +192,15 @@ CREATE TABLE IF NOT EXISTS media_state (
         REFERENCES media(id)
         ON DELETE CASCADE,
 
-    CHECK (watch_state IN (
-        'suggested',
-        'to_watch',
-        'watched',
-        'watching',
-        'not_interested',
-        'dropped'
-    )),
+    CHECK (
+        watch_state IS NULL
+        OR watch_state IN (
+            'to_watch',
+            'watched',
+            'not_interested',
+            'dropped'
+        )
+    ),
 
     CHECK (
         impression IS NULL
@@ -214,6 +215,123 @@ CREATE TABLE IF NOT EXISTS media_state (
 
     CHECK (is_collection_pick IS NULL OR is_collection_pick IN (0, 1))
 );
+
+CREATE TRIGGER IF NOT EXISTS trg_media_state_validate_insert
+BEFORE INSERT ON media_state
+WHEN NEW.watch_state IS NOT NULL
+AND NOT EXISTS (
+    SELECT 1
+    FROM media m
+    WHERE m.id = NEW.media_id
+      AND (
+          (
+              m.media_type = 'movie'
+              AND NEW.watch_state IN (
+                  'to_watch',
+                  'watched',
+                  'not_interested'
+              )
+          )
+          OR (
+              m.media_type = 'series'
+              AND NEW.watch_state IN (
+                  'to_watch',
+                  'watched',
+                  'not_interested',
+                  'dropped'
+              )
+          )
+          OR (
+              m.media_type = 'episode'
+              AND NEW.watch_state IN (
+                  'to_watch',
+                  'watched',
+                  'not_interested'
+              )
+          )
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'invalid watch_state for media_type');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_media_state_validate_update
+BEFORE UPDATE OF media_id, watch_state ON media_state
+WHEN NEW.watch_state IS NOT NULL
+AND NOT EXISTS (
+    SELECT 1
+    FROM media m
+    WHERE m.id = NEW.media_id
+      AND (
+          (
+              m.media_type = 'movie'
+              AND NEW.watch_state IN (
+                  'to_watch',
+                  'watched',
+                  'not_interested'
+              )
+          )
+          OR (
+              m.media_type = 'series'
+              AND NEW.watch_state IN (
+                  'to_watch',
+                  'watched',
+                  'not_interested',
+                  'dropped'
+              )
+          )
+          OR (
+              m.media_type = 'episode'
+              AND NEW.watch_state IN (
+                  'to_watch',
+                  'watched',
+                  'not_interested'
+              )
+          )
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'invalid watch_state for media_type');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_media_validate_watch_state_after_type_change
+BEFORE UPDATE OF media_type ON media
+WHEN EXISTS (
+    SELECT 1
+    FROM media_state ms
+    WHERE ms.media_id = OLD.id
+      AND ms.watch_state IS NOT NULL
+      AND NOT (
+          (
+              NEW.media_type = 'movie'
+              AND ms.watch_state IN (
+                  'to_watch',
+                  'watched',
+                  'not_interested'
+              )
+          )
+          OR (
+              NEW.media_type = 'series'
+              AND ms.watch_state IN (
+                  'to_watch',
+                  'watched',
+                  'not_interested',
+                  'dropped'
+              )
+          )
+          OR (
+              NEW.media_type = 'episode'
+              AND ms.watch_state IN (
+                  'to_watch',
+                  'watched',
+                  'not_interested'
+              )
+          )
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'media_type is incompatible with watch_state');
+END;
 -- ----------------------------------------------------------
 
 -- ----------------------------------------------------------

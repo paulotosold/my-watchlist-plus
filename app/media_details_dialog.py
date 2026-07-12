@@ -61,6 +61,7 @@ from app.watch_history_editor import (
     validate_watch_dates,
     watched_episode_keys,
 )
+from app.watch_states import VALID_WATCH_STATES_BY_MEDIA_TYPE
 from db.connection import get_connection
 
 
@@ -84,13 +85,34 @@ WATCH_ENTRY_DATE_GROUP_SPACING = 2
 WATCH_ENTRY_SEASON_LABEL_WIDTH = 60
 WATCH_ENTRY_SEASON_LABEL_BUTTON_SPACING = 20
 
-STATUS_OPTIONS = (
-    ("to_watch", "To Watch"),
-    ("watched", "Watched"),
-    ("watching", "Watching"),
-    ("not_interested", "Not Interested"),
-    ("dropped", "Dropped"),
+WATCH_STATE_OPTION_ORDER = (
+    "to_watch",
+    "watched",
+    "not_interested",
+    "dropped",
 )
+WATCH_STATE_LABELS = {
+    "to_watch": "To Watch",
+    "watched": "Watched",
+    "not_interested": "Not Interested",
+    "dropped": "Dropped",
+}
+NO_WATCH_STATE_LABELS = {
+    "movie": "Not in watchlist",
+    "series": "Not in watchlist",
+    "episode": "No individual status",
+}
+STATUS_OPTIONS_BY_MEDIA_TYPE = {
+    media_type: (
+        (None, NO_WATCH_STATE_LABELS[media_type]),
+        *(
+            (watch_state, WATCH_STATE_LABELS[watch_state])
+            for watch_state in WATCH_STATE_OPTION_ORDER
+            if watch_state in allowed_states
+        ),
+    )
+    for media_type, allowed_states in VALID_WATCH_STATES_BY_MEDIA_TYPE.items()
+}
 
 IMPRESSION_OPTIONS = (
     (None, "None"),
@@ -921,7 +943,12 @@ class MediaDetailsDialog(QDialog):
 
     def render_user_data_controls(self):
         user_data = self.media_draft.get("user_data") or {}
-        populate_status_combo(self.status_combo, user_data.get("watch_state"))
+        metadata = self.media_draft.get("metadata") or {}
+        populate_status_combo(
+            self.status_combo,
+            metadata.get("media_type"),
+            user_data.get("watch_state"),
+        )
         populate_combo(self.impression_combo, IMPRESSION_OPTIONS, user_data.get("impression"))
         populate_combo(
             self.collection_combo,
@@ -1107,6 +1134,24 @@ class MediaDetailsDialog(QDialog):
             entry,
             dialog.result_payload,
         )
+
+        if self._is_episode():
+            user_data = self.media_draft.setdefault("user_data", {})
+            watch_history = user_data.get("watch_history") or []
+            action = dialog.result_payload.get("action")
+
+            if entry is None and action == "save" and watch_history:
+                user_data["watch_state"] = "watched"
+                set_combo_value(self.status_combo, "watched")
+            elif action == "delete" and not watch_history:
+                current_watch_state = self.status_combo.currentData()
+
+                if current_watch_state == "watched":
+                    current_watch_state = None
+                    set_combo_value(self.status_combo, None)
+
+                user_data["watch_state"] = current_watch_state
+
         self.mark_dirty()
         self.render_watch_history()
 
@@ -1180,10 +1225,26 @@ class MediaDetailsDialog(QDialog):
     def _apply_form_to_draft(self):
         user_data = deepcopy(self.media_draft.get("user_data") or {})
         user_data["watch_state"] = self.status_combo.currentData()
+
+        if self._is_episode() and user_data["watch_state"] == "watched":
+            watch_history = user_data.setdefault("watch_history", [])
+
+            if not watch_history:
+                watch_history.append({
+                    "date_earliest": None,
+                    "date_latest": None,
+                })
+
         user_data["impression"] = self.impression_combo.currentData()
         user_data["is_collection_pick"] = self.collection_combo.currentData()
         user_data["lists"] = self._collect_selected_lists(user_data.get("lists", []))
         self.media_draft["user_data"] = user_data
+
+    def _is_episode(self):
+        return (
+            (self.media_draft.get("metadata") or {}).get("media_type")
+            == "episode"
+        )
 
     def _collect_selected_lists(self, current_lists):
         selected_lists = []
@@ -1359,21 +1420,12 @@ def populate_combo(combo, options, current_value):
     combo.blockSignals(False)
 
 
-def populate_status_combo(combo, current_value):
-    combo.blockSignals(True)
-    combo.clear()
-
-    if current_value == "suggested":
-        combo.addItem("Suggested (system)", "suggested")
-        item = combo.model().item(0)
-        if item is not None:
-            item.setEnabled(False)
-
-    for value, label in STATUS_OPTIONS:
-        combo.addItem(label, value)
-
-    set_combo_value(combo, current_value)
-    combo.blockSignals(False)
+def populate_status_combo(combo, media_type, current_value):
+    options = STATUS_OPTIONS_BY_MEDIA_TYPE.get(
+        media_type,
+        ((None, "Not in watchlist"),),
+    )
+    populate_combo(combo, options, current_value)
 
 
 def set_combo_value(combo, value):

@@ -36,7 +36,7 @@ medias_to_input = [
     },
     {
         "imdb_id": "tt14688458",  # Silo
-        "watch_state": "watching",
+        "watch_state": "to_watch",
         "watched_episodes": [
             {"season_num": 1, "episode_nums": [1, 2, 3],}
         ],
@@ -51,7 +51,9 @@ medias_to_input = [
     {
         "imdb_id": "tt0094582",  # Wonder Years
         "watch_state": "watched",
-        "watched_episodes": "all", # como isso vai desdobrar nos episódios? esperado: q todos os episódios herdem o status "watched" e tb o watch_history, confere? esse workflow não parece muito bem resolvido... vamos pensar isso melhor!
+        # Series state does not propagate to episodes. Episode-level history
+        # must be recorded explicitly when that detail is known.
+        "watched_episodes": "all",
         "impression": "very_good",
         "is_collection_pick": True,
         "watch_history": [

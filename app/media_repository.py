@@ -1,4 +1,5 @@
 from app.config import TMDB_MAX_POSTERS_PER_MEDIA
+from app.watch_states import validate_watch_state
 
 
 TMDB_FRESHNESS_COLUMNS = (
@@ -640,7 +641,7 @@ def get_db_media_posters(conn, metadata):
 
 def get_empty_media_user_data():
     return {
-        "watch_state": "to_watch",
+        "watch_state": None,
         "impression": None,
         "is_collection_pick": None,
         "watch_history": [],
@@ -879,6 +880,17 @@ def delete_media(conn, media_id):
 ########################################################
 
 def save_media_draft(conn, media_draft):
+    media_id = save_media_catalog_draft(conn, media_draft)
+    _save_media_user_data(
+        conn,
+        media_id,
+        media_draft.get("user_data") or get_empty_media_user_data(),
+    )
+
+    return media_id
+
+
+def save_media_catalog_draft(conn, media_draft):
     metadata = media_draft["metadata"]
 
     media_id = _save_media_metadata(conn, metadata)
@@ -894,12 +906,6 @@ def save_media_draft(conn, media_draft):
         metadata,
         media_draft.get("posters", []),
     )
-    _save_media_user_data(
-        conn,
-        media_id,
-        media_draft.get("user_data") or get_empty_media_user_data(),
-    )
-
     media_draft["media_id"] = media_id
     return media_id
 
@@ -1711,11 +1717,58 @@ def _replace_season_posters(conn, series_id, season_num, posters):
 
 def _save_media_user_data(conn, media_id, user_data):
     _save_media_state(conn, media_id, user_data)
-    _sync_watch_history(conn, media_id, user_data.get("watch_history", []))
+    watch_history = _prepare_watch_history_for_save(
+        conn,
+        media_id,
+        user_data.get("watch_state"),
+        user_data.get("watch_history", []),
+    )
+    user_data["watch_history"] = watch_history
+    _sync_watch_history(conn, media_id, watch_history)
     _sync_media_notes(conn, media_id, user_data.get("notes", []))
     _sync_media_lists(conn, media_id, user_data.get("lists", []))
 
+
+def _prepare_watch_history_for_save(
+    conn,
+    media_id,
+    requested_watch_state,
+    watch_history,
+):
+    watch_history = list(watch_history or [])
+
+    if watch_history or requested_watch_state != "watched":
+        return watch_history
+
+    if _get_media_type(conn, media_id) != "episode":
+        return watch_history
+
+    if _get_media_watch_history_ids(conn, media_id):
+        return watch_history
+
+    return [{
+        "date_earliest": None,
+        "date_latest": None,
+    }]
+
+
 def _save_media_state(conn, media_id, user_data):
+    watch_state = user_data.get("watch_state")
+    impression = user_data.get("impression")
+    is_collection_pick = _to_db_bool(user_data.get("is_collection_pick"))
+    media_type = _get_media_type(conn, media_id)
+    validate_watch_state(media_type, watch_state)
+
+    if watch_state is None and impression is None and is_collection_pick is None:
+        conn.execute(
+            """
+            DELETE FROM media_state
+            WHERE media_id = ?
+            """,
+            (media_id,),
+        )
+        return
+
     conn.execute(
         """
         INSERT INTO media_state (
@@ -1733,13 +1786,139 @@ def _save_media_state(conn, media_id, user_data):
         """,
         (
             media_id,
-            user_data.get("watch_state") or "to_watch",
-            user_data.get("impression"),
-            _to_db_bool(user_data.get("is_collection_pick")),
+            watch_state,
+            impression,
+            is_collection_pick,
         ),
     )
 
+
+def set_media_watch_state(conn, media_id, watch_state):
+    media_type = _get_media_type(conn, media_id)
+    validate_watch_state(media_type, watch_state)
+
+    if (
+        media_type == "episode"
+        and watch_state == "watched"
+        and not _get_media_watch_history_ids(conn, media_id)
+    ):
+        conn.execute(
+            """
+            INSERT INTO watch_history (
+                media_id,
+                date_earliest,
+                date_latest
+            )
+            VALUES (?, NULL, NULL)
+            """,
+            (media_id,),
+        )
+
+    if watch_state is None:
+        conn.execute(
+            """
+            UPDATE media_state
+            SET
+                watch_state = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE media_id = ?
+            """,
+            (media_id,),
+        )
+        _delete_empty_media_state(conn, media_id)
+        return
+
+    conn.execute(
+        """
+        INSERT INTO media_state (
+            media_id,
+            watch_state
+        )
+        VALUES (?, ?)
+        ON CONFLICT (media_id) DO UPDATE SET
+            watch_state = excluded.watch_state,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (
+            media_id,
+            watch_state,
+        ),
+    )
+
+
+def _delete_empty_media_state(conn, media_id):
+    conn.execute(
+        """
+        DELETE FROM media_state
+        WHERE media_id = ?
+          AND watch_state IS NULL
+          AND impression IS NULL
+          AND is_collection_pick IS NULL
+        """,
+        (media_id,),
+    )
+
+
+def _get_media_type(conn, media_id):
+    cursor = conn.execute(
+        """
+        SELECT media_type
+        FROM media
+        WHERE id = ?
+        """,
+        (media_id,),
+    )
+    row = cursor.fetchone()
+
+    if row is None:
+        raise ValueError(f"media id {media_id} does not exist.")
+
+    return row["media_type"]
+
+
+def _sync_episode_watch_state_for_history_transition(
+    conn,
+    media_id,
+    previous_history_ids,
+    current_history_ids,
+):
+    if _get_media_type(conn, media_id) != "episode":
+        return
+
+    if current_history_ids - previous_history_ids:
+        set_media_watch_state(conn, media_id, "watched")
+        return
+
+    if not previous_history_ids or current_history_ids:
+        return
+
+    cursor = conn.execute(
+        """
+        SELECT watch_state
+        FROM media_state
+        WHERE media_id = ?
+        """,
+        (media_id,),
+    )
+    state = cursor.fetchone()
+
+    if state is not None and state["watch_state"] == "watched":
+        set_media_watch_state(conn, media_id, None)
+
+
+def _get_media_watch_history_ids(conn, media_id):
+    cursor = conn.execute(
+        """
+        SELECT id
+        FROM watch_history
+        WHERE media_id = ?
+        """,
+        (media_id,),
+    )
+    return {row["id"] for row in cursor.fetchall()}
+
 def _sync_watch_history(conn, media_id, watch_history):
+    previous_history_ids = _get_media_watch_history_ids(conn, media_id)
     kept_ids = []
 
     for event in watch_history:
@@ -1761,7 +1940,8 @@ def _sync_watch_history(conn, media_id, watch_history):
                     event.get("date_latest"),
                 ),
             )
-            kept_ids.append(cursor.lastrowid)
+            event["id"] = cursor.lastrowid
+            kept_ids.append(event["id"])
             continue
 
         cursor = conn.execute(
@@ -1788,8 +1968,19 @@ def _sync_watch_history(conn, media_id, watch_history):
         kept_ids.append(event_id)
 
     _delete_missing_ids(conn, "watch_history", media_id, kept_ids)
+    current_history_ids = _get_media_watch_history_ids(conn, media_id)
+    _sync_episode_watch_state_for_history_transition(
+        conn,
+        media_id,
+        previous_history_ids,
+        current_history_ids,
+    )
 
 def sync_series_episode_watch_history(conn, series_id, episode_watch_history):
+    previous_history_ids_by_episode = _get_series_episode_watch_history_ids(
+        conn,
+        series_id,
+    )
     kept_ids = []
 
     for event in episode_watch_history or []:
@@ -1846,6 +2037,52 @@ def sync_series_episode_watch_history(conn, series_id, episode_watch_history):
         kept_ids.append(event_id)
 
     _delete_missing_series_episode_watch_history(conn, series_id, kept_ids)
+    current_history_ids_by_episode = _get_series_episode_watch_history_ids(
+        conn,
+        series_id,
+    )
+
+    for episode_id in (
+        previous_history_ids_by_episode.keys()
+        | current_history_ids_by_episode.keys()
+    ):
+        previous_history_ids = previous_history_ids_by_episode.get(episode_id, set())
+        current_history_ids = current_history_ids_by_episode.get(episode_id, set())
+
+        if previous_history_ids == current_history_ids:
+            continue
+
+        _sync_episode_watch_state_for_history_transition(
+            conn,
+            episode_id,
+            previous_history_ids,
+            current_history_ids,
+        )
+
+
+def _get_series_episode_watch_history_ids(conn, series_id):
+    cursor = conn.execute(
+        """
+        SELECT
+            ed.media_id AS episode_id,
+            wh.id AS watch_history_id
+        FROM episode_details ed
+        LEFT JOIN watch_history wh
+            ON wh.media_id = ed.media_id
+        WHERE ed.series_id = ?
+        """,
+        (series_id,),
+    )
+    history_ids_by_episode = {}
+
+    for row in cursor.fetchall():
+        episode_id = row["episode_id"]
+        history_ids_by_episode.setdefault(episode_id, set())
+
+        if row["watch_history_id"] is not None:
+            history_ids_by_episode[episode_id].add(row["watch_history_id"])
+
+    return history_ids_by_episode
 
 
 def _resolve_series_episode_id(conn, series_id, event):
