@@ -1,5 +1,6 @@
 import os
 import unittest
+from datetime import date, datetime
 
 os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
@@ -351,6 +352,186 @@ class MediaDetailsHelperTests(unittest.TestCase):
             ),
             "Probably 2000-2025",
         )
+
+    def test_watch_history_entries_sort_by_estimated_watch_date_oldest_first(self):
+        media_draft = {
+            "metadata": {
+                "media_type": "movie",
+                "release_date": "2020-01-01",
+            },
+            "user_data": {
+                "watch_history": [
+                    {
+                        "id": 1,
+                        "date_earliest": "2026-01-01",
+                        "date_latest": "2026-01-01",
+                        "created_at": "2026-01-02 10:00:00",
+                    },
+                    {
+                        "id": 2,
+                        "date_earliest": "2024-01-01",
+                        "date_latest": "2026-01-01",
+                        "created_at": "2026-02-01 10:00:00",
+                    },
+                    {
+                        "id": 3,
+                        "date_earliest": "2024-01-01",
+                        "date_latest": None,
+                        "created_at": "2026-01-01 10:00:00",
+                    },
+                    {
+                        "id": 4,
+                        "date_earliest": None,
+                        "date_latest": "2030-01-01",
+                        "created_at": "2028-01-01 10:00:00",
+                    },
+                    {
+                        "id": 5,
+                        "date_earliest": None,
+                        "date_latest": None,
+                        "created_at": "2027-01-01T10:00:00Z",
+                    },
+                ],
+            },
+        }
+
+        entries = build_watch_history_display_entries(media_draft)
+
+        self.assertEqual(
+            [entry["watch_history_id"] for entry in entries],
+            [3, 4, 2, 1, 5],
+        )
+
+    def test_watch_history_order_tiebreaks_by_created_time_then_id(self):
+        media_draft = {
+            "metadata": {
+                "media_type": "movie",
+                "release_date": "2020-01-01",
+            },
+            "user_data": {
+                "watch_history": [
+                    {
+                        "id": 11,
+                        "date_earliest": "2026-06-01",
+                        "date_latest": "2026-06-01",
+                        "created_at": "2026-06-02 10:00:00",
+                    },
+                    {
+                        "id": 12,
+                        "date_earliest": "2026-06-01",
+                        "date_latest": "2026-06-01",
+                        "created_at": "2026-06-02 10:00:00",
+                    },
+                    {
+                        "id": 10,
+                        "date_earliest": "2026-06-01",
+                        "date_latest": "2026-06-01",
+                        "created_at": "2026-06-02 12:00:00",
+                    },
+                ],
+            },
+        }
+
+        entries = build_watch_history_display_entries(media_draft)
+
+        self.assertEqual(
+            [entry["watch_history_id"] for entry in entries],
+            [11, 12, 10],
+        )
+
+    def test_watch_history_order_accepts_date_and_datetime_values(self):
+        media_draft = {
+            "metadata": {
+                "media_type": "movie",
+                "release_date": date(2020, 1, 1),
+            },
+            "user_data": {
+                "watch_history": [
+                    {
+                        "id": 1,
+                        "date_earliest": date(2026, 1, 1),
+                        "date_latest": datetime(2026, 1, 1, 20, 0),
+                        "created_at": datetime(2026, 1, 2, 10, 0),
+                    },
+                    {
+                        "id": 2,
+                        "date_earliest": date(2026, 2, 1),
+                        "date_latest": date(2026, 2, 1),
+                        "created_at": datetime(2026, 2, 2, 10, 0),
+                    },
+                ],
+            },
+        }
+
+        entries = build_watch_history_display_entries(media_draft)
+
+        self.assertEqual(
+            [entry["watch_history_id"] for entry in entries],
+            [1, 2],
+        )
+
+    def test_series_history_combines_entries_by_estimated_watch_date(self):
+        media_draft = {
+            "metadata": {
+                "media_type": "series",
+                "release_date": "2020-01-01",
+            },
+            "user_data": {
+                "watch_history": [
+                    {
+                        "id": 50,
+                        "date_earliest": "2026-06-10",
+                        "date_latest": "2026-06-10",
+                        "created_at": "2030-01-01 10:00:00",
+                    },
+                ],
+            },
+            "series_view": {
+                "summary": {"first_air_date": "2020-01-01"},
+                "episode_watch_history": [
+                    {
+                        "series_id": 10,
+                        "episode_id": 101,
+                        "watch_history_id": 40,
+                        "date_earliest": "2026-06-20",
+                        "date_latest": "2026-06-20",
+                        "created_at": "2020-01-01 10:00:00",
+                        "season_num": 1,
+                        "episode_num": 1,
+                    },
+                    {
+                        "series_id": 10,
+                        "episode_id": 102,
+                        "watch_history_id": 60,
+                        "date_earliest": "2026-06-20",
+                        "date_latest": "2026-06-20",
+                        "created_at": "2020-01-01 10:01:00",
+                        "season_num": 1,
+                        "episode_num": 2,
+                    },
+                    {
+                        "series_id": 10,
+                        "episode_id": 103,
+                        "watch_history_id": 70,
+                        "date_earliest": None,
+                        "date_latest": None,
+                        "created_at": "2027-01-01 10:00:00",
+                        "season_num": 1,
+                        "episode_num": 3,
+                    },
+                ],
+            },
+        }
+
+        entries = build_watch_history_display_entries(media_draft)
+
+        self.assertEqual(
+            [entry["kind"] for entry in entries],
+            ["media_event", "episode_group", "episode_group"],
+        )
+        self.assertEqual(entries[0]["watch_history_id"], 50)
+        self.assertEqual(entries[1]["watch_history_ids"], [40, 60])
+        self.assertEqual(entries[2]["watch_history_ids"], [70])
 
     def test_series_episode_watch_history_grouping(self):
         media_draft = {

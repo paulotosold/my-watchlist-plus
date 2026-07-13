@@ -52,6 +52,50 @@ class WatchHistoryEditorTests(unittest.TestCase):
         apply_watch_entry_result(media_draft, entry, {"action": "delete"})
         self.assertEqual(media_draft["user_data"]["watch_history"], [])
 
+    def test_sorted_movie_entry_keeps_its_original_index_when_edited(self):
+        media_draft = {
+            "metadata": {
+                "media_type": "movie",
+                "release_date": "2020-01-01",
+            },
+            "user_data": {
+                "watch_history": [
+                    {
+                        "id": 1,
+                        "date_earliest": "2024-01-01",
+                        "date_latest": "2024-01-01",
+                        "created_at": "2026-01-01 10:00:00",
+                    },
+                    {
+                        "id": 2,
+                        "date_earliest": "2025-01-01",
+                        "date_latest": "2025-01-01",
+                        "created_at": "2025-01-01 10:00:00",
+                    },
+                ],
+            },
+        }
+
+        newest_entry = build_watch_history_display_entries(media_draft)[-1]
+        self.assertEqual(newest_entry["watch_history_id"], 2)
+        self.assertEqual(newest_entry["watch_history_index"], 1)
+
+        apply_watch_entry_result(media_draft, newest_entry, {
+            "action": "save",
+            "date_earliest": "2025-02-01",
+            "date_latest": "2025-02-01",
+            "selected_episodes": [],
+        })
+
+        self.assertEqual(
+            media_draft["user_data"]["watch_history"][0]["date_earliest"],
+            "2024-01-01",
+        )
+        self.assertEqual(
+            media_draft["user_data"]["watch_history"][1]["date_earliest"],
+            "2025-02-01",
+        )
+
     def test_series_entry_can_move_between_series_and_episode_history(self):
         media_draft = {
             "media_id": 10,
