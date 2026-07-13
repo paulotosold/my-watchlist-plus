@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime
+from datetime import date, datetime
 from uuid import uuid4
 
 
@@ -72,6 +72,23 @@ def validate_watch_dates(date_earliest, date_latest):
         "date_latest": latest,
         "error": None,
     }
+
+
+def is_episode_available(episode, today=None):
+    release_date = (episode or {}).get("release_date")
+
+    if not isinstance(release_date, str):
+        return False
+
+    try:
+        released_on = datetime.strptime(release_date, DATE_FORMAT).date()
+    except ValueError:
+        return False
+
+    if released_on.strftime(DATE_FORMAT) != release_date:
+        return False
+
+    return released_on <= (today or date.today())
 
 
 def apply_watch_entry_result(media_draft, entry, result):

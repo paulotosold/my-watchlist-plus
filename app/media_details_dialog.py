@@ -5,12 +5,13 @@ from pathlib import Path
 
 import requests
 
-from PySide6.QtCore import QModelIndex, QPoint, QSize, Qt
+from PySide6.QtCore import QModelIndex, QPoint, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -62,8 +63,8 @@ from app.watch_history_editor import (
     apply_watch_entry_result,
     episode_key,
     get_series_episodes,
+    is_episode_available,
     make_draft_id,
-    selected_episode_keys,
     validate_watch_dates,
     watched_episode_keys,
 )
@@ -182,13 +183,30 @@ class DetailBlock(QFrame):
 
 
 class DownwardComboBox(QComboBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._user_activation_previous_data = None
+
     def showPopup(self):
+        self._user_activation_previous_data = self.currentData()
         super().showPopup()
 
         popup = self.view().window()
 
         if popup is not None:
             popup.move(self.mapToGlobal(QPoint(0, self.height())))
+
+    def keyPressEvent(self, event):
+        self._user_activation_previous_data = self.currentData()
+        super().keyPressEvent(event)
+
+    def reset_user_activation_baseline(self):
+        self._user_activation_previous_data = self.currentData()
+
+    def take_user_activation_previous_data(self):
+        previous_data = self._user_activation_previous_data
+        self._user_activation_previous_data = self.currentData()
+        return previous_data
 
 
 class ComboPopupView(QListView):
@@ -380,8 +398,6 @@ class WatchEntryDetailsDialog(QDialog):
         if not episodes_by_season:
             content_layout.addWidget(QLabel("No episodes available.", self))
         else:
-            selected_keys = selected_episode_keys(self.entry)
-
             for season_num in sorted(episodes_by_season):
                 row_layout = QHBoxLayout()
                 row_layout.setContentsMargins(0, 0, 0, 0)
@@ -407,7 +423,12 @@ class WatchEntryDetailsDialog(QDialog):
                         WATCH_ENTRY_EPISODE_BUTTON_WIDTH,
                         WATCH_ENTRY_EPISODE_BUTTON_HEIGHT,
                     )
-                    button.setChecked(key in selected_keys)
+                    button.setChecked(self._entry_selects_episode(episode))
+                    button.setToolTip(self._episode_tooltip(episode))
+
+                    if not is_episode_available(episode):
+                        button.setEnabled(False)
+
                     button.clicked.connect(
                         lambda checked=False, key=key: self._episode_toggled(key)
                     )
@@ -461,25 +482,52 @@ class WatchEntryDetailsDialog(QDialog):
         )
 
     def _selectable_episodes(self):
-        episodes_by_key = {
-            episode_key(episode): deepcopy(episode)
-            for episode in get_series_episodes(self.media_draft)
+        catalog_episodes = get_series_episodes(self.media_draft)
+        catalog_by_episode_id = {
+            episode.get("episode_id"): episode
+            for episode in catalog_episodes
+            if episode.get("episode_id") is not None
+        }
+        catalog_by_tmdb_id = {
+            episode.get("tmdb_id"): episode
+            for episode in catalog_episodes
+            if episode.get("tmdb_id") is not None
+        }
+        catalog_by_key = {
+            episode_key(episode): episode
+            for episode in catalog_episodes
             if episode_key(episode) != (None, None)
         }
+        selected_episodes = (self.entry or {}).get("episodes", [])
+        episodes_by_key = {}
 
-        for row in (
-            (self.media_draft.get("series_view") or {})
-            .get("episode_watch_history", [])
-        ):
-            key = episode_key(row)
-
-            if key != (None, None) and key not in episodes_by_key:
-                episodes_by_key[key] = deepcopy(row)
-
-        for episode in (self.entry or {}).get("episodes", []):
+        for episode in catalog_episodes:
             key = episode_key(episode)
 
-            if key != (None, None) and key not in episodes_by_key:
+            if key == (None, None):
+                continue
+
+            if is_episode_available(episode) or self._entry_selects_episode(episode):
+                episodes_by_key[key] = deepcopy(episode)
+
+        for selected_episode in selected_episodes:
+            episode = None
+            episode_id = selected_episode.get("episode_id")
+            tmdb_id = selected_episode.get("tmdb_id")
+
+            if episode_id is not None:
+                episode = catalog_by_episode_id.get(episode_id)
+
+            if episode is None and tmdb_id is not None:
+                episode = catalog_by_tmdb_id.get(tmdb_id)
+
+            if episode is None:
+                episode = catalog_by_key.get(episode_key(selected_episode))
+
+            episode = episode or selected_episode
+            key = episode_key(episode)
+
+            if key != (None, None):
                 episodes_by_key[key] = deepcopy(episode)
 
         return sorted(
@@ -488,6 +536,50 @@ class WatchEntryDetailsDialog(QDialog):
                 item.get("season_num") or 0,
                 item.get("episode_num") or 0,
             ),
+        )
+
+    def _entry_selects_episode(self, episode):
+        episode_id = episode.get("episode_id")
+        tmdb_id = episode.get("tmdb_id")
+        key = episode_key(episode)
+
+        for selected_episode in (self.entry or {}).get("episodes", []):
+            selected_episode_id = selected_episode.get("episode_id")
+            selected_tmdb_id = selected_episode.get("tmdb_id")
+
+            if (
+                episode_id is not None
+                and selected_episode_id is not None
+                and episode_id == selected_episode_id
+            ):
+                return True
+
+            if (
+                tmdb_id is not None
+                and selected_tmdb_id is not None
+                and tmdb_id == selected_tmdb_id
+            ):
+                return True
+
+            if key != (None, None) and key == episode_key(selected_episode):
+                return True
+
+        return False
+
+    def _episode_tooltip(self, episode):
+        season_num, episode_num = episode_key(episode)
+        title = (
+            episode.get("title")
+            or episode.get("episode_title")
+            or f"Season {season_num}, Episode {episode_num}"
+        )
+
+        if is_episode_available(episode):
+            return title
+
+        return (
+            f"{title}\n"
+            "Unavailable (not released yet or release date unknown)."
         )
 
     def _episode_toggled(self, key):
@@ -504,7 +596,8 @@ class WatchEntryDetailsDialog(QDialog):
             self._refresh_episode_button(key)
 
         is_changed = self._current_signature() != self.initial_signature
-        self.save_entry_button.setEnabled(validation["is_valid"] and is_changed)
+        can_save = self.entry is None or is_changed
+        self.save_entry_button.setEnabled(validation["is_valid"] and can_save)
         self.delete_entry_button.setEnabled(self.entry is not None)
 
     def _refresh_episode_button(self, key):
@@ -628,6 +721,9 @@ class MediaDetailsDialog(QDialog):
         self._metadata_refresh_job_id = None
         self._metadata_refresh_in_progress = False
         self._is_closing = False
+        self._watch_entry_dialog_active = False
+        self._status_change_generation = 0
+        self._scheduled_watch_entry_generation = None
         self.metadata_refresh_manager = (
             metadata_refresh_manager or get_metadata_refresh_manager()
         )
@@ -850,7 +946,11 @@ class MediaDetailsDialog(QDialog):
         panel_layout.setContentsMargins(0, 0, 0, 0)
         panel_layout.setSpacing(4)
 
-        self.status_combo = self._make_combo(panel_widget)
+        self.status_combo = self._make_combo(
+            panel_widget,
+            self._on_status_index_changed,
+        )
+        self.status_combo.activated.connect(self._on_status_activated)
         self.impression_combo = self._make_combo(panel_widget)
         self.collection_combo = self._make_combo(panel_widget)
 
@@ -861,14 +961,14 @@ class MediaDetailsDialog(QDialog):
 
         parent_layout.addWidget(panel_widget, stretch=0)
 
-    def _make_combo(self, parent):
+    def _make_combo(self, parent, change_handler=None):
         combo = DownwardComboBox(parent)
         combo.setMinimumHeight(30)
         combo.setFixedWidth(190)
         view = ComboPopupView(combo)
         view.setItemDelegate(ComboPopupItemDelegate(combo, view))
         combo.setView(view)
-        combo.currentIndexChanged.connect(self.mark_dirty)
+        combo.currentIndexChanged.connect(change_handler or self.mark_dirty)
         return combo
 
     def _add_combo_row(self, parent_layout, label_text, combo):
@@ -984,11 +1084,13 @@ class MediaDetailsDialog(QDialog):
     def render_user_data_controls(self):
         user_data = self.media_draft.get("user_data") or {}
         metadata = self.media_draft.get("metadata") or {}
+        self._status_change_generation += 1
         populate_status_combo(
             self.status_combo,
             metadata.get("media_type"),
             user_data.get("watch_state"),
         )
+        self.status_combo.reset_user_activation_baseline()
         populate_combo(self.impression_combo, IMPRESSION_OPTIONS, user_data.get("impression"))
         populate_combo(
             self.collection_combo,
@@ -1089,6 +1191,64 @@ class MediaDetailsDialog(QDialog):
         self._is_dirty = True
         self._update_action_buttons()
 
+    def _on_status_index_changed(self, _index):
+        self._status_change_generation += 1
+        self.mark_dirty()
+
+    def _on_status_activated(self, _index):
+        previous_status = (
+            self.status_combo.take_user_activation_previous_data()
+        )
+        current_status = self.status_combo.currentData()
+
+        if previous_status == "watched" or current_status != "watched":
+            return
+
+        self._schedule_new_watch_entry_dialog()
+
+    def _schedule_new_watch_entry_dialog(self):
+        if (
+            self._is_populating
+            or self._metadata_refresh_in_progress
+            or self._is_closing
+            or self._watch_entry_dialog_active
+        ):
+            return
+
+        generation = self._status_change_generation
+
+        if self._scheduled_watch_entry_generation == generation:
+            return
+
+        self._scheduled_watch_entry_generation = generation
+        QTimer.singleShot(
+            0,
+            lambda generation=generation: (
+                self._open_scheduled_watch_entry_dialog(generation)
+            ),
+        )
+
+    def _open_scheduled_watch_entry_dialog(self, generation):
+        if self._scheduled_watch_entry_generation == generation:
+            self._scheduled_watch_entry_generation = None
+
+        if (
+            generation != self._status_change_generation
+            or self.status_combo.currentData() != "watched"
+            or self._is_populating
+            or self._metadata_refresh_in_progress
+            or self._is_closing
+            or self._watch_entry_dialog_active
+        ):
+            return
+
+        active_modal = QApplication.activeModalWidget()
+
+        if active_modal is not None and active_modal is not self:
+            return
+
+        self._open_watch_entry_details()
+
     def _update_action_buttons(self):
         has_media_id = self.media_draft.get("media_id") is not None
         self.delete_button.setEnabled(has_media_id)
@@ -1121,6 +1281,10 @@ class MediaDetailsDialog(QDialog):
     def reject(self):
         self._cancel_active_metadata_refresh()
         super().reject()
+
+    def accept(self):
+        self._cancel_active_metadata_refresh()
+        super().accept()
 
     def closeEvent(self, event):
         self._cancel_active_metadata_refresh()
@@ -1304,9 +1468,18 @@ class MediaDetailsDialog(QDialog):
         self._open_watch_entry_details()
 
     def _open_watch_entry_details(self, entry=None):
-        dialog = WatchEntryDetailsDialog(self, self.media_draft, entry)
+        if self._watch_entry_dialog_active:
+            return
 
-        if dialog.exec() != QDialog.Accepted:
+        self._watch_entry_dialog_active = True
+
+        try:
+            dialog = WatchEntryDetailsDialog(self, self.media_draft, entry)
+            result = dialog.exec()
+        finally:
+            self._watch_entry_dialog_active = False
+
+        if result != QDialog.Accepted:
             return
 
         apply_watch_entry_result(

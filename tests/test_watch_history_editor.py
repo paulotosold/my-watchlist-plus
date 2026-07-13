@@ -1,8 +1,10 @@
 import unittest
+from datetime import date
 
 from app.media_details_formatters import build_watch_history_display_entries
 from app.watch_history_editor import (
     apply_watch_entry_result,
+    is_episode_available,
     validate_watch_dates,
     watched_episode_keys,
 )
@@ -14,6 +16,28 @@ class WatchHistoryEditorTests(unittest.TestCase):
         self.assertTrue(validate_watch_dates("2026-05-01", "2026-05-31")["is_valid"])
         self.assertFalse(validate_watch_dates("2026/05/01", "")["is_valid"])
         self.assertFalse(validate_watch_dates("2026-05-31", "2026-05-01")["is_valid"])
+
+    def test_episode_availability_requires_released_iso_date(self):
+        today = date(2026, 7, 13)
+
+        self.assertTrue(
+            is_episode_available({"release_date": "2026-07-12"}, today=today)
+        )
+        self.assertTrue(
+            is_episode_available({"release_date": "2026-07-13"}, today=today)
+        )
+        self.assertFalse(
+            is_episode_available({"release_date": "2026-07-14"}, today=today)
+        )
+
+        for release_date in (None, "", "2026-7-13", "not-a-date", date(2026, 7, 13)):
+            with self.subTest(release_date=release_date):
+                self.assertFalse(
+                    is_episode_available(
+                        {"release_date": release_date},
+                        today=today,
+                    )
+                )
 
     def test_add_edit_delete_movie_watch_entry(self):
         media_draft = {

@@ -154,20 +154,111 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
         self.assertEqual(self.manager.cancelled_ids, ["refresh-job"])
 
-    def _dialog(self):
+    def test_initial_watched_status_does_not_open_watch_entry_details(self):
+        with patch(
+            "app.media_details_dialog.WatchEntryDetailsDialog",
+        ) as watch_entry_dialog:
+            dialog = self._dialog(watch_state="watched")
+            self.application.processEvents()
+
+        watch_entry_dialog.assert_not_called()
+        dialog.close()
+
+    def test_user_transition_to_watched_opens_one_new_entry_for_each_media_type(self):
+        for media_type in ("movie", "series", "episode"):
+            with self.subTest(media_type=media_type), patch(
+                "app.media_details_dialog.WatchEntryDetailsDialog",
+            ) as watch_entry_dialog:
+                watch_entry_dialog.return_value.exec.return_value = QDialog.Rejected
+                dialog = self._dialog(media_type=media_type)
+
+                self._activate_status(dialog, "watched")
+
+                watch_entry_dialog.assert_called_once()
+                call = watch_entry_dialog.call_args
+                entry = (
+                    call.args[2]
+                    if len(call.args) > 2
+                    else call.kwargs.get("entry")
+                )
+                self.assertIsNone(entry)
+                dialog.close()
+
+    def test_cancelling_automatic_entry_keeps_watched_status_and_dirty_state(self):
+        with patch(
+            "app.media_details_dialog.WatchEntryDetailsDialog",
+        ) as watch_entry_dialog:
+            watch_entry_dialog.return_value.exec.return_value = QDialog.Rejected
+            dialog = self._dialog()
+
+            self._activate_status(dialog, "watched")
+
+        self.assertEqual(dialog.status_combo.currentData(), "watched")
+        self.assertTrue(dialog._is_dirty)
+        self.assertTrue(dialog.save_button.isEnabled())
+        dialog.close()
+
+    def test_programmatic_watched_status_does_not_open_or_recurse(self):
+        with patch(
+            "app.media_details_dialog.WatchEntryDetailsDialog",
+        ) as watch_entry_dialog:
+            dialog = self._dialog()
+
+            watched_index = dialog.status_combo.findData("watched")
+            dialog.status_combo.setCurrentIndex(watched_index)
+            self.application.processEvents()
+
+        watch_entry_dialog.assert_not_called()
+        dialog.close()
+
+    def test_user_transition_to_other_status_does_not_open_watch_entry_details(self):
+        with patch(
+            "app.media_details_dialog.WatchEntryDetailsDialog",
+        ) as watch_entry_dialog:
+            dialog = self._dialog()
+
+            self._activate_status(dialog, "not_interested")
+
+        watch_entry_dialog.assert_not_called()
+        dialog.close()
+
+    def test_scheduled_entry_is_ignored_after_dialog_accepts(self):
+        with patch(
+            "app.media_details_dialog.WatchEntryDetailsDialog",
+        ) as watch_entry_dialog:
+            dialog = self._dialog()
+            watched_index = dialog.status_combo.findData("watched")
+            dialog.status_combo.setCurrentIndex(watched_index)
+            dialog.status_combo.activated.emit(watched_index)
+            dialog.accept()
+            self.application.processEvents()
+
+        watch_entry_dialog.assert_not_called()
+
+    def _dialog(self, media_type="series", watch_state="to_watch"):
         return MediaDetailsDialog(
             None,
-            self._series_draft(),
+            self._series_draft(
+                media_type=media_type,
+                watch_state=watch_state,
+            ),
             metadata_refresh_manager=self.manager,
         )
 
-    def _series_draft(self):
+    def _activate_status(self, dialog, watch_state):
+        index = dialog.status_combo.findData(watch_state)
+        self.assertGreaterEqual(index, 0)
+        dialog.status_combo.setCurrentIndex(index)
+        dialog.status_combo.activated.emit(index)
+        self.application.processEvents()
+
+    def _series_draft(self, media_type="series", watch_state="to_watch"):
         return {
             "media_id": 1,
             "metadata": {
                 "tmdb_id": 100,
                 "imdb_id": "tt100",
-                "media_type": "series",
+                "media_type": media_type,
                 "title": "Series",
                 "original_title": "Series",
                 "production_status": "Returning Series",
@@ -191,7 +282,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
             "watch_providers": [],
             "posters": [],
             "user_data": {
-                "watch_state": "to_watch",
+                "watch_state": watch_state,
                 "impression": None,
                 "is_collection_pick": None,
                 "watch_history": [],
