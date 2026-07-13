@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QScrollArea
 
 from app.media_details_dialog import WatchEntryDetailsDialog
 from app.watch_history_editor import apply_watch_entry_result
@@ -146,6 +146,41 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         self.assertEqual(rows_by_id[77]["season_num"], 1)
         self.assertEqual(rows_by_id[77]["episode_num"], 3)
         self.assertEqual(rows_by_id[77]["date_earliest"], "2026-05-03")
+
+    def test_episode_selector_height_tracks_rows_from_the_first_season(self):
+        dialog_heights = []
+
+        for season_count in (1, 2, 3):
+            episodes = [
+                {
+                    **self._episode(
+                        episode_id=10 + season_num,
+                        episode_num=1,
+                        title=f"Season {season_num} premiere",
+                        release_date=date.today(),
+                    ),
+                    "season_num": season_num,
+                }
+                for season_num in range(1, season_count + 1)
+            ]
+            dialog = self._dialog(self._series_draft(episodes))
+            dialog.show()
+            self.application.processEvents()
+            selector = dialog.findChild(
+                QScrollArea,
+                "episodeSelectorScroll",
+            )
+
+            self.assertIsNotNone(selector)
+            self.assertEqual(
+                selector.height(),
+                selector.widget().sizeHint().height(),
+            )
+            dialog_heights.append(dialog.height())
+            dialog.close()
+
+        self.assertLess(dialog_heights[0], dialog_heights[1])
+        self.assertLess(dialog_heights[1], dialog_heights[2])
 
     def _dialog(self, media_draft, entry=None):
         dialog = WatchEntryDetailsDialog(None, media_draft, entry)

@@ -441,6 +441,12 @@ class WatchEntryDetailsDialog(QDialog):
 
         content_layout.addStretch()
         scroll.setWidget(content)
+        scroll.setFixedHeight(
+            min(
+                content.sizeHint().height(),
+                WATCH_ENTRY_EPISODE_SELECTOR_MAX_HEIGHT,
+            )
+        )
         return scroll
 
     def _build_button_bar(self):
@@ -821,10 +827,24 @@ class MediaDetailsDialog(QDialog):
 
         self.providers_block = DetailBlock("Watch Providers (via TMDB API / JustWatch)", "details_reload.png", self)
         self.providers_block.action_button.clicked.connect(self.reload_watch_providers)
-        self.providers_layout = QVBoxLayout()
+
+        self.providers_scroll = QScrollArea(self.providers_block)
+        self.providers_scroll.setObjectName("transparentScroll")
+        self.providers_scroll.setWidgetResizable(True)
+        self.providers_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.providers_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+
+        self.providers_content = QWidget()
+        self.providers_content.setObjectName("transparentContent")
+        self.providers_layout = QVBoxLayout(self.providers_content)
         self.providers_layout.setContentsMargins(0, 0, 0, 0)
         self.providers_layout.setSpacing(4)
-        self.providers_block.body_layout.addLayout(self.providers_layout)
+        self.providers_scroll.setWidget(self.providers_content)
+        self.providers_block.body_layout.addWidget(self.providers_scroll)
 
         self.posters_block = DetailBlock("Posters", "details_edit.png", self)
         self.posters_block.action_button.clicked.connect(self.edit_posters)
@@ -1027,7 +1047,7 @@ class MediaDetailsDialog(QDialog):
 
         for access_type, label in WATCH_PROVIDER_GROUPS:
             value = ", ".join(grouped.get(access_type, [])) or "None"
-            provider_label = QLabel(f"{label}: {value}", self.providers_block)
+            provider_label = QLabel(f"{label}: {value}", self.providers_content)
             provider_label.setWordWrap(False)
             provider_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self.providers_layout.addWidget(provider_label)
@@ -1038,13 +1058,14 @@ class MediaDetailsDialog(QDialog):
         )
         checked_at_label = QLabel(
             f"Last Sync: {checked_at or 'None'}",
-            self.providers_block,
+            self.providers_content,
         )
         checked_at_label.setWordWrap(False)
         checked_at_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.providers_layout.addWidget(checked_at_label)
 
         self.providers_layout.addStretch()
+        self.providers_content.adjustSize()
 
     def render_posters(self):
         clear_layout(self.poster_layout)

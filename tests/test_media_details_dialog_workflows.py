@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, Qt
 from PySide6.QtWidgets import QApplication, QDialog
 
 from app.media_details_dialog import MediaDetailsDialog
@@ -234,6 +234,44 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
             self.application.processEvents()
 
         watch_entry_dialog.assert_not_called()
+
+    def test_long_watch_providers_scroll_without_resizing_columns(self):
+        dialog = self._dialog()
+        dialog.show()
+        self.application.processEvents()
+        initial_widths = (
+            dialog.metadata_block.width(),
+            dialog.providers_block.width(),
+        )
+        dialog.media_draft["watch_providers"] = [
+            {
+                "provider_name": (
+                    f"Very Long Provider Name {index} with Additional Channel Text"
+                ),
+                "access_type": "flatrate",
+            }
+            for index in range(20)
+        ]
+
+        dialog.render_watch_providers()
+        self.application.processEvents()
+
+        self.assertEqual(
+            (
+                dialog.metadata_block.width(),
+                dialog.providers_block.width(),
+            ),
+            initial_widths,
+        )
+        self.assertGreater(
+            dialog.providers_scroll.horizontalScrollBar().maximum(),
+            0,
+        )
+        self.assertEqual(
+            dialog.providers_scroll.horizontalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        dialog.close()
 
     def _dialog(self, media_type="series", watch_state="to_watch"):
         return MediaDetailsDialog(
