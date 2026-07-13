@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import unittest
+from copy import deepcopy
 from unittest.mock import patch
 
 os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
@@ -134,6 +135,87 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             self._state_row(self._media_id(sibling["tmdb_id"], "episode")),
         )
         self.assertFalse(result["series_created"])
+
+    def test_new_series_reuses_metadata_refresh_snapshot(self):
+        series_tmdb_id = 700
+        series_draft = self._series_draft(series_tmdb_id, "to_watch")
+        episodes = [
+            self._episode_metadata(series_tmdb_id, 1, 1),
+            self._episode_metadata(series_tmdb_id, 1, 2),
+        ]
+        series_draft["_metadata_refresh_snapshot"] = {
+            "media_type": "series",
+            "tmdb_id": series_tmdb_id,
+            "regular_episodes": episodes,
+        }
+
+        with self._mock_downloads(), patch.object(
+            draft_saver.tmdb_fetcher,
+            "get_tmdb_series_episode_metadata_list",
+        ) as fetch_episodes:
+            result = draft_saver.save_media_draft_with_posters(
+                self.conn,
+                series_draft,
+            )
+
+        fetch_episodes.assert_not_called()
+        self.assertEqual(result["episode_seed_count"], 2)
+        self.assertIsNotNone(self._media_id(episodes[0]["tmdb_id"], "episode"))
+        self.assertIsNotNone(self._media_id(episodes[1]["tmdb_id"], "episode"))
+
+    def test_existing_series_save_is_local_and_skips_episode_catalog(self):
+        baseline = self._series_draft(800, "to_watch")
+        media_id = media_repository.save_media_draft(self.conn, baseline)
+        current = deepcopy(baseline)
+        current["user_data"]["impression"] = "very_good"
+
+        with patch.object(
+            draft_saver.tmdb_fetcher,
+            "get_tmdb_series_episode_metadata_list",
+        ) as fetch_episodes, patch.object(
+            draft_saver,
+            "download_missing_draft_posters",
+        ) as download_posters:
+            result = draft_saver.save_existing_media_changes(
+                self.conn,
+                baseline,
+                current,
+            )
+
+        fetch_episodes.assert_not_called()
+        download_posters.assert_not_called()
+        self.assertEqual(result["media_id"], media_id)
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT impression FROM media_state WHERE media_id = ?",
+                (media_id,),
+            ).fetchone()["impression"],
+            "very_good",
+        )
+
+    def test_existing_episode_save_does_not_seed_parent_or_siblings(self):
+        metadata = self._episode_metadata(900, 1, 1)
+        baseline = self._episode_draft(metadata, "to_watch")
+        media_id = media_repository.save_media_draft(self.conn, baseline)
+        current = deepcopy(baseline)
+        current["user_data"]["impression"] = "good"
+
+        with patch.object(
+            draft_saver.tmdb_fetcher,
+            "get_tmdb_series_episode_metadata_list",
+        ) as fetch_episodes, patch.object(
+            draft_saver.media_draft_builder,
+            "build_media_draft_from_tmdb_match",
+        ) as build_parent:
+            result = draft_saver.save_existing_media_changes(
+                self.conn,
+                baseline,
+                current,
+            )
+
+        fetch_episodes.assert_not_called()
+        build_parent.assert_not_called()
+        self.assertEqual(result["media_id"], media_id)
 
     def _series_draft(self, tmdb_id, watch_state):
         return {

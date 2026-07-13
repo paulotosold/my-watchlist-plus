@@ -112,6 +112,34 @@ def save_media_draft_with_posters(
     )
 
 
+def save_existing_media_changes(conn, baseline_draft, media_draft):
+    """Persist only user-owned changes for an existing media item.
+
+    Catalog metadata, posters, providers, and series episode materialization are
+    deliberately outside this path.  The caller owns the transaction and must
+    apply returned database IDs to the live draft only after commit succeeds.
+    """
+    media_id = media_draft.get("media_id")
+
+    if media_id is None or baseline_draft.get("media_id") != media_id:
+        raise ValueError("Existing-media save requires matching media ids.")
+
+    result = media_repository.apply_media_user_changes(
+        conn,
+        media_id,
+        baseline_draft,
+        media_draft,
+    )
+    metadata = media_draft.get("metadata") or {}
+    return {
+        **result,
+        "media_id": media_id,
+        "poster_downloads": _empty_poster_downloads(),
+        "saved_media_type": metadata.get("media_type"),
+        "saved_title": metadata.get("title"),
+    }
+
+
 def _save_episode_draft_with_series_context(
     conn,
     media_draft,
@@ -217,15 +245,32 @@ def _save_series_draft_with_episode_context(
     )
     poster_downloads = series_save_result["poster_downloads"]
 
-    episode_seed_result = _save_series_episode_seeds(
-        conn,
-        series_tmdb_id,
-        poster_dir=poster_dir,
-        poster_size=poster_size,
-        max_posters_per_media=max_posters_per_media,
-        fail_on_poster_error=fail_on_poster_error,
-        fetch_episode_imdb_ids=fetch_episode_imdb_ids,
-    )
+    refresh_snapshot = media_draft.get("_metadata_refresh_snapshot") or {}
+    snapshot_episodes = refresh_snapshot.get("regular_episodes")
+
+    if (
+        snapshot_episodes is not None
+        and refresh_snapshot.get("media_type") == "series"
+        and refresh_snapshot.get("tmdb_id") == series_tmdb_id
+    ):
+        episode_seed_result = _save_series_episode_metadata_list(
+            conn,
+            snapshot_episodes,
+            poster_dir=poster_dir,
+            poster_size=poster_size,
+            max_posters_per_media=max_posters_per_media,
+            fail_on_poster_error=fail_on_poster_error,
+        )
+    else:
+        episode_seed_result = _save_series_episode_seeds(
+            conn,
+            series_tmdb_id,
+            poster_dir=poster_dir,
+            poster_size=poster_size,
+            max_posters_per_media=max_posters_per_media,
+            fail_on_poster_error=fail_on_poster_error,
+            fetch_episode_imdb_ids=fetch_episode_imdb_ids,
+        )
     _merge_poster_downloads(
         poster_downloads,
         episode_seed_result["poster_downloads"],
@@ -274,6 +319,24 @@ def _save_series_episode_seeds(
         series_tmdb_id,
         include_episode_imdb_ids=fetch_episode_imdb_ids,
     )
+    return _save_series_episode_metadata_list(
+        conn,
+        episode_metadata_list,
+        poster_dir=poster_dir,
+        poster_size=poster_size,
+        max_posters_per_media=max_posters_per_media,
+        fail_on_poster_error=fail_on_poster_error,
+    )
+
+
+def _save_series_episode_metadata_list(
+    conn,
+    episode_metadata_list,
+    poster_dir=DEFAULT_POSTER_DIR,
+    poster_size=TMDB_POSTER_SIZE,
+    max_posters_per_media=TMDB_MAX_POSTERS_PER_MEDIA,
+    fail_on_poster_error=False,
+):
     result = {
         "poster_downloads": _empty_poster_downloads(),
         "saved_count": 0,

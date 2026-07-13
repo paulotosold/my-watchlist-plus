@@ -229,6 +229,7 @@ def remove_episode_group_watch_entry(media_draft, entry):
 
 def build_media_event(result):
     return {
+        "draft_id": result.get("draft_id") or make_draft_id(),
         "date_earliest": result.get("date_earliest"),
         "date_latest": result.get("date_latest"),
         "created_at": result.get("created_at") or current_draft_timestamp(),

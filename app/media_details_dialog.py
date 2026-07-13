@@ -29,6 +29,11 @@ from PySide6.QtWidgets import (
 import app.draft_saver as draft_saver
 import app.media_repository as media_repo
 import app.tmdb_fetcher as tmdb_fetcher
+from app.media_details_state import (
+    apply_inserted_ids_to_draft,
+    merge_metadata_refresh,
+)
+from app.metadata_refresh import get_metadata_refresh_manager
 from app.media_details_formatters import (
     WATCH_PROVIDER_GROUPS,
     build_metadata_display_rows,
@@ -57,6 +62,7 @@ from app.watch_history_editor import (
     apply_watch_entry_result,
     episode_key,
     get_series_episodes,
+    make_draft_id,
     selected_episode_keys,
     validate_watch_dates,
     watched_episode_keys,
@@ -603,7 +609,13 @@ class WatchEntryDetailsDialog(QDialog):
 
 
 class MediaDetailsDialog(QDialog):
-    def __init__(self, parent, media_draft, input_query=None):
+    def __init__(
+        self,
+        parent,
+        media_draft,
+        input_query=None,
+        metadata_refresh_manager=None,
+    ):
         super().__init__(parent)
 
         self.media_draft = deepcopy(media_draft)
@@ -612,6 +624,28 @@ class MediaDetailsDialog(QDialog):
         self.list_checkboxes = []
         self._is_dirty = False
         self._is_populating = False
+        self._baseline_media_draft = deepcopy(media_draft)
+        self._metadata_refresh_job_id = None
+        self._metadata_refresh_in_progress = False
+        self._is_closing = False
+        self.metadata_refresh_manager = (
+            metadata_refresh_manager or get_metadata_refresh_manager()
+        )
+        self.metadata_refresh_manager.progress.connect(
+            self._on_metadata_refresh_progress
+        )
+        self.metadata_refresh_manager.succeeded.connect(
+            self._on_metadata_refresh_succeeded
+        )
+        self.metadata_refresh_manager.failed.connect(
+            self._on_metadata_refresh_failed
+        )
+        self.metadata_refresh_manager.cancelled.connect(
+            self._on_metadata_refresh_cancelled
+        )
+        self.metadata_refresh_manager.finished.connect(
+            self._on_metadata_refresh_finished
+        )
 
         self.setWindowTitle("Media Details")
         self.setFixedSize(1320, 850)
@@ -651,17 +685,22 @@ class MediaDetailsDialog(QDialog):
         upper_layout.addWidget(self.metadata_block, stretch=2)
         upper_layout.addLayout(right_column, stretch=1)
 
-        lower_block = self._build_lower_block()
+        self.lower_block = self._build_lower_block()
         footer_layout = self._build_footer()
 
         main_layout.addLayout(search_layout)
         main_layout.addLayout(upper_layout, stretch=1)
-        main_layout.addWidget(lower_block)
+        main_layout.addWidget(self.lower_block)
         main_layout.addLayout(footer_layout)
 
     def _build_metadata_block(self):
         block = DetailBlock("Metadata (via TMDB API)", "details_reload.png", self)
         block.action_button.clicked.connect(self.reload_metadata)
+
+        self.metadata_refresh_status_label = QLabel("", block)
+        self.metadata_refresh_status_label.setObjectName("refreshStatus")
+        self.metadata_refresh_status_label.hide()
+        block.body_layout.addWidget(self.metadata_refresh_status_label)
 
         self.metadata_scroll = QScrollArea(block)
         self.metadata_scroll.setObjectName("transparentScroll")
@@ -843,6 +882,7 @@ class MediaDetailsDialog(QDialog):
 
     def set_media_draft(self, media_draft):
         self.media_draft = deepcopy(media_draft)
+        self._baseline_media_draft = deepcopy(self.media_draft)
         self._is_dirty = self.media_draft.get("media_id") is None
         self._render_all()
         self._update_action_buttons()
@@ -1055,6 +1095,9 @@ class MediaDetailsDialog(QDialog):
         self.save_button.setEnabled(not has_media_id or self._is_dirty)
 
     def search_media(self):
+        if self._metadata_refresh_in_progress:
+            return
+
         if self._is_dirty:
             result = QMessageBox.question(
                 self,
@@ -1075,10 +1118,140 @@ class MediaDetailsDialog(QDialog):
         self._load_all_lists()
         self.set_media_draft(media_draft)
 
+    def reject(self):
+        self._cancel_active_metadata_refresh()
+        super().reject()
+
+    def closeEvent(self, event):
+        self._cancel_active_metadata_refresh()
+        super().closeEvent(event)
+
+    def _cancel_active_metadata_refresh(self):
+        self._is_closing = True
+
+        if self._metadata_refresh_job_id is not None:
+            self.metadata_refresh_manager.cancel(self._metadata_refresh_job_id)
+
     def reload_metadata(self):
-        print("Metadata reload clicked")
+        if self._metadata_refresh_in_progress:
+            return
+
+        self._apply_form_to_draft()
+        match = build_tmdb_match_from_metadata(
+            self.media_draft.get("metadata") or {}
+        )
+
+        try:
+            job_id = self.metadata_refresh_manager.start_refresh(
+                self.media_draft.get("media_id"),
+                match,
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Metadata", str(exc))
+            return
+
+        self._metadata_refresh_job_id = job_id
+        self._set_metadata_refresh_busy(True, "Refreshing metadata…")
+
+    def _on_metadata_refresh_progress(self, job_id, payload):
+        if not self._is_current_metadata_refresh(job_id):
+            return
+
+        message = (payload or {}).get("message") or "Refreshing metadata…"
+        self.metadata_refresh_status_label.setText(message)
+
+    def _on_metadata_refresh_succeeded(self, job_id, payload):
+        if not self._is_current_metadata_refresh(job_id) or self._is_closing:
+            return
+
+        was_dirty = self._is_dirty
+
+        try:
+            refreshed_draft = merge_metadata_refresh(self.media_draft, payload)
+            refreshed_baseline = merge_metadata_refresh(
+                self._baseline_media_draft,
+                payload,
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Metadata", str(exc))
+            return
+
+        self.media_draft = refreshed_draft
+        self._baseline_media_draft = refreshed_baseline
+        self._is_dirty = was_dirty
+        self._render_all()
+        self._update_action_buttons()
+
+        refresh_result = (payload or {}).get("refresh_result") or {}
+        stats = refresh_result.get("stats") or {}
+        created = stats.get("created", stats.get("episodes_created", 0)) or 0
+        preserved = stats.get(
+            "preserved_missing",
+            stats.get("local_absent_preserved", 0),
+        ) or 0
+
+        if created or preserved:
+            parts = []
+
+            if created:
+                parts.append(f"{created} new episode(s) added")
+
+            if preserved:
+                parts.append(f"{preserved} local episode(s) preserved")
+
+            QMessageBox.information(self, "Metadata", ". ".join(parts) + ".")
+
+    def _on_metadata_refresh_failed(self, job_id, payload):
+        if not self._is_current_metadata_refresh(job_id) or self._is_closing:
+            return
+
+        QMessageBox.warning(
+            self,
+            "Metadata",
+            (payload or {}).get("message") or "Metadata refresh failed.",
+        )
+
+    def _on_metadata_refresh_cancelled(self, job_id, payload):
+        if not self._is_current_metadata_refresh(job_id):
+            return
+
+        self.metadata_refresh_status_label.setText("Metadata refresh cancelled.")
+
+    def _on_metadata_refresh_finished(self, job_id, payload):
+        if not self._is_current_metadata_refresh(job_id):
+            return
+
+        self._metadata_refresh_job_id = None
+        self._set_metadata_refresh_busy(False)
+
+    def _is_current_metadata_refresh(self, job_id):
+        return job_id == self._metadata_refresh_job_id
+
+    def _set_metadata_refresh_busy(self, is_busy, message=None):
+        self._metadata_refresh_in_progress = is_busy
+        self.metadata_block.action_button.setEnabled(not is_busy)
+        self.providers_block.action_button.setEnabled(not is_busy)
+        self.posters_block.action_button.setEnabled(not is_busy)
+        self.search_input.setEnabled(not is_busy)
+        self.search_button.setEnabled(not is_busy)
+        self.lower_block.setEnabled(not is_busy)
+
+        if is_busy:
+            self.metadata_refresh_status_label.setText(
+                message or "Refreshing metadata…"
+            )
+            self.metadata_refresh_status_label.show()
+            self.save_button.setEnabled(False)
+            self.delete_button.setEnabled(False)
+            return
+
+        self.metadata_refresh_status_label.hide()
+        self._update_action_buttons()
 
     def reload_watch_providers(self):
+        if self._metadata_refresh_in_progress:
+            return
+
         try:
             providers = tmdb_fetcher.get_tmdb_media_watch_providers(
                 build_tmdb_match_from_metadata(self.media_draft.get("metadata") or {})
@@ -1105,6 +1278,13 @@ class MediaDetailsDialog(QDialog):
             except Exception as exc:
                 QMessageBox.warning(self, "Watch Providers", str(exc))
                 return
+
+            baseline_metadata = self._baseline_media_draft.setdefault(
+                "metadata",
+                {},
+            )
+            baseline_metadata["last_tmdb_watch_providers_checked_at"] = checked_at
+            self._baseline_media_draft["watch_providers"] = deepcopy(providers)
         else:
             self._is_dirty = True
 
@@ -1165,17 +1345,38 @@ class MediaDetailsDialog(QDialog):
         print("List add clicked")
 
     def save_media(self):
+        if self._metadata_refresh_in_progress:
+            return
+
         self._apply_form_to_draft()
+        media_id = self.media_draft.get("media_id")
 
         try:
-            with get_connection() as conn:
-                save_result = draft_saver.save_media_draft_with_posters(
-                    conn,
-                    self.media_draft,
-                )
+            if media_id is None:
+                draft_to_save = deepcopy(self.media_draft)
+
+                with get_connection() as conn:
+                    save_result = draft_saver.save_media_draft_with_posters(
+                        conn,
+                        draft_to_save,
+                    )
+
+                self.media_draft = draft_to_save
+            else:
+                with get_connection() as conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    save_result = draft_saver.save_existing_media_changes(
+                        conn,
+                        self._baseline_media_draft,
+                        self.media_draft,
+                    )
+
+                apply_inserted_ids_to_draft(self.media_draft, save_result)
         except Exception as exc:
             QMessageBox.warning(self, "Save Media", str(exc))
             return
+
+        self._baseline_media_draft = deepcopy(self.media_draft)
 
         self.result_payload = {
             "status": "saved",
@@ -1186,6 +1387,9 @@ class MediaDetailsDialog(QDialog):
         self.accept()
 
     def delete_media(self):
+        if self._metadata_refresh_in_progress:
+            return
+
         media_id = self.media_draft.get("media_id")
 
         if media_id is None:
@@ -1231,6 +1435,7 @@ class MediaDetailsDialog(QDialog):
 
             if not watch_history:
                 watch_history.append({
+                    "draft_id": make_draft_id(),
                     "date_earliest": None,
                     "date_latest": None,
                 })
