@@ -174,6 +174,26 @@ CREATE TABLE IF NOT EXISTS media_notes (
 
 CREATE INDEX IF NOT EXISTS idx_media_notes_media_id
     ON media_notes (media_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_media_notes_validate_insert
+BEFORE INSERT ON media_notes
+WHEN length(trim(
+    NEW.note,
+    ' ' || char(9) || char(10) || char(11) || char(12) || char(13)
+)) = 0
+BEGIN
+    SELECT RAISE(ABORT, 'media note cannot be empty');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_media_notes_validate_update
+BEFORE UPDATE OF note ON media_notes
+WHEN length(trim(
+    NEW.note,
+    ' ' || char(9) || char(10) || char(11) || char(12) || char(13)
+)) = 0
+BEGIN
+    SELECT RAISE(ABORT, 'media note cannot be empty');
+END;
 -- ----------------------------------------------------------
 
 -- ----------------------------------------------------------

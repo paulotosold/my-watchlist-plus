@@ -1,6 +1,7 @@
 import sqlite3
 
 from app.config import TMDB_MAX_POSTERS_PER_MEDIA
+from app.media_notes import validate_note_text
 from app.watch_states import validate_watch_state
 
 
@@ -2178,7 +2179,7 @@ def _sync_media_notes(conn, media_id, notes):
 
     for note in notes:
         note_id = note.get("id")
-        note_text = note.get("note") or ""
+        note_text = validate_note_text(note.get("note"))
 
         if note_id is None:
             cursor = conn.execute(
@@ -2400,6 +2401,9 @@ def apply_media_user_changes(conn, media_id, baseline_draft, current_draft):
     note_result = _empty_owned_delta_result()
 
     if baseline_notes != current_notes:
+        for note in current_notes:
+            validate_note_text(note.get("note"))
+
         note_result = _apply_owned_row_delta(
             conn=conn,
             table_name="media_notes",

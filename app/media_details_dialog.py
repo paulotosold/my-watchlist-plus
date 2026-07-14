@@ -18,8 +18,10 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListView,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QStyle,
     QStyledItemDelegate,
     QToolButton,
@@ -48,6 +50,12 @@ from app.media_details_formatters import (
     group_watch_providers,
 )
 from app.media_lookup import resolve_media_draft_from_query
+from app.media_notes import (
+    EMPTY_NOTE_ERROR,
+    apply_note_result,
+    normalize_note_text,
+    validate_note_text,
+)
 from app.watch_history_editor import (
     WATCH_ENTRY_DATE_INPUT_WIDTH,
     WATCH_ENTRY_EPISODE_BUTTON_BORDER_RADIUS,
@@ -85,6 +93,8 @@ DETAIL_ACTION_LINE_ICON_TEXT_SPACING = 1
 DETAIL_ICON_BUTTON_SIZE = 20
 DETAIL_ICON_SIZE = 18
 DETAIL_BUTTON_WIDTH = 100
+NOTE_DETAILS_INPUT_WIDTH = 500
+NOTE_DETAILS_INPUT_HEIGHT = 100
 WATCH_ENTRY_BACKGROUND_COLOR = "#f1f1f1"
 WATCH_ENTRY_DIALOG_DEFAULT_WIDTH = 960
 WATCH_ENTRY_DIALOG_MAX_HEIGHT = 750
@@ -152,6 +162,38 @@ def open_media_details_dialog(parent, media_draft, input_query=None):
         return dialog.result_payload
 
     return {"status": "cancelled"}
+
+
+class NotePreviewLabel(QLabel):
+    def __init__(self, text, parent=None):
+        super().__init__(parent)
+
+        self.full_text = text or ""
+        self.preview_text = " ".join(self.full_text.split())
+        self.setWordWrap(False)
+        self.setTextFormat(Qt.TextFormat.PlainText)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
+        self.setMinimumWidth(0)
+        self.setToolTip(self.full_text)
+        self._refresh_elided_text()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._refresh_elided_text()
+
+    def _refresh_elided_text(self):
+        available_width = max(0, self.contentsRect().width())
+        self.setText(
+            self.fontMetrics().elidedText(
+                self.preview_text,
+                Qt.TextElideMode.ElideRight,
+                available_width,
+            )
+        )
 
 
 class DetailBlock(QFrame):
@@ -273,6 +315,129 @@ class ComboPopupItemDelegate(QStyledItemDelegate):
             str(index.data(Qt.ItemDataRole.DisplayRole)),
         )
         painter.restore()
+
+
+class NoteDetailsDialog(QDialog):
+    def __init__(self, parent, note=None):
+        super().__init__(parent)
+
+        self.note = deepcopy(note) if note is not None else None
+        self.result_payload = {"action": "cancel"}
+        self.initial_note_text = normalize_note_text(
+            (self.note or {}).get("note")
+        )
+        self._has_user_edited = False
+
+        self.setWindowTitle("Note Details")
+        self._apply_parent_styles(parent)
+        self._build_ui()
+        self._populate_initial_value()
+        self.resize(self.sizeHint())
+        self._refresh_state()
+
+    def _apply_parent_styles(self, parent):
+        parent_style = parent.styleSheet() if parent is not None else ""
+        self.setStyleSheet(parent_style + f"""
+            QLabel#errorLabel {{
+                color: #b00020;
+            }}
+
+            QFrame#dialogButtonBar {{
+                background-color: {WATCH_ENTRY_BACKGROUND_COLOR};
+                border: none;
+            }}
+        """)
+
+    def _build_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 16, 20, 16)
+        main_layout.setSpacing(8)
+
+        self.note_input = QPlainTextEdit(self)
+        self.note_input.setFixedSize(
+            NOTE_DETAILS_INPUT_WIDTH,
+            NOTE_DETAILS_INPUT_HEIGHT,
+        )
+        self.note_input.textChanged.connect(self._on_text_changed)
+        main_layout.addWidget(self.note_input)
+
+        self.error_label = QLabel(self)
+        self.error_label.setObjectName("errorLabel")
+        self.error_label.setWordWrap(True)
+        main_layout.addWidget(self.error_label)
+
+        main_layout.addWidget(self._build_button_bar())
+
+    def _build_button_bar(self):
+        bar = QFrame(self)
+        bar.setObjectName("dialogButtonBar")
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(10)
+        layout.addStretch()
+
+        self.delete_note_button = QPushButton("DELETE", bar)
+        self.delete_note_button.setObjectName("deleteButton")
+        self.cancel_note_button = QPushButton("Cancel", bar)
+        self.save_note_button = QPushButton("Save", bar)
+
+        for button in (
+            self.delete_note_button,
+            self.cancel_note_button,
+            self.save_note_button,
+        ):
+            button.setMinimumHeight(32)
+            button.setFixedWidth(DETAIL_BUTTON_WIDTH)
+            layout.addWidget(button)
+
+        layout.addStretch()
+
+        self.delete_note_button.clicked.connect(self._delete_note)
+        self.cancel_note_button.clicked.connect(self.reject)
+        self.save_note_button.clicked.connect(self._save_note)
+        return bar
+
+    def _populate_initial_value(self):
+        self.note_input.blockSignals(True)
+        self.note_input.setPlainText((self.note or {}).get("note") or "")
+        self.note_input.blockSignals(False)
+
+    def _on_text_changed(self):
+        self._has_user_edited = True
+        self._refresh_state()
+
+    def _refresh_state(self):
+        normalized_text = normalize_note_text(self.note_input.toPlainText())
+        is_valid = bool(normalized_text)
+        is_changed = normalized_text != self.initial_note_text
+        can_save = is_valid and (self.note is None or is_changed)
+        show_empty_error = self._has_user_edited and not is_valid
+
+        self.error_label.setText(EMPTY_NOTE_ERROR if show_empty_error else "")
+        self.error_label.setVisible(show_empty_error)
+        self.save_note_button.setEnabled(can_save)
+        self.delete_note_button.setEnabled(self.note is not None)
+
+    def _save_note(self):
+        try:
+            note_text = validate_note_text(self.note_input.toPlainText())
+        except ValueError:
+            self._has_user_edited = True
+            self._refresh_state()
+            return
+
+        self.result_payload = {
+            "action": "save",
+            "note": note_text,
+        }
+        self.accept()
+
+    def _delete_note(self):
+        if self.note is None:
+            return
+
+        self.result_payload = {"action": "delete"}
+        self.accept()
 
 
 class WatchEntryDetailsDialog(QDialog):
@@ -1286,6 +1451,10 @@ class MediaDetailsDialog(QDialog):
     def render_watch_history(self):
         clear_layout(self.watch_history_layout)
 
+        self.watch_history_layout.addWidget(
+            make_icon_button("details_add.png", self, self.add_watch_history)
+        )
+
         for entry in build_watch_history_display_entries(self.media_draft):
             self.watch_history_layout.addLayout(
                 self._make_action_line(
@@ -1295,29 +1464,39 @@ class MediaDetailsDialog(QDialog):
                 )
             )
 
-        self.watch_history_layout.addWidget(
-            make_icon_button("details_add.png", self, self.add_watch_history)
-        )
         self.watch_history_layout.addStretch()
 
     def render_notes(self):
         clear_layout(self.notes_layout)
 
-        for note in self.media_draft.get("user_data", {}).get("notes", []):
+        self.notes_layout.addWidget(
+            make_icon_button("details_add.png", self, self.add_note)
+        )
+
+        notes = self.media_draft.get("user_data", {}).get("notes", [])
+
+        for note_index in range(len(notes) - 1, -1, -1):
+            note = notes[note_index]
+            entry = {
+                **deepcopy(note),
+                "note_index": note_index,
+            }
             self.notes_layout.addLayout(
-                self._make_action_line(
-                    "details_edit.png",
+                self._make_note_action_line(
                     note.get("note") or "",
-                    self.edit_note,
+                    lambda checked=False, entry=entry: self.edit_note(entry),
                 )
             )
 
-        self.notes_layout.addWidget(make_icon_button("details_add.png", self, self.add_note))
         self.notes_layout.addStretch()
 
     def render_lists(self):
         clear_layout(self.lists_layout)
         self.list_checkboxes = []
+
+        self.lists_layout.addWidget(
+            make_icon_button("details_add.png", self, self.add_list)
+        )
 
         selected_lists = self.media_draft.get("user_data", {}).get("lists", [])
         selected_by_id = {
@@ -1352,7 +1531,6 @@ class MediaDetailsDialog(QDialog):
             self.list_checkboxes.append((checkbox, list_item))
             self.lists_layout.addWidget(checkbox)
 
-        self.lists_layout.addWidget(make_icon_button("details_add.png", self, self.add_list))
         self.lists_layout.addStretch()
 
     def _make_action_line(self, icon_name, text, callback):
@@ -1367,6 +1545,17 @@ class MediaDetailsDialog(QDialog):
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         line_layout.addWidget(label, stretch=1)
 
+        return line_layout
+
+    def _make_note_action_line(self, text, callback):
+        line_layout = QHBoxLayout()
+        line_layout.setContentsMargins(0, 0, 0, 0)
+        line_layout.setSpacing(DETAIL_ACTION_LINE_ICON_TEXT_SPACING)
+
+        line_layout.addWidget(
+            make_icon_button("details_edit.png", self, callback)
+        )
+        line_layout.addWidget(NotePreviewLabel(text, self), stretch=1)
         return line_layout
 
     def mark_dirty(self):
@@ -1693,11 +1882,22 @@ class MediaDetailsDialog(QDialog):
         self.mark_dirty()
         self.render_watch_history()
 
-    def edit_note(self):
-        print("Note edit clicked")
+    def edit_note(self, entry=None):
+        dialog = NoteDetailsDialog(self, entry)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        apply_note_result(
+            self.media_draft,
+            entry,
+            dialog.result_payload,
+        )
+        self.mark_dirty()
+        self.render_notes()
 
     def add_note(self):
-        print("Note add clicked")
+        self.edit_note()
 
     def add_list(self):
         print("List add clicked")
@@ -1848,7 +2048,8 @@ class MediaDetailsDialog(QDialog):
                 border: 1px solid #555555;
             }
 
-            QLineEdit {
+            QLineEdit,
+            QPlainTextEdit {
                 border: 1px solid #bcbcbc;
                 border-radius: 6px;
                 padding: 4px 8px;
