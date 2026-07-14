@@ -1,6 +1,11 @@
 import sqlite3
 
 from app.config import TMDB_MAX_POSTERS_PER_MEDIA
+from app.media_lists import (
+    DUPLICATE_LIST_NAME_ERROR,
+    normalize_list_description,
+    validate_list_name,
+)
 from app.media_notes import validate_note_text
 from app.watch_states import validate_watch_state
 
@@ -769,7 +774,7 @@ def get_db_media_user_data(conn, metadata):
         JOIN lists l
             ON l.id = ml.list_id
         WHERE ml.media_id = ?
-        ORDER BY l.name
+        ORDER BY l.name COLLATE NOCASE, l.name, l.id
         """,
         (media_id,),
     )
@@ -793,11 +798,88 @@ def get_all_lists(conn):
             name,
             description
         FROM lists
-        ORDER BY name
+        ORDER BY name COLLATE NOCASE, name, id
         """
     )
 
     return [dict(row) for row in cursor.fetchall()]
+
+
+def create_list(conn, name, description=None):
+    normalized_name = validate_list_name(name)
+    normalized_description = normalize_list_description(description)
+    _ensure_unique_list_name(conn, normalized_name)
+
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO lists (name, description)
+            VALUES (?, ?)
+            """,
+            (normalized_name, normalized_description),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise ValueError(DUPLICATE_LIST_NAME_ERROR) from exc
+
+    return {
+        "id": cursor.lastrowid,
+        "name": normalized_name,
+        "description": normalized_description,
+    }
+
+
+def update_list(conn, list_id, name, description=None):
+    normalized_name = validate_list_name(name)
+    normalized_description = normalize_list_description(description)
+    _ensure_unique_list_name(conn, normalized_name, current_list_id=list_id)
+
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE lists
+            SET
+                name = ?,
+                description = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (normalized_name, normalized_description, list_id),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise ValueError(DUPLICATE_LIST_NAME_ERROR) from exc
+
+    if cursor.rowcount == 0:
+        raise ValueError(f"lists id {list_id} does not exist.")
+
+    return {
+        "id": list_id,
+        "name": normalized_name,
+        "description": normalized_description,
+    }
+
+
+def delete_list(conn, list_id):
+    cursor = conn.execute(
+        "DELETE FROM lists WHERE id = ?",
+        (list_id,),
+    )
+    return cursor.rowcount > 0
+
+
+def _ensure_unique_list_name(conn, name, current_list_id=None):
+    if current_list_id is None:
+        row = conn.execute(
+            "SELECT id FROM lists WHERE name = ?",
+            (name,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT id FROM lists WHERE name = ? AND id != ?",
+            (name, current_list_id),
+        ).fetchone()
+
+    if row is not None:
+        raise ValueError(DUPLICATE_LIST_NAME_ERROR)
 
 
 def replace_media_watch_providers(conn, media_id, watch_providers, checked_at=None):

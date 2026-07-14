@@ -6,10 +6,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from PySide6.QtCore import QObject, Signal, Qt
+from PySide6.QtCore import QObject, QPoint, Signal, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QToolButton
 
-from app.media_details_dialog import MediaDetailsDialog, NotePreviewLabel
+from app.media_details_dialog import (
+    ClickableEntryLabel,
+    ENTRY_ACTION_LINE_HEIGHT,
+    MediaDetailsDialog,
+    NotePreviewLabel,
+)
 
 
 class FakeRefreshManager(QObject):
@@ -58,6 +64,45 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
             with self.subTest(layout=panel_layout):
                 self.assertIsInstance(panel_layout.itemAt(0).widget(), QToolButton)
 
+        self.assertIsInstance(
+            dialog.watch_history_layout.itemAt(1).widget(),
+            ClickableEntryLabel,
+        )
+
+    def test_watch_history_and_note_texts_open_the_correct_details_dialogs(self):
+        with (
+            patch(
+                "app.media_details_dialog.WatchEntryDetailsDialog",
+            ) as watch_dialog,
+            patch(
+                "app.media_details_dialog.NoteDetailsDialog",
+            ) as note_dialog,
+        ):
+            watch_dialog.return_value.exec.return_value = QDialog.Rejected
+            note_dialog.return_value.exec.return_value = QDialog.Rejected
+            dialog = self._dialog(notes=[{"id": 20, "note": "Clickable note"}])
+            dialog.show()
+            self.application.processEvents()
+
+            watch_label = dialog.watch_history_layout.itemAt(1).widget()
+            note_label = self._note_label(dialog, 1)
+            QTest.mouseClick(
+                watch_label,
+                Qt.MouseButton.LeftButton,
+                pos=QPoint(2, watch_label.height() // 2),
+            )
+            QTest.mouseClick(
+                note_label,
+                Qt.MouseButton.LeftButton,
+                pos=QPoint(2, note_label.height() // 2),
+            )
+
+        watch_entry = watch_dialog.call_args.args[2]
+        note_entry = note_dialog.call_args.args[1]
+        self.assertEqual(watch_entry["watch_history_id"], 10)
+        self.assertEqual(note_entry["id"], 20)
+        self.assertEqual(note_entry["note_index"], 0)
+
     def test_notes_render_newest_first_as_literal_single_line_previews(self):
         newest_text = "<b>Newest</b>\nwith a second line and enough text to elide"
         dialog = self._dialog(notes=[
@@ -83,6 +128,11 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
         self.assertEqual(newest_label.textFormat(), Qt.TextFormat.PlainText)
         self.assertNotIn("\n", newest_label.text())
         self.assertEqual(oldest_label.full_text, "Oldest")
+        self.assertEqual(newest_label.height(), ENTRY_ACTION_LINE_HEIGHT)
+        self.assertEqual(
+            newest_label.height(),
+            dialog.watch_history_layout.itemAt(1).widget().height(),
+        )
 
         newest_label.resize(70, newest_label.height())
         self.application.processEvents()
@@ -168,8 +218,7 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
         self.assertFalse(dialog._is_dirty)
 
     def _note_label(self, dialog, layout_index):
-        row = dialog.notes_layout.itemAt(layout_index).layout()
-        label = row.itemAt(1).widget()
+        label = dialog.notes_layout.itemAt(layout_index).widget()
         self.assertIsInstance(label, NotePreviewLabel)
         return label
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import requests
 
-from PySide6.QtCore import QDate, QModelIndex, QPoint, QSize, Qt, QTimer
+from PySide6.QtCore import QDate, QModelIndex, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QApplication,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -50,6 +51,14 @@ from app.media_details_formatters import (
     group_watch_providers,
 )
 from app.media_lookup import resolve_media_draft_from_query
+from app.media_lists import (
+    DUPLICATE_LIST_NAME_ERROR,
+    EMPTY_LIST_NAME_ERROR,
+    is_duplicate_list_name,
+    normalize_list_description,
+    normalize_list_name,
+    validate_list_name,
+)
 from app.media_notes import (
     EMPTY_NOTE_ERROR,
     apply_note_result,
@@ -89,10 +98,14 @@ POSTER_PREVIEW_HEIGHT = 232
 # Tweak this value to fine-tune vertical spacing in open dropdown menus.
 COMBO_POPUP_ITEM_HEIGHT = 28
 DETAIL_HEADER_ICON_TEXT_SPACING = 1
-DETAIL_ACTION_LINE_ICON_TEXT_SPACING = 1
 DETAIL_ICON_BUTTON_SIZE = 20
 DETAIL_ICON_SIZE = 18
 DETAIL_BUTTON_WIDTH = 100
+ENTRY_ACTION_LINE_HEIGHT = DETAIL_ICON_BUTTON_SIZE
+LIST_DETAILS_INPUT_WIDTH = 500
+LIST_DETAILS_DESCRIPTION_INPUT_HEIGHT = 100
+LIST_CHECKBOX_SIZE = DETAIL_ICON_BUTTON_SIZE
+LIST_CHECKBOX_TO_TEXT_SPACING = 8
 NOTE_DETAILS_INPUT_WIDTH = 500
 NOTE_DETAILS_INPUT_HEIGHT = 100
 WATCH_ENTRY_BACKGROUND_COLOR = "#f1f1f1"
@@ -164,20 +177,141 @@ def open_media_details_dialog(parent, media_draft, input_query=None):
     return {"status": "cancelled"}
 
 
-class NotePreviewLabel(QLabel):
-    def __init__(self, text, parent=None):
-        super().__init__(parent)
+class ClickableEntryLabel(QLabel):
+    activated = Signal()
 
-        self.full_text = text or ""
-        self.preview_text = " ".join(self.full_text.split())
+    def __init__(self, text, parent=None, callback=None):
+        super().__init__(text or "", parent)
+
+        self._press_position = None
+        self._press_started_over_text = False
+        self._pointer_over_text = False
+        self.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
         self.setWordWrap(False)
         self.setTextFormat(Qt.TextFormat.PlainText)
         self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)
+        self.setFixedHeight(ENTRY_ACTION_LINE_HEIGHT)
         self.setSizePolicy(
             QSizePolicy.Policy.Ignored,
-            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Fixed,
         )
         self.setMinimumWidth(0)
+
+        if callback is not None:
+            self.activated.connect(callback)
+
+    def enterEvent(self, event):
+        super().enterEvent(event)
+        self._update_pointer_state(event.position().toPoint())
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        self._set_pointer_over_text(False)
+
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        self._update_pointer_state(event.position().toPoint())
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_position = event.position().toPoint()
+            self._press_started_over_text = self._is_over_rendered_text(
+                self._press_position
+            )
+
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        release_position = event.position().toPoint()
+        should_activate = (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._press_position is not None
+            and self._press_started_over_text
+            and self._is_over_rendered_text(release_position)
+            and (
+                release_position - self._press_position
+            ).manhattanLength() < QApplication.startDragDistance()
+        )
+
+        super().mouseReleaseEvent(event)
+        self._press_position = None
+        self._press_started_over_text = False
+
+        if should_activate and not self.hasSelectedText():
+            self.activated.emit()
+
+    def keyPressEvent(self, event):
+        if event.key() in (
+            Qt.Key.Key_Return,
+            Qt.Key.Key_Enter,
+            Qt.Key.Key_Space,
+        ):
+            event.accept()
+            self.activated.emit()
+            return
+
+        super().keyPressEvent(event)
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self._refresh_underline()
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self._refresh_underline()
+
+    def _update_pointer_state(self, position):
+        self._set_pointer_over_text(self._is_over_rendered_text(position))
+
+    def _set_pointer_over_text(self, is_over_text):
+        if self._pointer_over_text == is_over_text:
+            return
+
+        self._pointer_over_text = is_over_text
+
+        if is_over_text:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        else:
+            self.unsetCursor()
+
+        self._refresh_underline()
+
+    def _refresh_underline(self):
+        font = self.font()
+        font.setUnderline(self._pointer_over_text or self.hasFocus())
+        self.setFont(font)
+
+    def _is_over_rendered_text(self, position):
+        text = self.text()
+
+        if not text:
+            return False
+
+        content_rect = self.contentsRect()
+        metrics = self.fontMetrics()
+        text_width = min(metrics.horizontalAdvance(text), content_rect.width())
+        text_height = min(metrics.height(), content_rect.height())
+        text_top = content_rect.top() + max(
+            0,
+            (content_rect.height() - text_height) // 2,
+        )
+
+        return (
+            content_rect.left() <= position.x() < content_rect.left() + text_width
+            and text_top <= position.y() < text_top + text_height
+        )
+
+
+class NotePreviewLabel(ClickableEntryLabel):
+    def __init__(self, text, parent=None, callback=None):
+        self.full_text = text or ""
+        self.preview_text = " ".join(self.full_text.split())
+        super().__init__("", parent, callback)
+
         self.setToolTip(self.full_text)
         self._refresh_elided_text()
 
@@ -434,6 +568,198 @@ class NoteDetailsDialog(QDialog):
 
     def _delete_note(self):
         if self.note is None:
+            return
+
+        self.result_payload = {"action": "delete"}
+        self.accept()
+
+
+class ListDetailsDialog(QDialog):
+    def __init__(self, parent, list_item=None, existing_lists=None):
+        super().__init__(parent)
+
+        self.list_item = deepcopy(list_item) if list_item is not None else None
+        self.existing_lists = deepcopy(existing_lists or [])
+        self.result_payload = {"action": "cancel"}
+        self.initial_signature = (
+            normalize_list_name((self.list_item or {}).get("name")),
+            normalize_list_description(
+                (self.list_item or {}).get("description")
+            ),
+        )
+        self._has_user_edited = False
+
+        self.setWindowTitle("List Details")
+        self._apply_parent_styles(parent)
+        self._build_ui()
+        self._populate_initial_values()
+        self.resize(self.sizeHint())
+        self._refresh_state()
+
+    def _apply_parent_styles(self, parent):
+        parent_style = parent.styleSheet() if parent is not None else ""
+        self.setStyleSheet(parent_style + f"""
+            QLabel#errorLabel {{
+                color: #b00020;
+            }}
+
+            QFrame#dialogButtonBar {{
+                background-color: {WATCH_ENTRY_BACKGROUND_COLOR};
+                border: none;
+            }}
+        """)
+
+    def _build_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 16, 20, 16)
+        main_layout.setSpacing(8)
+
+        form_layout = QGridLayout()
+        form_layout.setContentsMargins(0, 0, 0, 0)
+        form_layout.setHorizontalSpacing(16)
+        form_layout.setVerticalSpacing(12)
+
+        name_label = QLabel("List Name:", self)
+        name_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        description_label = QLabel("Description:", self)
+        description_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop
+        )
+
+        self.list_name_input = QLineEdit(self)
+        self.list_name_input.setFixedSize(LIST_DETAILS_INPUT_WIDTH, 32)
+        self.description_input = QPlainTextEdit(self)
+        self.description_input.setFixedSize(
+            LIST_DETAILS_INPUT_WIDTH,
+            LIST_DETAILS_DESCRIPTION_INPUT_HEIGHT,
+        )
+
+        self.list_name_input.textChanged.connect(self._on_text_changed)
+        self.description_input.textChanged.connect(self._on_text_changed)
+
+        form_layout.addWidget(name_label, 0, 0)
+        form_layout.addWidget(self.list_name_input, 0, 1)
+        form_layout.addWidget(description_label, 1, 0)
+        form_layout.addWidget(self.description_input, 1, 1)
+        main_layout.addLayout(form_layout)
+
+        self.error_label = QLabel(self)
+        self.error_label.setObjectName("errorLabel")
+        self.error_label.setWordWrap(True)
+        main_layout.addWidget(self.error_label)
+        main_layout.addWidget(self._build_button_bar())
+
+    def _build_button_bar(self):
+        bar = QFrame(self)
+        bar.setObjectName("dialogButtonBar")
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(10)
+        layout.addStretch()
+
+        self.delete_list_button = QPushButton("DELETE", bar)
+        self.delete_list_button.setObjectName("deleteButton")
+        self.cancel_list_button = QPushButton("Cancel", bar)
+        self.save_list_button = QPushButton("Save", bar)
+
+        for button in (
+            self.delete_list_button,
+            self.cancel_list_button,
+            self.save_list_button,
+        ):
+            button.setMinimumHeight(32)
+            button.setFixedWidth(DETAIL_BUTTON_WIDTH)
+            layout.addWidget(button)
+
+        layout.addStretch()
+
+        self.delete_list_button.clicked.connect(self._delete_list)
+        self.cancel_list_button.clicked.connect(self.reject)
+        self.save_list_button.clicked.connect(self._save_list)
+        return bar
+
+    def _populate_initial_values(self):
+        self.list_name_input.blockSignals(True)
+        self.description_input.blockSignals(True)
+        self.list_name_input.setText((self.list_item or {}).get("name") or "")
+        self.description_input.setPlainText(
+            (self.list_item or {}).get("description") or ""
+        )
+        self.list_name_input.blockSignals(False)
+        self.description_input.blockSignals(False)
+
+    def _on_text_changed(self):
+        self._has_user_edited = True
+        self._refresh_state()
+
+    def _refresh_state(self):
+        name = normalize_list_name(self.list_name_input.text())
+        description = normalize_list_description(
+            self.description_input.toPlainText()
+        )
+        is_duplicate = is_duplicate_list_name(
+            name,
+            self.existing_lists,
+            current_list_id=(self.list_item or {}).get("id"),
+        )
+        is_valid = bool(name) and not is_duplicate
+        is_changed = (name, description) != self.initial_signature
+        can_save = is_valid and (self.list_item is None or is_changed)
+
+        error = ""
+
+        if self._has_user_edited and not name:
+            error = EMPTY_LIST_NAME_ERROR
+        elif is_duplicate:
+            error = DUPLICATE_LIST_NAME_ERROR
+
+        self.error_label.setText(error)
+        self.error_label.setVisible(bool(error))
+        self.save_list_button.setEnabled(can_save)
+        self.delete_list_button.setEnabled(self.list_item is not None)
+
+    def _save_list(self):
+        try:
+            name = validate_list_name(self.list_name_input.text())
+        except ValueError:
+            self._has_user_edited = True
+            self._refresh_state()
+            return
+
+        if is_duplicate_list_name(
+            name,
+            self.existing_lists,
+            current_list_id=(self.list_item or {}).get("id"),
+        ):
+            self._has_user_edited = True
+            self._refresh_state()
+            return
+
+        self.result_payload = {
+            "action": "save",
+            "name": name,
+            "description": normalize_list_description(
+                self.description_input.toPlainText()
+            ),
+        }
+        self.accept()
+
+    def _delete_list(self):
+        if self.list_item is None:
+            return
+
+        name = self.list_item.get("name") or "this list"
+        result = QMessageBox.warning(
+            self,
+            "Delete List",
+            f"Delete {name} and remove it from every media item?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if result != QMessageBox.Yes:
             return
 
         self.result_payload = {"action": "delete"}
@@ -1456,11 +1782,10 @@ class MediaDetailsDialog(QDialog):
         )
 
         for entry in build_watch_history_display_entries(self.media_draft):
-            self.watch_history_layout.addLayout(
-                self._make_action_line(
-                    "details_edit.png",
+            self.watch_history_layout.addWidget(
+                self._make_entry_label(
                     entry["text"],
-                    lambda checked=False, entry=entry: self.edit_watch_history(entry),
+                    lambda entry=entry: self.edit_watch_history(entry),
                 )
             )
 
@@ -1481,10 +1806,10 @@ class MediaDetailsDialog(QDialog):
                 **deepcopy(note),
                 "note_index": note_index,
             }
-            self.notes_layout.addLayout(
-                self._make_note_action_line(
+            self.notes_layout.addWidget(
+                self._make_note_entry_label(
                     note.get("note") or "",
-                    lambda checked=False, entry=entry: self.edit_note(entry),
+                    lambda entry=entry: self.edit_note(entry),
                 )
             )
 
@@ -1521,42 +1846,63 @@ class MediaDetailsDialog(QDialog):
                     "description": None,
                 })
 
+        lists_to_show.sort(
+            key=lambda item: (
+                (item.get("name") or "").casefold(),
+                item.get("name") or "",
+                item.get("id") or 0,
+            )
+        )
+
         for list_item in lists_to_show:
-            checkbox = QCheckBox(list_item["name"], self)
+            checkbox = QCheckBox(self)
+            checkbox.setFixedSize(LIST_CHECKBOX_SIZE, LIST_CHECKBOX_SIZE)
             checkbox.setChecked(
                 list_item.get("id") in selected_by_id
                 or list_item.get("name") in selected_names
             )
+            checkbox.setToolTip(
+                f"Include this media in {list_item['name']}"
+            )
             checkbox.stateChanged.connect(self.mark_dirty)
             self.list_checkboxes.append((checkbox, list_item))
-            self.lists_layout.addWidget(checkbox)
+            self.lists_layout.addWidget(
+                self._make_list_action_line(checkbox, list_item)
+            )
 
         self.lists_layout.addStretch()
 
-    def _make_action_line(self, icon_name, text, callback):
-        line_layout = QHBoxLayout()
-        line_layout.setContentsMargins(0, 0, 0, 0)
-        line_layout.setSpacing(DETAIL_ACTION_LINE_ICON_TEXT_SPACING)
+    def _make_entry_label(self, text, callback):
+        return ClickableEntryLabel(text, self, callback)
 
-        line_layout.addWidget(make_icon_button(icon_name, self, callback))
+    def _make_note_entry_label(self, text, callback):
+        return NotePreviewLabel(text, self, callback)
 
-        label = QLabel(text, self)
-        label.setWordWrap(False)
-        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        line_layout.addWidget(label, stretch=1)
-
-        return line_layout
-
-    def _make_note_action_line(self, text, callback):
-        line_layout = QHBoxLayout()
-        line_layout.setContentsMargins(0, 0, 0, 0)
-        line_layout.setSpacing(DETAIL_ACTION_LINE_ICON_TEXT_SPACING)
-
-        line_layout.addWidget(
-            make_icon_button("details_edit.png", self, callback)
+    def _make_list_action_line(self, checkbox, list_item):
+        line = QWidget(self)
+        line.setFixedHeight(ENTRY_ACTION_LINE_HEIGHT)
+        line.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
         )
-        line_layout.addWidget(NotePreviewLabel(text, self), stretch=1)
-        return line_layout
+
+        line_layout = QHBoxLayout(line)
+        line_layout.setContentsMargins(0, 0, 0, 0)
+        line_layout.setSpacing(0)
+
+        line_layout.addWidget(checkbox, alignment=Qt.AlignmentFlag.AlignVCenter)
+        line_layout.addSpacing(LIST_CHECKBOX_TO_TEXT_SPACING)
+        label = ClickableEntryLabel(
+            list_item.get("name") or "",
+            self,
+            lambda list_item=deepcopy(list_item): self.edit_list(list_item),
+        )
+        line_layout.addWidget(
+            label,
+            stretch=1,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
+        return line
 
     def mark_dirty(self):
         if self._is_populating:
@@ -1899,8 +2245,82 @@ class MediaDetailsDialog(QDialog):
     def add_note(self):
         self.edit_note()
 
+    def edit_list(self, list_item=None):
+        dialog = ListDetailsDialog(
+            self,
+            list_item,
+            existing_lists=self.all_lists,
+        )
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self._apply_list_checkboxes_to_draft()
+        action = dialog.result_payload.get("action")
+
+        try:
+            with get_connection() as conn:
+                if action == "delete":
+                    list_id = list_item.get("id")
+
+                    if not media_repo.delete_list(conn, list_id):
+                        raise ValueError(f"lists id {list_id} does not exist.")
+
+                    saved_list = None
+                elif action == "save" and list_item is None:
+                    saved_list = media_repo.create_list(
+                        conn,
+                        dialog.result_payload.get("name"),
+                        dialog.result_payload.get("description"),
+                    )
+                elif action == "save":
+                    saved_list = media_repo.update_list(
+                        conn,
+                        list_item.get("id"),
+                        dialog.result_payload.get("name"),
+                        dialog.result_payload.get("description"),
+                    )
+                else:
+                    raise ValueError(f"Unsupported list action: {action}")
+        except Exception as exc:
+            QMessageBox.warning(self, "List Details", str(exc))
+            return
+
+        if action == "delete":
+            self._remove_list_references(list_item.get("id"))
+        elif list_item is not None:
+            self._rename_list_references(saved_list)
+
+        self._load_all_lists()
+        self.render_lists()
+
     def add_list(self):
-        print("List add clicked")
+        self.edit_list()
+
+    def _apply_list_checkboxes_to_draft(self):
+        user_data = self.media_draft.setdefault("user_data", {})
+        user_data["lists"] = self._collect_selected_lists(
+            user_data.get("lists", [])
+        )
+
+    def _rename_list_references(self, saved_list):
+        list_id = saved_list.get("id")
+
+        for draft in (self.media_draft, self._baseline_media_draft):
+            user_data = draft.setdefault("user_data", {})
+
+            for list_reference in user_data.get("lists", []):
+                if list_reference.get("id") == list_id:
+                    list_reference["name"] = saved_list.get("name")
+
+    def _remove_list_references(self, list_id):
+        for draft in (self.media_draft, self._baseline_media_draft):
+            user_data = draft.setdefault("user_data", {})
+            user_data["lists"] = [
+                list_reference
+                for list_reference in user_data.get("lists", [])
+                if list_reference.get("id") != list_id
+            ]
 
     def save_media(self):
         if self._metadata_refresh_in_progress:
