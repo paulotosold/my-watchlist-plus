@@ -330,6 +330,13 @@ class MediaDetailsHelperTests(unittest.TestCase):
                 "date_earliest": "2022-03-01",
                 "date_latest": "2022-06-20",
             }),
+            "Mar-Jun 2022",
+        )
+        self.assertEqual(
+            format_watch_history_entry({
+                "date_earliest": "2022-01-01",
+                "date_latest": "2022-12-31",
+            }),
             "2022",
         )
         self.assertEqual(
@@ -350,7 +357,7 @@ class MediaDetailsHelperTests(unittest.TestCase):
                 },
                 release_date="2000-01-01",
             ),
-            "Probably 2000-2025",
+            "~2000-2025",
         )
 
     def test_watch_history_entries_sort_by_estimated_watch_date_oldest_first(self):

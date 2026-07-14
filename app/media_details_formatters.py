@@ -700,7 +700,7 @@ def format_watch_history_entry(event, release_date=None):
         label = format_date_range(earliest, latest)
 
     if inferred:
-        return f"Probably {label}"
+        return f"~{label}"
 
     return label
 
@@ -733,7 +733,15 @@ def format_date_range(earliest, latest):
         return earliest.strftime("%b %Y")
 
     if earliest.year == latest.year:
-        return str(earliest.year)
+        if (
+            earliest.month == 1
+            and earliest.day == 1
+            and latest.month == 12
+            and latest.day == 31
+        ):
+            return str(earliest.year)
+
+        return f"{earliest:%b}-{latest:%b %Y}"
 
     return f"{earliest.year}-{latest.year}"
 
