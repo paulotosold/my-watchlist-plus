@@ -100,7 +100,7 @@ class WatchHistoryEditorTests(unittest.TestCase):
             },
         }
 
-        newest_entry = build_watch_history_display_entries(media_draft)[-1]
+        newest_entry = build_watch_history_display_entries(media_draft)[0]
         self.assertEqual(newest_entry["watch_history_id"], 2)
         self.assertEqual(newest_entry["watch_history_index"], 1)
 

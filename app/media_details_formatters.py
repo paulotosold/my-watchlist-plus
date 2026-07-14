@@ -556,6 +556,7 @@ def sort_watch_history_entries(entries, release_date=None):
     return sorted(
         entries,
         key=lambda entry: watch_history_sort_key(entry, release_date),
+        reverse=True,
     )
 
 

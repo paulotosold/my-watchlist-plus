@@ -360,7 +360,7 @@ class MediaDetailsHelperTests(unittest.TestCase):
             "~2000-2025",
         )
 
-    def test_watch_history_entries_sort_by_estimated_watch_date_oldest_first(self):
+    def test_watch_history_entries_sort_by_estimated_watch_date_newest_first(self):
         media_draft = {
             "metadata": {
                 "media_type": "movie",
@@ -406,7 +406,7 @@ class MediaDetailsHelperTests(unittest.TestCase):
 
         self.assertEqual(
             [entry["watch_history_id"] for entry in entries],
-            [3, 4, 2, 1, 5],
+            [5, 1, 2, 4, 3],
         )
 
     def test_watch_history_order_tiebreaks_by_created_time_then_id(self):
@@ -443,7 +443,7 @@ class MediaDetailsHelperTests(unittest.TestCase):
 
         self.assertEqual(
             [entry["watch_history_id"] for entry in entries],
-            [11, 12, 10],
+            [10, 12, 11],
         )
 
     def test_watch_history_order_accepts_date_and_datetime_values(self):
@@ -474,7 +474,7 @@ class MediaDetailsHelperTests(unittest.TestCase):
 
         self.assertEqual(
             [entry["watch_history_id"] for entry in entries],
-            [1, 2],
+            [2, 1],
         )
 
     def test_series_history_combines_entries_by_estimated_watch_date(self):
@@ -534,11 +534,11 @@ class MediaDetailsHelperTests(unittest.TestCase):
 
         self.assertEqual(
             [entry["kind"] for entry in entries],
-            ["media_event", "episode_group", "episode_group"],
+            ["episode_group", "episode_group", "media_event"],
         )
-        self.assertEqual(entries[0]["watch_history_id"], 50)
+        self.assertEqual(entries[0]["watch_history_ids"], [70])
         self.assertEqual(entries[1]["watch_history_ids"], [40, 60])
-        self.assertEqual(entries[2]["watch_history_ids"], [70])
+        self.assertEqual(entries[2]["watch_history_id"], 50)
 
     def test_series_episode_watch_history_grouping(self):
         media_draft = {
