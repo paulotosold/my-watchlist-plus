@@ -5,7 +5,7 @@ from pathlib import Path
 
 import requests
 
-from PySide6.QtCore import QModelIndex, QPoint, QSize, Qt, QTimer
+from PySide6.QtCore import QDate, QModelIndex, QPoint, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 import app.draft_saver as draft_saver
 import app.media_repository as media_repo
 import app.tmdb_fetcher as tmdb_fetcher
+from app.calendar_picker import CleanCalendarPopup
 from app.media_details_state import (
     apply_inserted_ids_to_draft,
     merge_metadata_refresh,
@@ -89,6 +90,9 @@ WATCH_ENTRY_DIALOG_DEFAULT_WIDTH = 960
 WATCH_ENTRY_DIALOG_MAX_HEIGHT = 750
 WATCH_ENTRY_EPISODE_SELECTOR_MAX_HEIGHT = 520
 WATCH_ENTRY_DATE_GROUP_SPACING = 2
+WATCH_ENTRY_INLINE_BUTTON_SIZE = 32
+WATCH_ENTRY_INLINE_ICON_SIZE = 20
+WATCH_ENTRY_SMART_TO_DATES_SPACING = 8
 WATCH_ENTRY_SEASON_LABEL_WIDTH = 60
 WATCH_ENTRY_SEASON_LABEL_BUTTON_SPACING = 20
 
@@ -280,6 +284,7 @@ class WatchEntryDetailsDialog(QDialog):
         self.result_payload = {"action": "cancel"}
         self.episode_buttons = {}
         self.initial_signature = None
+        self._date_picker_popup = None
 
         self.setWindowTitle("Watch Entry Details")
         self.setMinimumWidth(WATCH_ENTRY_DIALOG_DEFAULT_WIDTH)
@@ -330,6 +335,17 @@ class WatchEntryDetailsDialog(QDialog):
             QPushButton#episodeButton[watchState="selected"] {{
                 background-color: {WATCH_ENTRY_EPISODE_BUTTON_SELECTED_COLOR};
             }}
+
+            QToolButton#watchEntryInlineButton {{
+                background-color: white;
+                border: 1px solid #bcbcbc;
+                border-radius: 6px;
+                padding: 3px;
+            }}
+
+            QToolButton#watchEntryInlineButton:hover {{
+                background-color: #f2f2f2;
+            }}
         """)
 
     def _build_ui(self):
@@ -337,20 +353,60 @@ class WatchEntryDetailsDialog(QDialog):
         main_layout.setContentsMargins(20, 16, 20, 16)
         main_layout.setSpacing(0)
 
+        smart_layout = QHBoxLayout()
+        smart_layout.setContentsMargins(0, 0, 0, 0)
+        smart_layout.setSpacing(16)
+
+        self.smart_input = QLineEdit(self)
+        self.smart_input.setFixedHeight(32)
+        self.smart_button = QPushButton("Smart Fill", self)
+        self.smart_button.setMinimumHeight(32)
+        self.smart_button.setFixedWidth(DETAIL_BUTTON_WIDTH)
+        self.smart_button.clicked.connect(self._smart_fill)
+
+        smart_layout.addWidget(self.smart_input, stretch=1)
+        smart_layout.addWidget(self.smart_button)
+        main_layout.addLayout(smart_layout)
+        main_layout.addSpacing(WATCH_ENTRY_SMART_TO_DATES_SPACING)
+
         date_layout = QHBoxLayout()
         date_layout.setContentsMargins(0, 0, 0, 0)
-        date_layout.setSpacing(16)
+        date_layout.setSpacing(8)
 
         self.date_earliest_input = self._make_date_input()
         self.date_latest_input = self._make_date_input()
+        self.date_earliest_picker_button = self._make_inline_icon_button(
+            "watch_history_calendar_picker.png",
+            "Choose earliest date",
+            lambda: self._open_date_picker(
+                self.date_earliest_input,
+                self.date_earliest_picker_button,
+            ),
+        )
+        self.copy_date_button = self._make_inline_icon_button(
+            "watch_history_copy_over.png",
+            "Copy earliest date to latest date",
+            self._copy_earliest_to_latest,
+        )
+        self.date_latest_picker_button = self._make_inline_icon_button(
+            "watch_history_calendar_picker.png",
+            "Choose latest date",
+            lambda: self._open_date_picker(
+                self.date_latest_input,
+                self.date_latest_picker_button,
+            ),
+        )
         self.preview_label = QLabel(self)
         self.preview_label.setWordWrap(False)
 
         date_layout.addWidget(QLabel("Earliest Date:", self))
         date_layout.addWidget(self.date_earliest_input)
+        date_layout.addWidget(self.date_earliest_picker_button)
+        date_layout.addWidget(self.copy_date_button)
         date_layout.addSpacing(WATCH_ENTRY_DATE_GROUP_SPACING)
         date_layout.addWidget(QLabel("Latest Date:", self))
         date_layout.addWidget(self.date_latest_input)
+        date_layout.addWidget(self.date_latest_picker_button)
         date_layout.addSpacing(WATCH_ENTRY_DATE_GROUP_SPACING)
         date_layout.addWidget(self.preview_label, stretch=1)
         main_layout.addLayout(date_layout)
@@ -375,6 +431,106 @@ class WatchEntryDetailsDialog(QDialog):
         input_widget.setFixedWidth(WATCH_ENTRY_DATE_INPUT_WIDTH)
         input_widget.textChanged.connect(self._refresh_state)
         return input_widget
+
+    def _make_inline_icon_button(self, icon_name, tooltip, callback):
+        button = QToolButton(self)
+        button.setObjectName("watchEntryInlineButton")
+        button.setFixedSize(
+            WATCH_ENTRY_INLINE_BUTTON_SIZE,
+            WATCH_ENTRY_INLINE_BUTTON_SIZE,
+        )
+        button.setIcon(QIcon(str(DETAIL_ICON_DIR / icon_name)))
+        button.setIconSize(
+            QSize(
+                WATCH_ENTRY_INLINE_ICON_SIZE,
+                WATCH_ENTRY_INLINE_ICON_SIZE,
+            )
+        )
+        button.setToolTip(tooltip)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.clicked.connect(callback)
+        return button
+
+    def _smart_fill(self):
+        print(self.smart_input.text())
+
+    def _copy_earliest_to_latest(self):
+        self.date_latest_input.setText(self.date_earliest_input.text())
+
+    def _open_date_picker(self, target_input, anchor_button):
+        self._close_date_picker_popup()
+
+        input_text = target_input.text().strip()
+        initial_date = QDate.fromString(input_text, "yyyy-MM-dd")
+
+        if (
+            not initial_date.isValid()
+            or initial_date.toString("yyyy-MM-dd") != input_text
+        ):
+            initial_date = QDate.currentDate()
+
+        popup = CleanCalendarPopup(initial_date=initial_date, parent=self)
+        self._date_picker_popup = popup
+        popup.date_selected.connect(
+            lambda date, popup=popup, target_input=target_input: (
+                self._apply_picker_date(popup, target_input, date)
+            )
+        )
+        popup.destroyed.connect(
+            lambda _object=None, popup=popup: self._clear_date_picker_popup(
+                popup
+            )
+        )
+        popup.ensurePolished()
+        popup.layout().activate()
+        popup.adjustSize()
+        popup.move(self._date_picker_position(popup, anchor_button))
+        popup.show()
+
+    def _date_picker_position(self, popup, anchor_button):
+        anchor_bottom = anchor_button.mapToGlobal(
+            QPoint(0, anchor_button.height() + 6)
+        )
+        screen = anchor_button.screen()
+
+        if screen is None:
+            return anchor_bottom
+
+        available = screen.availableGeometry()
+        x = min(
+            max(anchor_bottom.x(), available.left()),
+            available.right() - popup.width() + 1,
+        )
+        y = anchor_bottom.y()
+
+        if y + popup.height() > available.bottom() + 1:
+            anchor_top = anchor_button.mapToGlobal(QPoint(0, 0))
+            y = anchor_top.y() - popup.height() - 6
+
+        y = min(
+            max(y, available.top()),
+            available.bottom() - popup.height() + 1,
+        )
+        return QPoint(x, y)
+
+    def _apply_picker_date(self, popup, target_input, date):
+        if popup is not self._date_picker_popup:
+            return
+
+        target_input.setText(date.toString("yyyy-MM-dd"))
+        self._date_picker_popup = None
+        QTimer.singleShot(0, popup.close)
+
+    def _clear_date_picker_popup(self, popup):
+        if self._date_picker_popup is popup:
+            self._date_picker_popup = None
+
+    def _close_date_picker_popup(self):
+        popup = self._date_picker_popup
+        self._date_picker_popup = None
+
+        if popup is not None:
+            popup.close()
 
     def _build_episode_selector(self):
         scroll = QScrollArea(self)
@@ -634,6 +790,10 @@ class WatchEntryDetailsDialog(QDialog):
         event = {
             "date_earliest": validation["date_earliest"],
             "date_latest": validation["date_latest"],
+            "created_at": (
+                (self.entry or {}).get("created_at")
+                or QDate.currentDate().toString("yyyy-MM-dd")
+            ),
         }
         release_date = self._watch_history_release_date()
         preview = format_watch_history_entry(event, release_date=release_date)
@@ -705,6 +865,10 @@ class WatchEntryDetailsDialog(QDialog):
 
         self.result_payload = {"action": "delete"}
         self.accept()
+
+    def done(self, result):
+        self._close_date_picker_popup()
+        super().done(result)
 
 
 class MediaDetailsDialog(QDialog):

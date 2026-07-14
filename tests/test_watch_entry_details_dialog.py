@@ -2,11 +2,13 @@ import os
 import unittest
 from copy import deepcopy
 from datetime import date, timedelta
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
+from PySide6.QtCore import QDate, QSize
 from PySide6.QtWidgets import QApplication, QDialog, QScrollArea
 
 from app.media_details_dialog import WatchEntryDetailsDialog
@@ -42,6 +44,56 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
                 self.assertIsNone(dialog.result_payload["date_latest"])
                 self.assertEqual(dialog.result_payload["selected_episodes"], [])
 
+    def test_new_empty_entry_preview_ranges_from_release_to_today(self):
+        today = QDate.currentDate()
+        release_date = today.addYears(-2)
+        release_text = release_date.toString("yyyy-MM-dd")
+        expected_range = f"~{release_date.year()}-{today.year()}"
+
+        movie_draft = self._movie_draft()
+        movie_draft["metadata"]["release_date"] = release_text
+        series_draft = self._series_draft([])
+        series_draft["metadata"]["release_date"] = release_text
+        series_draft["series_view"]["summary"]["first_air_date"] = release_text
+
+        cases = (
+            (movie_draft, f"Preview: {expected_range}"),
+            (
+                series_draft,
+                f"Preview: {expected_range} · no episode info",
+            ),
+        )
+
+        for media_draft, expected_preview in cases:
+            with self.subTest(
+                media_type=media_draft["metadata"]["media_type"],
+            ):
+                dialog = self._dialog(media_draft)
+                self.assertEqual(dialog.preview_label.text(), expected_preview)
+
+    def test_edited_empty_entry_preview_uses_existing_created_at(self):
+        today = QDate.currentDate()
+        release_date = today.addYears(-6)
+        created_date = today.addYears(-3)
+        media_draft = self._movie_draft()
+        media_draft["metadata"]["release_date"] = release_date.toString(
+            "yyyy-MM-dd"
+        )
+        entry = {
+            "kind": "media_event",
+            "watch_history_id": 50,
+            "date_earliest": None,
+            "date_latest": None,
+            "created_at": created_date.toString("yyyy-MM-dd"),
+        }
+
+        dialog = self._dialog(media_draft, entry)
+
+        self.assertEqual(
+            dialog.preview_label.text(),
+            f"Preview: ~{release_date.year()}-{created_date.year()}",
+        )
+
     def test_invalid_dates_disable_new_entry_save(self):
         dialog = self._dialog(self._movie_draft())
 
@@ -71,6 +123,111 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
 
         dialog.date_latest_input.setText("invalid")
         self.assertFalse(dialog.save_entry_button.isEnabled())
+
+    def test_smart_fill_prints_the_input_text(self):
+        dialog = self._dialog(self._movie_draft())
+        dialog.smart_input.setText("  watched yesterday  ")
+
+        with patch("builtins.print") as print_mock:
+            dialog.smart_button.click()
+
+        print_mock.assert_called_once_with("  watched yesterday  ")
+
+    def test_inline_date_buttons_have_expected_size_and_icons(self):
+        dialog = self._dialog(self._movie_draft())
+
+        for button in (
+            dialog.date_earliest_picker_button,
+            dialog.copy_date_button,
+            dialog.date_latest_picker_button,
+        ):
+            with self.subTest(tooltip=button.toolTip()):
+                self.assertEqual(button.minimumSize(), QSize(32, 32))
+                self.assertEqual(button.maximumSize(), QSize(32, 32))
+                self.assertEqual(button.iconSize(), QSize(20, 20))
+                self.assertFalse(button.icon().isNull())
+
+    def test_copy_over_copies_literal_invalid_and_empty_values(self):
+        dialog = self._dialog(self._movie_draft())
+        dialog.date_earliest_input.setText("not-a-date")
+        dialog.date_latest_input.setText("2026-05-01")
+
+        dialog.copy_date_button.click()
+
+        self.assertEqual(dialog.date_latest_input.text(), "not-a-date")
+        self.assertEqual(dialog.error_label.text(), "Use YYYY-MM-DD.")
+        self.assertFalse(dialog.error_label.isHidden())
+        self.assertFalse(dialog.save_entry_button.isEnabled())
+
+        dialog.date_earliest_input.clear()
+        dialog.copy_date_button.click()
+
+        self.assertEqual(dialog.date_latest_input.text(), "")
+        self.assertEqual(dialog.error_label.text(), "")
+        self.assertTrue(dialog.error_label.isHidden())
+        self.assertTrue(dialog.save_entry_button.isEnabled())
+
+    def test_each_date_picker_uses_initial_date_and_updates_its_field(self):
+        cases = (
+            (
+                "earliest",
+                "date_earliest_input",
+                "date_earliest_picker_button",
+                "2026-07-04",
+                QDate(2026, 7, 4),
+                QDate(2026, 7, 9),
+                "date_latest_input",
+            ),
+            (
+                "latest",
+                "date_latest_input",
+                "date_latest_picker_button",
+                "invalid",
+                QDate.currentDate(),
+                QDate(2026, 8, 3),
+                "date_earliest_input",
+            ),
+        )
+
+        for (
+            name,
+            input_name,
+            button_name,
+            initial_text,
+            expected_initial_date,
+            selected_date,
+            other_input_name,
+        ) in cases:
+            with self.subTest(field=name):
+                dialog = self._dialog(self._movie_draft())
+                target_input = getattr(dialog, input_name)
+                other_input = getattr(dialog, other_input_name)
+                picker_button = getattr(dialog, button_name)
+                target_input.setText(initial_text)
+                other_input.setText("keep-me")
+                dialog.show()
+                self.application.processEvents()
+
+                picker_button.click()
+                self.application.processEvents()
+                popup = dialog._date_picker_popup
+
+                self.assertIsNotNone(popup)
+                self.assertTrue(popup.isVisible())
+                self.assertEqual(popup.current_date, expected_initial_date)
+
+                popup.choose_date(selected_date)
+
+                self.assertEqual(
+                    target_input.text(),
+                    selected_date.toString("yyyy-MM-dd"),
+                )
+                self.assertEqual(other_input.text(), "keep-me")
+                self.assertIsNone(dialog._date_picker_popup)
+
+                self.application.processEvents()
+                self.assertFalse(popup.isVisible())
+                dialog.close()
 
     def test_episode_selector_filters_by_local_release_date_and_sets_tooltips(self):
         today = date.today()
