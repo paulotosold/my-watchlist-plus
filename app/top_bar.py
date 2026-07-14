@@ -26,58 +26,7 @@ QLineEdit {
 }
 """
 
-ADD_INPUT_EXAMPLES = [
-    "Watched 'Project Hail Mary' in the theater yesterday. Great movie!",
-    "Add 'Dune: Part Two' to my watchlist.",
-    "Watched 'The Batman' last night and loved the atmosphere.",
-    "Add 'Severance' to my series watchlist.",
-    "Finished season 1 of 'The Bear' this weekend.",
-    "Add 'Blade Runner 2049' to rewatch later.",
-    "Watched 'Arrival' again yesterday. Still amazing.",
-    "Add 'The Last of Us' to my series watchlist.",
-    "Watched episode 3 of 'Andor' last night.",
-    "Finished 'Shogun' and give it 5 stars.",
-    "Add 'The Matrix' as a must-rewatch.",
-    "Watched 'Spirited Away' with Benji today.",
-    "Add 'Spider-Man: Across the Spider-Verse' for family movie night.",
-    "Watched 'Poor Things' last Friday. Weird but brilliant.",
-    "Add 'The Wild Robot' to watch with Benji.",
-    "Watched 'Interstellar' again. Big feelings, bigger organs.",
-    "Add 'Mad Max: Fury Road' to my action rewatch list.",
-    "Started 'Slow Horses' and liked the first episode.",
-    "Watched 'The Godfather' for the first time.",
-    "Add 'Paddington 2' because apparently everyone says it's perfect.",
-    "Watched 'Oppenheimer' in IMAX.",
-    "Add 'Past Lives' to watch soon.",
-    "Finished 'Succession' season 2.",
-    "Watched 'The Holdovers' yesterday. Cozy and sad in a good way.",
-    "Add 'Alien' to my Halloween watchlist.",
-    "Watched 'Nope' last night. Not sure what I think yet.",
-    "Add 'Mission: Impossible – Fallout' to rewatch.",
-    "Watched 'Ratatouille' with the family today.",
-    "Add 'Wall-E' for a Sunday afternoon.",
-    "Finished 'Dark' season 1 and need a diagram for my brain.",
-    "Watched 'The Grand Budapest Hotel' again.",
-    "Add 'Everything Everywhere All at Once' to favorites.",
-    "Watched 'John Wick: Chapter 4' yesterday. Exhausting, in a good way.",
-    "Add 'The Iron Giant' to watch with Benji.",
-    "Started 'Foundation' but only watched the pilot.",
-    "Watched 'Heat' last night. Great diner scene.",
-    "Add 'The Boy and the Heron' to watch later.",
-    "Finished 'Chernobyl'. Incredible, but heavy.",
-    "Watched 'Knives Out' again. Still fun.",
-    "Add 'The Nice Guys' to my comedy list.",
-    "Watched 'The Social Network' yesterday and give it 4.5 stars.",
-    "Add 'Children of Men' to rewatch soon.",
-    "Add 'Silo' to my series watchlist.",
-    "Watched 'Toy Story' with Benji this afternoon.",
-    "Add 'The Incredibles' for family movie night.",
-    "Finished 'Blue Eye Samurai' and loved the animation.",
-    "Watched 'Her' last night. Beautiful and uncomfortable.",
-    "Add 'Casablanca' because I still haven't seen it.",
-    "Watched 'Princess Mononoke' again.",
-    "Add 'The Prestige' to rewatch with fresh eyes.",
-]
+ADD_INPUT_PLACEHOLDER = "IMDb ID or describe what you’re looking for"
 
 class TopBar(QWidget):
     search_submitted = Signal(str)
@@ -112,7 +61,7 @@ class TopBar(QWidget):
 
         self.add_input = QLineEdit()
         self.add_input.setFixedHeight(input_box_height)
-        self.add_input.setPlaceholderText(random.choice(ADD_INPUT_EXAMPLES))
+        self.add_input.setPlaceholderText(ADD_INPUT_PLACEHOLDER)
         self.add_input.setStyleSheet(INPUT_BOX_STYLE)
 
         self.add_btn = QToolButton()
