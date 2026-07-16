@@ -169,7 +169,7 @@ def build_media_drafts(matches_by_intent):
     #
     #     media_draft = build_media_draft(
     #
-    #         input_query=input_query,
+    #         media_query=media_query,
     #
     #         intent_info=match_package["intent_info"],
     #

@@ -1,19 +1,12 @@
 from copy import deepcopy
+from datetime import date
 import re
 
+from app.library_filter import DEFAULT_FILTER_INTENT
 from app.media_draft_builder import build_media_draft_from_db
 from app.watch_states import VALID_WATCH_STATES_BY_MEDIA_TYPE
 from db.connection import get_connection
 
-
-DEFAULT_SEARCH_INTENT = {
-    "watch_state": {
-        "include": ["to_watch"],
-    },
-    "order_by": [
-        {"field": "random"},
-    ],
-}
 
 ALLOWED_WATCH_STATES = frozenset().union(
     *VALID_WATCH_STATES_BY_MEDIA_TYPE.values()
@@ -33,15 +26,14 @@ EPISODE_CODE_PATTERN = re.compile(
 
 
 class FilteredMedia:
-    def __init__(self, search_intent=None):
-        self.search_intent = deepcopy(search_intent or DEFAULT_SEARCH_INTENT)
-        self.filter_parameters = self.search_intent
+    def __init__(self, filter_intent=None):
+        self.filter_intent = deepcopy(filter_intent or DEFAULT_FILTER_INTENT)
         self.media_list = []
         self.next_media_index = 0
 
     def refresh(self):
         with get_connection() as conn:
-            rows = get_media_rows_for_search(conn, self.search_intent)
+            rows = get_media_rows_for_filter(conn, self.filter_intent)
             self.media_list = []
 
             for row in rows:
@@ -58,28 +50,34 @@ class FilteredMedia:
         return self.media_list
 
 
-def get_media_rows_for_search(conn, search_intent):
-    query, params = build_media_search_query(search_intent)
+def get_media_rows_for_filter(conn, filter_intent, *, today=None):
+    query, params = build_media_filter_query(filter_intent, today=today)
     cursor = conn.execute(query, params)
     return cursor.fetchall()
 
 
-def build_media_search_query(search_intent):
-    library_query = str(search_intent.get("library_query") or "").strip()
+def build_media_filter_query(filter_intent, *, today=None):
+    library_query = str(filter_intent.get("library_query") or "").strip()
 
     if library_query:
-        return _build_library_search_query(library_query, search_intent)
+        return _build_library_text_filter_query(library_query, filter_intent)
 
-    statuses = _get_included_watch_states(search_intent)
+    statuses = _get_included_watch_states(filter_intent)
     placeholders = ", ".join("?" for _ in statuses)
     params = list(statuses)
 
     where_clauses = [
         f"ms.watch_state IN ({placeholders})",
     ]
+    release_date_clauses, release_date_params = _build_release_date_filter(
+        filter_intent,
+        today=today,
+    )
+    where_clauses.extend(release_date_clauses)
+    params.extend(release_date_params)
 
     where_sql = "\n          AND ".join(where_clauses)
-    order_sql = _build_order_by(search_intent)
+    order_sql = _build_order_by(filter_intent)
 
     query = f"""
         SELECT
@@ -106,7 +104,31 @@ def build_media_search_query(search_intent):
     return query, params
 
 
-def _build_library_search_query(library_query, search_intent):
+def _build_release_date_filter(filter_intent, *, today=None):
+    release_date_filter = filter_intent.get("release_date") or {}
+    clauses = []
+    params = []
+
+    if release_date_filter.get("exclude_null"):
+        clauses.append("m.release_date IS NOT NULL")
+
+    on_or_before = release_date_filter.get("on_or_before")
+
+    if on_or_before is None:
+        return clauses, params
+
+    if on_or_before == "today":
+        on_or_before = today or date.today()
+
+    if isinstance(on_or_before, date):
+        on_or_before = on_or_before.isoformat()
+
+    clauses.append("m.release_date <= ?")
+    params.append(str(on_or_before))
+    return clauses, params
+
+
+def _build_library_text_filter_query(library_query, filter_intent):
     episode_match = EPISODE_CODE_PATTERN.search(library_query)
     text_query = library_query
     where_clauses = []
@@ -155,8 +177,8 @@ def _build_library_search_query(library_query, search_intent):
     where_sql = "\n          AND ".join(where_clauses)
     order_sql = _build_order_by(
         {
-            **search_intent,
-            "order_by": search_intent.get("order_by") or [{"field": "title"}],
+            **filter_intent,
+            "order_by": filter_intent.get("order_by") or [{"field": "title"}],
         }
     )
 
@@ -198,12 +220,12 @@ def _build_like_pattern(value):
     return f"%{escaped}%"
 
 
-def _get_included_watch_states(search_intent):
-    watch_state = search_intent.get("watch_state") or {}
+def _get_included_watch_states(filter_intent):
+    watch_state = filter_intent.get("watch_state") or {}
     statuses = watch_state.get("include") or []
 
     if not statuses:
-        raise ValueError("search_intent.watch_state.include must not be empty.")
+        raise ValueError("filter_intent.watch_state.include must not be empty.")
 
     unknown_statuses = sorted(set(statuses) - ALLOWED_WATCH_STATES)
 
@@ -213,8 +235,8 @@ def _get_included_watch_states(search_intent):
     return statuses
 
 
-def _build_order_by(search_intent):
-    order_by = search_intent.get("order_by") or [{"field": "random"}]
+def _build_order_by(filter_intent):
+    order_by = filter_intent.get("order_by") or [{"field": "random"}]
     clauses = []
 
     for order_item in order_by:

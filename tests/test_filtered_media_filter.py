@@ -1,15 +1,16 @@
 import sqlite3
 import unittest
+from datetime import date
 
 from app.filtered_media import (
-    DEFAULT_SEARCH_INTENT,
-    build_media_search_query,
-    get_media_rows_for_search,
+    build_media_filter_query,
+    get_media_rows_for_filter,
 )
+from app.library_filter import DEFAULT_FILTER_INTENT
 from db.connection import apply_database_schema
 
 
-class FilteredMediaSearchTests(unittest.TestCase):
+class FilteredMediaFilterTests(unittest.TestCase):
     def setUp(self):
         self.conn = sqlite3.connect(":memory:")
         self.conn.execute("PRAGMA foreign_keys = ON;")
@@ -19,15 +20,27 @@ class FilteredMediaSearchTests(unittest.TestCase):
     def tearDown(self):
         self.conn.close()
 
-    def test_default_filter_contains_only_explicit_to_watch_rows(self):
-        movie_id = self._insert_media(1, "movie", "Queued Movie")
-        series_id = self._insert_media(2, "series", "Queued Series")
+    def test_default_filter_contains_only_released_to_watch_rows(self):
+        today = date(2026, 7, 15)
+        movie_id = self._insert_media(
+            1,
+            "movie",
+            "Queued Movie",
+            release_date="2026-07-14",
+        )
+        series_id = self._insert_media(
+            2,
+            "series",
+            "Queued Series",
+            release_date=today.isoformat(),
+        )
         explicit_episode_id = self._insert_episode(
             series_id,
             3,
             "Queued Episode",
             1,
             1,
+            release_date="2026-07-13",
         )
         neutral_episode_id = self._insert_episode(
             series_id,
@@ -35,11 +48,45 @@ class FilteredMediaSearchTests(unittest.TestCase):
             "Catalog Episode",
             1,
             2,
+            release_date="2026-07-12",
         )
-        watched_movie_id = self._insert_media(5, "movie", "Watched Movie")
-        null_state_movie_id = self._insert_media(6, "movie", "Rated Only")
+        watched_movie_id = self._insert_media(
+            5,
+            "movie",
+            "Watched Movie",
+            release_date="2026-07-11",
+        )
+        null_state_movie_id = self._insert_media(
+            6,
+            "movie",
+            "Rated Only",
+            release_date="2026-07-10",
+        )
+        future_movie_id = self._insert_media(
+            7,
+            "movie",
+            "Coming Soon",
+            release_date="2026-07-16",
+        )
+        unknown_date_movie_id = self._insert_media(
+            8,
+            "movie",
+            "Release Unknown",
+        )
+        no_state_movie_id = self._insert_media(
+            9,
+            "movie",
+            "Not Listed",
+            release_date="2026-07-09",
+        )
 
-        for media_id in (movie_id, series_id, explicit_episode_id):
+        for media_id in (
+            movie_id,
+            series_id,
+            explicit_episode_id,
+            future_movie_id,
+            unknown_date_movie_id,
+        ):
             self._insert_state(media_id, "to_watch")
         self._insert_state(watched_movie_id, "watched")
         self.conn.execute(
@@ -50,7 +97,11 @@ class FilteredMediaSearchTests(unittest.TestCase):
             (null_state_movie_id,),
         )
 
-        rows = get_media_rows_for_search(self.conn, DEFAULT_SEARCH_INTENT)
+        rows = get_media_rows_for_filter(
+            self.conn,
+            DEFAULT_FILTER_INTENT,
+            today=today,
+        )
         found_ids = {row["id"] for row in rows}
 
         self.assertEqual(
@@ -60,6 +111,21 @@ class FilteredMediaSearchTests(unittest.TestCase):
         self.assertNotIn(neutral_episode_id, found_ids)
         self.assertNotIn(watched_movie_id, found_ids)
         self.assertNotIn(null_state_movie_id, found_ids)
+        self.assertNotIn(future_movie_id, found_ids)
+        self.assertNotIn(unknown_date_movie_id, found_ids)
+        self.assertNotIn(no_state_movie_id, found_ids)
+
+    def test_default_filter_uses_inclusive_date_and_random_order(self):
+        query, params = build_media_filter_query(
+            DEFAULT_FILTER_INTENT,
+            today=date(2026, 7, 15),
+        )
+        normalized_query = " ".join(query.split())
+
+        self.assertIn("m.release_date IS NOT NULL", normalized_query)
+        self.assertIn("m.release_date <= ?", normalized_query)
+        self.assertTrue(normalized_query.endswith("ORDER BY RANDOM()"))
+        self.assertEqual(params, ["to_watch", "2026-07-15"])
 
     def test_library_search_matches_title_parent_and_episode_code(self):
         series_id = self._insert_media(
@@ -113,13 +179,13 @@ class FilteredMediaSearchTests(unittest.TestCase):
         for watch_state in ("watching", "suggested"):
             with self.subTest(watch_state=watch_state):
                 with self.assertRaises(ValueError):
-                    build_media_search_query({
+                    build_media_filter_query({
                         "watch_state": {"include": [watch_state]},
                         "order_by": [{"field": "title"}],
                     })
 
     def _search_library(self, query):
-        return get_media_rows_for_search(
+        return get_media_rows_for_filter(
             self.conn,
             {
                 "library_query": query,
@@ -133,6 +199,7 @@ class FilteredMediaSearchTests(unittest.TestCase):
         media_type,
         title,
         original_title=None,
+        release_date=None,
     ):
         cursor = self.conn.execute(
             """
@@ -140,11 +207,12 @@ class FilteredMediaSearchTests(unittest.TestCase):
                 tmdb_id,
                 media_type,
                 title,
-                original_title
+                original_title,
+                release_date
             )
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (tmdb_id, media_type, title, original_title),
+            (tmdb_id, media_type, title, original_title, release_date),
         )
         return cursor.lastrowid
 
@@ -155,8 +223,14 @@ class FilteredMediaSearchTests(unittest.TestCase):
         title,
         season_num,
         episode_num,
+        release_date=None,
     ):
-        episode_id = self._insert_media(tmdb_id, "episode", title)
+        episode_id = self._insert_media(
+            tmdb_id,
+            "episode",
+            title,
+            release_date=release_date,
+        )
         self.conn.execute(
             """
             INSERT INTO episode_details (

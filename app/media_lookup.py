@@ -23,25 +23,29 @@ def confirm_llm_cost(parent) -> bool:
     return result == QMessageBox.Ok
 
 
-def resolve_media_draft_from_query(parent, input_query):
-    input_query = (input_query or "").strip()
+def resolve_media_draft_from_query(parent, media_query):
+    media_query = (media_query or "").strip()
 
-    if not input_query:
-        QMessageBox.warning(parent, "Search Media", "Type a media search first.")
+    if not media_query:
+        QMessageBox.warning(
+            parent,
+            "Find Media",
+            "Enter an IMDb ID or media description first.",
+        )
         return None
 
-    if re.fullmatch(r"tt\d{7,10}", input_query):
-        imdb_id = input_query
+    if re.fullmatch(r"tt\d{7,10}", media_query):
+        imdb_id = media_query
     else:
         if not confirm_llm_cost(parent):
             return None
 
-        result = resolve_imdb_id_from_query(input_query)
+        result = resolve_imdb_id_from_query(media_query)
 
         if result["status"] != "resolved":
             QMessageBox.warning(
                 parent,
-                "Search Media",
+                "Find Media",
                 result["followup_question"] or result["reason"],
             )
             return None

@@ -1,8 +1,8 @@
-import random
-
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QToolButton, QWidget
+
+from app.library_filter import DEFAULT_FILTER_TEXT
 
 BUTTON_STYLE = """
 QToolButton {
@@ -26,11 +26,12 @@ QLineEdit {
 }
 """
 
-ADD_INPUT_PLACEHOLDER = "IMDb ID or describe what you’re looking for"
+FIND_MEDIA_INPUT_PLACEHOLDER = "IMDb ID or describe what you’re looking for"
+
 
 class TopBar(QWidget):
-    search_submitted = Signal(str)
-    add_submitted = Signal(str)
+    filter_submitted = Signal(str)
+    find_media_submitted = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -45,49 +46,39 @@ class TopBar(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.search_label = QLabel("Search Library:")
+        self.filter_label = QLabel("Filter Library:")
 
-        self.search_input = QLineEdit()
-        self.search_input.setFixedHeight(input_box_height)
-        self.search_input.setStyleSheet(INPUT_BOX_STYLE)
+        self.filter_input = QLineEdit()
+        self.filter_input.setFixedHeight(input_box_height)
+        self.filter_input.setText(DEFAULT_FILTER_TEXT)
+        self.filter_input.setStyleSheet(INPUT_BOX_STYLE)
 
-        self.search_btn = QToolButton()
-        self.search_btn.setIcon(QIcon("app/assets/top_bar_icons/lupe.png"))
-        self.search_btn.setIconSize(QSize(icon_size, icon_size))
-        self.search_btn.setCursor(Qt.PointingHandCursor)
-        self.search_btn.setStyleSheet(BUTTON_STYLE)
+        self.filter_button = QToolButton()
+        self.filter_button.setIcon(QIcon("app/assets/top_bar_filter.png"))
+        self.filter_button.setIconSize(QSize(icon_size, icon_size))
+        self.filter_button.setCursor(Qt.PointingHandCursor)
+        self.filter_button.setStyleSheet(BUTTON_STYLE)
 
-        self.add_label = QLabel("Add to Watchlist:")
+        self.find_media_label = QLabel("Find Media:")
 
-        self.add_input = QLineEdit()
-        self.add_input.setFixedHeight(input_box_height)
-        self.add_input.setPlaceholderText(ADD_INPUT_PLACEHOLDER)
-        self.add_input.setStyleSheet(INPUT_BOX_STYLE)
+        self.find_media_input = QLineEdit()
+        self.find_media_input.setFixedHeight(input_box_height)
+        self.find_media_input.setPlaceholderText(FIND_MEDIA_INPUT_PLACEHOLDER)
+        self.find_media_input.setStyleSheet(INPUT_BOX_STYLE)
 
-        self.add_btn = QToolButton()
-        self.add_btn.setIcon(QIcon("app/assets/top_bar_icons/add.png"))
-        self.add_btn.setIconSize(QSize(icon_size, icon_size))
-        self.add_btn.setCursor(Qt.PointingHandCursor)
-        self.add_btn.setStyleSheet(BUTTON_STYLE)
-
-        layout.addWidget(self.search_label)
-        layout.addWidget(self.search_input, 1)
-        layout.addWidget(self.search_btn)
-        layout.addWidget(self.add_label)
-        layout.addWidget(self.add_input, 1)
-        layout.addWidget(self.add_btn)
+        layout.addWidget(self.filter_label)
+        layout.addWidget(self.filter_input, 1)
+        layout.addWidget(self.filter_button)
+        layout.addWidget(self.find_media_label)
+        layout.addWidget(self.find_media_input, 1)
 
     def _connect_signals(self):
-        self.search_input.returnPressed.connect(self._emit_search)
-        self.search_btn.clicked.connect(self._emit_search)
+        self.filter_input.returnPressed.connect(self._emit_filter)
+        self.find_media_input.returnPressed.connect(self._emit_find_media)
 
-        self.add_input.returnPressed.connect(self._emit_add)
-        self.add_btn.clicked.connect(self._emit_add)
+    def _emit_filter(self):
+        self.filter_submitted.emit(self.filter_input.text())
 
-    def _emit_search(self):
-        text = self.search_input.text().strip()
-        self.search_submitted.emit(text)
-
-    def _emit_add(self):
-        text = self.add_input.text().strip()
-        self.add_submitted.emit(text)
+    def _emit_find_media(self):
+        text = self.find_media_input.text().strip()
+        self.find_media_submitted.emit(text)

@@ -164,11 +164,11 @@ COLLECTION_PICK_OPTIONS = (
 )
 
 
-def open_media_details_dialog(parent, media_draft, input_query=None):
+def open_media_details_dialog(parent, media_draft, media_query=None):
     dialog = MediaDetailsDialog(
         parent=parent,
         media_draft=media_draft,
-        input_query=input_query,
+        media_query=media_query,
     )
 
     if dialog.exec() == QDialog.Accepted:
@@ -1367,7 +1367,7 @@ class MediaDetailsDialog(QDialog):
         self,
         parent,
         media_draft,
-        input_query=None,
+        media_query=None,
         metadata_refresh_manager=None,
     ):
         super().__init__(parent)
@@ -1408,29 +1408,29 @@ class MediaDetailsDialog(QDialog):
         self.setFixedSize(1320, 850)
 
         self._load_all_lists()
-        self._build_ui(input_query)
+        self._build_ui(media_query)
         self._apply_styles()
         self.set_media_draft(self.media_draft)
 
-    def _build_ui(self, input_query):
+    def _build_ui(self, media_query):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 16, 20, 16)
         main_layout.setSpacing(14)
 
-        self.search_input = QLineEdit(self)
-        self.search_input.setText(input_query or "")
-        self.search_input.setFixedHeight(32)
+        self.find_media_input = QLineEdit(self)
+        self.find_media_input.setText(media_query or "")
+        self.find_media_input.setFixedHeight(32)
 
-        self.search_button = QPushButton("Find Media", self)
-        self.search_button.setMinimumHeight(32)
-        self.search_button.setFixedWidth(DETAIL_BUTTON_WIDTH)
-        self.search_button.clicked.connect(self.search_media)
+        self.find_media_button = QPushButton("Find Media", self)
+        self.find_media_button.setMinimumHeight(32)
+        self.find_media_button.setFixedWidth(DETAIL_BUTTON_WIDTH)
+        self.find_media_button.clicked.connect(self.find_media)
 
-        search_layout = QHBoxLayout()
-        search_layout.setContentsMargins(0, 0, 0, 0)
-        search_layout.setSpacing(16)
-        search_layout.addWidget(self.search_input, stretch=1)
-        search_layout.addWidget(self.search_button)
+        find_media_layout = QHBoxLayout()
+        find_media_layout.setContentsMargins(0, 0, 0, 0)
+        find_media_layout.setSpacing(16)
+        find_media_layout.addWidget(self.find_media_input, stretch=1)
+        find_media_layout.addWidget(self.find_media_button)
 
         upper_layout = QHBoxLayout()
         upper_layout.setContentsMargins(0, 0, 0, 0)
@@ -1445,7 +1445,7 @@ class MediaDetailsDialog(QDialog):
         self.lower_block = self._build_lower_block()
         footer_layout = self._build_footer()
 
-        main_layout.addLayout(search_layout)
+        main_layout.addLayout(find_media_layout)
         main_layout.addLayout(upper_layout, stretch=1)
         main_layout.addWidget(self.lower_block)
         main_layout.addLayout(footer_layout)
@@ -1974,7 +1974,7 @@ class MediaDetailsDialog(QDialog):
         self.delete_button.setEnabled(has_media_id)
         self.save_button.setEnabled(not has_media_id or self._is_dirty)
 
-    def search_media(self):
+    def find_media(self):
         if self._metadata_refresh_in_progress:
             return
 
@@ -1990,7 +1990,10 @@ class MediaDetailsDialog(QDialog):
             if result != QMessageBox.Yes:
                 return
 
-        media_draft = resolve_media_draft_from_query(self, self.search_input.text())
+        media_draft = resolve_media_draft_from_query(
+            self,
+            self.find_media_input.text(),
+        )
 
         if media_draft is None:
             return
@@ -2116,8 +2119,8 @@ class MediaDetailsDialog(QDialog):
         self.metadata_block.action_button.setEnabled(not is_busy)
         self.providers_block.action_button.setEnabled(not is_busy)
         self.posters_block.action_button.setEnabled(not is_busy)
-        self.search_input.setEnabled(not is_busy)
-        self.search_button.setEnabled(not is_busy)
+        self.find_media_input.setEnabled(not is_busy)
+        self.find_media_button.setEnabled(not is_busy)
         self.lower_block.setEnabled(not is_busy)
 
         if is_busy:

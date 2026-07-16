@@ -1,9 +1,10 @@
 from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 
+from app.find_media_handler import handle_find_media_input
 from app.filtered_media import FilteredMedia
+from app.library_filter import DEFAULT_FILTER_TEXT
 from app.media_board import MediaBoard
 from app.top_bar import TopBar
-from app.media_input_handler import handle_media_input
 
 
 class MainWindow(QMainWindow):
@@ -22,11 +23,8 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(24, 24, 24, 24)
 
         self.top_bar = TopBar()
-        self.top_bar.search_input.setPlaceholderText(
-            "title, parent series, or S01E02"
-        )
-        self.top_bar.search_submitted.connect(self.on_search_input)
-        self.top_bar.add_submitted.connect(self.on_add_input)
+        self.top_bar.filter_submitted.connect(self.on_filter_input)
+        self.top_bar.find_media_submitted.connect(self.on_find_media_input)
         main_layout.addWidget(self.top_bar)
 
         self.media_board = MediaBoard(rows=2, columns=5)
@@ -40,23 +38,17 @@ class MainWindow(QMainWindow):
         self.media_board.load_media(self.filtered_media)
         self._update_status_bar()
 
-    def on_search_input(self, search_query):
-        print("Search:", search_query)
-        search_query = (search_query or "").strip()
+    def on_filter_input(self, filter_text):
+        if filter_text != DEFAULT_FILTER_TEXT:
+            print("Filter Library:", filter_text)
+            return
 
-        if search_query:
-            self.filtered_media = FilteredMedia({
-                "library_query": search_query,
-                "order_by": [{"field": "title"}],
-            })
-        else:
-            self.filtered_media = FilteredMedia()
-
+        self.filtered_media = FilteredMedia()
         self.refresh_media_view()
 
-    def on_add_input(self, input_query):
-        print("Add:", input_query)
-        result = handle_media_input(self, input_query)
+    def on_find_media_input(self, media_query):
+        print("Find Media:", media_query)
+        result = handle_find_media_input(self, media_query)
 
         if result and result.get("status") in {"saved", "deleted"}:
             self.refresh_media_view()
