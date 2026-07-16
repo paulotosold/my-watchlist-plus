@@ -61,6 +61,28 @@ class TopBarTests(unittest.TestCase):
         self.assertEqual(spy.count(), 1)
         self.assertEqual(spy.at(0), ["tt1234567"])
 
+    def test_labels_and_default_filter_text_are_configurable(self):
+        history_bar = TopBar(
+            filter_label_text="Filter History:",
+            default_filter_text="All watched media, in chronological order",
+            find_media_label_text="Open Media:",
+            find_media_placeholder="Find one title",
+        )
+
+        try:
+            self.assertEqual(history_bar.filter_label.text(), "Filter History:")
+            self.assertEqual(
+                history_bar.filter_input.text(),
+                "All watched media, in chronological order",
+            )
+            self.assertEqual(history_bar.find_media_label.text(), "Open Media:")
+            self.assertEqual(
+                history_bar.find_media_input.placeholderText(),
+                "Find one title",
+            )
+        finally:
+            history_bar.close()
+
 
 if __name__ == "__main__":
     unittest.main()

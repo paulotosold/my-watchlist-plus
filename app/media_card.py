@@ -1,6 +1,5 @@
 from app.media_card_info_panel import MediaCardInfoPanel
 from app.config import SUBSCRIBED_FLATRATE_PROVIDER_NAMES
-from app.media_details_dialog import open_media_details_dialog
 
 from copy import deepcopy
 from pathlib import Path
@@ -85,6 +84,7 @@ def get_media_key(media_draft):
 
 class MediaCard(QFrame):
     state_changed = Signal()
+    details_requested = Signal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -151,7 +151,7 @@ class MediaCard(QFrame):
         self.btn_pin.clicked.connect(self.on_pin_clicked)
 
         # info panel clicks
-        self.info_panel.details_clicked.connect(self.show_details_window)
+        self.info_panel.details_clicked.connect(self.request_details)
         self.info_panel.back_clicked.connect(self.hide_info_panel)
 
         # set layer order
@@ -384,32 +384,14 @@ class MediaCard(QFrame):
             self.btn_pin.setIcon(QIcon("app/assets/media_card_icons/pin.png"))
             self.pin_layer.clear()
 
-    def show_details_window(self):
+    def request_details(self):
         if self.current_media is None:
             return
 
-        result = open_media_details_dialog(self.window(), self.current_media)
+        self.details_requested.emit(deepcopy(self.current_media))
 
-        if not result or result.get("status") not in {"saved", "deleted"}:
-            return
-
-        window = self.window()
-
-        if window is not None and hasattr(window, "refresh_media_view"):
-            window.refresh_media_view()
-            return
-
-        board = self.parent()
-
-        if board is not None and hasattr(board, "filtered_media"):
-            filtered_media = board.filtered_media or self.filtered_media
-
-            if filtered_media is not None:
-                filtered_media.refresh()
-                board.load_media(filtered_media)
-                return
-
-        self.state_changed.emit()
+    def show_details_window(self):
+        self.request_details()
 
     def hide_info_panel(self):
         self.info_panel.hide()

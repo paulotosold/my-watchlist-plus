@@ -1,8 +1,12 @@
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QGridLayout, QWidget
 
 from app.media_card import MediaCard, get_media_key
 
+
 class MediaBoard(QWidget):
+    details_requested = Signal(object)
+
     def __init__(self, rows, columns, parent=None):
         super().__init__(parent)
 
@@ -27,6 +31,7 @@ class MediaBoard(QWidget):
                     self.has_next_media_for_card,
                 )
                 card.state_changed.connect(self.refresh_card_navigation)
+                card.details_requested.connect(self.details_requested.emit)
                 self.cards.append(card)
                 self.layout.addWidget(card, row, column)
 

@@ -5,11 +5,10 @@ from pathlib import Path
 
 import requests
 
-from PySide6.QtCore import QDate, QModelIndex, QPoint, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QPixmap
+from PySide6.QtCore import QDate, QPoint, QSize, Qt, QTimer
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QDialog,
     QApplication,
     QFrame,
@@ -17,14 +16,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListView,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSizePolicy,
-    QStyle,
-    QStyledItemDelegate,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -65,6 +61,17 @@ from app.media_notes import (
     normalize_note_text,
     validate_note_text,
 )
+from app.media_state_controls import (
+    COLLECTION_PICK_OPTIONS,
+    COMBO_POPUP_ITEM_HEIGHT,
+    IMPRESSION_OPTIONS,
+    ClickableEntryLabel,
+    ComboPopupItemDelegate,
+    ComboPopupView,
+    DownwardComboBox,
+    populate_combo,
+    set_combo_value,
+)
 from app.watch_history_editor import (
     WATCH_ENTRY_DATE_INPUT_WIDTH,
     WATCH_ENTRY_EPISODE_BUTTON_BORDER_RADIUS,
@@ -95,8 +102,6 @@ POSTER_DIR = Path("data/media_posters")
 TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 TMDB_POSTER_PREVIEW_SIZE = "w185"
 POSTER_PREVIEW_HEIGHT = 232
-# Tweak this value to fine-tune vertical spacing in open dropdown menus.
-COMBO_POPUP_ITEM_HEIGHT = 28
 DETAIL_HEADER_ICON_TEXT_SPACING = 1
 DETAIL_ICON_BUTTON_SIZE = 20
 DETAIL_ICON_SIZE = 18
@@ -148,22 +153,6 @@ STATUS_OPTIONS_BY_MEDIA_TYPE = {
     for media_type, allowed_states in VALID_WATCH_STATES_BY_MEDIA_TYPE.items()
 }
 
-IMPRESSION_OPTIONS = (
-    (None, "None"),
-    ("very_good", "👍👍 Very good"),
-    ("good", "👍 Good"),
-    ("meh", "😐 Meh"),
-    ("not_for_me", "Not for me"),
-    ("regret_watching", "😡 Waste of time"),
-)
-
-COLLECTION_PICK_OPTIONS = (
-    (None, "None"),
-    (True, "Yes!"),
-    (False, "No"),
-)
-
-
 def open_media_details_dialog(parent, media_draft, media_query=None):
     dialog = MediaDetailsDialog(
         parent=parent,
@@ -175,135 +164,6 @@ def open_media_details_dialog(parent, media_draft, media_query=None):
         return dialog.result_payload
 
     return {"status": "cancelled"}
-
-
-class ClickableEntryLabel(QLabel):
-    activated = Signal()
-
-    def __init__(self, text, parent=None, callback=None):
-        super().__init__(text or "", parent)
-
-        self._press_position = None
-        self._press_started_over_text = False
-        self._pointer_over_text = False
-        self.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        )
-        self.setWordWrap(False)
-        self.setTextFormat(Qt.TextFormat.PlainText)
-        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setMouseTracking(True)
-        self.setFixedHeight(ENTRY_ACTION_LINE_HEIGHT)
-        self.setSizePolicy(
-            QSizePolicy.Policy.Ignored,
-            QSizePolicy.Policy.Fixed,
-        )
-        self.setMinimumWidth(0)
-
-        if callback is not None:
-            self.activated.connect(callback)
-
-    def enterEvent(self, event):
-        super().enterEvent(event)
-        self._update_pointer_state(event.position().toPoint())
-
-    def leaveEvent(self, event):
-        super().leaveEvent(event)
-        self._set_pointer_over_text(False)
-
-    def mouseMoveEvent(self, event):
-        super().mouseMoveEvent(event)
-        self._update_pointer_state(event.position().toPoint())
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._press_position = event.position().toPoint()
-            self._press_started_over_text = self._is_over_rendered_text(
-                self._press_position
-            )
-
-        super().mousePressEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        release_position = event.position().toPoint()
-        should_activate = (
-            event.button() == Qt.MouseButton.LeftButton
-            and self._press_position is not None
-            and self._press_started_over_text
-            and self._is_over_rendered_text(release_position)
-            and (
-                release_position - self._press_position
-            ).manhattanLength() < QApplication.startDragDistance()
-        )
-
-        super().mouseReleaseEvent(event)
-        self._press_position = None
-        self._press_started_over_text = False
-
-        if should_activate and not self.hasSelectedText():
-            self.activated.emit()
-
-    def keyPressEvent(self, event):
-        if event.key() in (
-            Qt.Key.Key_Return,
-            Qt.Key.Key_Enter,
-            Qt.Key.Key_Space,
-        ):
-            event.accept()
-            self.activated.emit()
-            return
-
-        super().keyPressEvent(event)
-
-    def focusInEvent(self, event):
-        super().focusInEvent(event)
-        self._refresh_underline()
-
-    def focusOutEvent(self, event):
-        super().focusOutEvent(event)
-        self._refresh_underline()
-
-    def _update_pointer_state(self, position):
-        self._set_pointer_over_text(self._is_over_rendered_text(position))
-
-    def _set_pointer_over_text(self, is_over_text):
-        if self._pointer_over_text == is_over_text:
-            return
-
-        self._pointer_over_text = is_over_text
-
-        if is_over_text:
-            self.setCursor(Qt.CursorShape.PointingHandCursor)
-        else:
-            self.unsetCursor()
-
-        self._refresh_underline()
-
-    def _refresh_underline(self):
-        font = self.font()
-        font.setUnderline(self._pointer_over_text or self.hasFocus())
-        self.setFont(font)
-
-    def _is_over_rendered_text(self, position):
-        text = self.text()
-
-        if not text:
-            return False
-
-        content_rect = self.contentsRect()
-        metrics = self.fontMetrics()
-        text_width = min(metrics.horizontalAdvance(text), content_rect.width())
-        text_height = min(metrics.height(), content_rect.height())
-        text_top = content_rect.top() + max(
-            0,
-            (content_rect.height() - text_height) // 2,
-        )
-
-        return (
-            content_rect.left() <= position.x() < content_rect.left() + text_width
-            and text_top <= position.y() < text_top + text_height
-        )
 
 
 class NotePreviewLabel(ClickableEntryLabel):
@@ -360,95 +220,6 @@ class DetailBlock(QFrame):
 
         self.main_layout.addLayout(header_layout)
         self.main_layout.addLayout(self.body_layout, stretch=1)
-
-
-class DownwardComboBox(QComboBox):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._user_activation_previous_data = None
-
-    def showPopup(self):
-        self._user_activation_previous_data = self.currentData()
-        super().showPopup()
-
-        popup = self.view().window()
-
-        if popup is not None:
-            popup.move(self.mapToGlobal(QPoint(0, self.height())))
-
-    def keyPressEvent(self, event):
-        self._user_activation_previous_data = self.currentData()
-        super().keyPressEvent(event)
-
-    def reset_user_activation_baseline(self):
-        self._user_activation_previous_data = self.currentData()
-
-    def take_user_activation_previous_data(self):
-        previous_data = self._user_activation_previous_data
-        self._user_activation_previous_data = self.currentData()
-        return previous_data
-
-
-class ComboPopupView(QListView):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.hovered_index = QModelIndex()
-        self.setMouseTracking(True)
-        self.viewport().setMouseTracking(True)
-        self.setFrameShape(QFrame.Shape.NoFrame)
-
-    def mouseMoveEvent(self, event):
-        self.hovered_index = self.indexAt(event.position().toPoint())
-        self.viewport().update()
-        super().mouseMoveEvent(event)
-
-    def leaveEvent(self, event):
-        self.hovered_index = QModelIndex()
-        self.viewport().update()
-        super().leaveEvent(event)
-
-
-class ComboPopupItemDelegate(QStyledItemDelegate):
-    def __init__(self, combo, parent=None):
-        super().__init__(parent)
-        self.combo = combo
-
-    def sizeHint(self, option, index):
-        size = super().sizeHint(option, index)
-        size.setHeight(COMBO_POPUP_ITEM_HEIGHT)
-        return size
-
-    def paint(self, painter, option, index):
-        view = option.widget
-        hovered_index = getattr(view, "hovered_index", QModelIndex())
-        is_hovered = (
-            hovered_index == index
-            or bool(option.state & QStyle.StateFlag.State_MouseOver)
-            or bool(option.state & QStyle.StateFlag.State_Selected)
-        )
-        is_current = index.row() == self.combo.currentIndex()
-
-        painter.save()
-        painter.fillRect(
-            option.rect,
-            QColor("#f2f2f2") if is_hovered else QColor("white"),
-        )
-        painter.setPen(QColor("black"))
-        painter.setFont(option.font)
-
-        if is_current:
-            painter.drawText(
-                option.rect.adjusted(10, 0, 0, 0),
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                "✓",
-            )
-
-        painter.drawText(
-            option.rect.adjusted(34, 0, -12, 0),
-            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-            str(index.data(Qt.ItemDataRole.DisplayRole)),
-        )
-        painter.restore()
 
 
 class NoteDetailsDialog(QDialog):
@@ -2596,36 +2367,12 @@ def make_icon_button(icon_name, parent=None, callback=None):
     return button
 
 
-def populate_combo(combo, options, current_value):
-    combo.blockSignals(True)
-    combo.clear()
-
-    for value, label in options:
-        combo.addItem(label, value)
-
-    set_combo_value(combo, current_value)
-    combo.blockSignals(False)
-
-
 def populate_status_combo(combo, media_type, current_value):
     options = STATUS_OPTIONS_BY_MEDIA_TYPE.get(
         media_type,
         ((None, "Not in watchlist"),),
     )
     populate_combo(combo, options, current_value)
-
-
-def set_combo_value(combo, value):
-    index = combo.findData(value)
-
-    if index >= 0:
-        combo.setCurrentIndex(index)
-        return
-
-    if combo.count():
-        combo.setCurrentIndex(0)
-
-
 def load_poster_pixmap(poster):
     filename = poster.get("filename")
 

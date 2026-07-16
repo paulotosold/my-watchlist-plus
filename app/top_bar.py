@@ -33,8 +33,21 @@ class TopBar(QWidget):
     filter_submitted = Signal(str)
     find_media_submitted = Signal(str)
 
-    def __init__(self, parent=None):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        filter_label_text="Filter Library:",
+        default_filter_text=DEFAULT_FILTER_TEXT,
+        find_media_label_text="Find Media:",
+        find_media_placeholder=FIND_MEDIA_INPUT_PLACEHOLDER,
+    ):
         super().__init__(parent)
+
+        self.filter_label_text = filter_label_text
+        self.default_filter_text = default_filter_text
+        self.find_media_label_text = find_media_label_text
+        self.find_media_placeholder = find_media_placeholder
 
         self._setup_ui()
         self._connect_signals()
@@ -46,11 +59,11 @@ class TopBar(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self.filter_label = QLabel("Filter Library:")
+        self.filter_label = QLabel(self.filter_label_text)
 
         self.filter_input = QLineEdit()
         self.filter_input.setFixedHeight(input_box_height)
-        self.filter_input.setText(DEFAULT_FILTER_TEXT)
+        self.filter_input.setText(self.default_filter_text)
         self.filter_input.setStyleSheet(INPUT_BOX_STYLE)
 
         self.filter_button = QToolButton()
@@ -59,11 +72,11 @@ class TopBar(QWidget):
         self.filter_button.setCursor(Qt.PointingHandCursor)
         self.filter_button.setStyleSheet(BUTTON_STYLE)
 
-        self.find_media_label = QLabel("Find Media:")
+        self.find_media_label = QLabel(self.find_media_label_text)
 
         self.find_media_input = QLineEdit()
         self.find_media_input.setFixedHeight(input_box_height)
-        self.find_media_input.setPlaceholderText(FIND_MEDIA_INPUT_PLACEHOLDER)
+        self.find_media_input.setPlaceholderText(self.find_media_placeholder)
         self.find_media_input.setStyleSheet(INPUT_BOX_STYLE)
 
         layout.addWidget(self.filter_label)

@@ -25,6 +25,39 @@ class MetadataRefreshConflict(RuntimeError):
     """Raised when a TMDB snapshot cannot be reconciled without data loss."""
 
 
+def get_media_by_id(conn, media_id):
+    if media_id is None:
+        return None
+
+    cursor = conn.execute(
+        """
+        SELECT
+            id,
+            tmdb_id,
+            imdb_id,
+            media_type,
+            title,
+            original_title,
+            production_status,
+            release_date,
+            runtime_min,
+            last_tmdb_metadata_checked_at,
+            last_tmdb_posters_checked_at,
+            last_tmdb_watch_providers_checked_at
+        FROM media
+        WHERE id = ?
+        """,
+        (media_id,),
+    )
+
+    row = cursor.fetchone()
+
+    if row is None:
+        return None
+
+    return dict(row)
+
+
 def get_media_by_imdb_id(conn, imdb_id):
     if imdb_id is None:
         return None
@@ -2651,6 +2684,227 @@ def _normalize_state_value(field, value):
     if field == "is_collection_pick" and value is not None:
         return bool(value)
     return value
+
+
+def get_media_state(conn, media_id):
+    media = conn.execute(
+        "SELECT id FROM media WHERE id = ?",
+        (media_id,),
+    ).fetchone()
+
+    if media is None:
+        raise ValueError(f"media id {media_id} does not exist.")
+
+    state = conn.execute(
+        """
+        SELECT
+            watch_state,
+            impression,
+            is_collection_pick
+        FROM media_state
+        WHERE media_id = ?
+        """,
+        (media_id,),
+    ).fetchone()
+
+    return {
+        "media_id": media_id,
+        "watch_state": state["watch_state"] if state is not None else None,
+        "impression": state["impression"] if state is not None else None,
+        "is_collection_pick": (
+            None
+            if state is None or state["is_collection_pick"] is None
+            else bool(state["is_collection_pick"])
+        ),
+    }
+
+
+def apply_media_state_patch(
+    conn,
+    media_id,
+    expected_values,
+    changes,
+):
+    """Patch History-editable state fields with optimistic concurrency checks."""
+    editable_fields = ("impression", "is_collection_pick")
+    expected_values = dict(expected_values or {})
+    changes = dict(changes or {})
+
+    unsupported_fields = set(changes) - set(editable_fields)
+
+    if unsupported_fields:
+        unsupported = ", ".join(sorted(unsupported_fields))
+        raise ValueError(f"Unsupported media state patch fields: {unsupported}.")
+
+    if not changes:
+        return get_media_state(conn, media_id)
+
+    missing_expected_fields = set(changes) - set(expected_values)
+
+    if missing_expected_fields:
+        missing = ", ".join(sorted(missing_expected_fields))
+        raise ValueError(f"Missing expected media state values: {missing}.")
+
+    for values in (expected_values, changes):
+        if "impression" in values and values["impression"] not in {
+            None,
+            "very_good",
+            "good",
+            "meh",
+            "not_for_me",
+            "regret_watching",
+        }:
+            raise ValueError("Unsupported impression value.")
+
+        if (
+            "is_collection_pick" in values
+            and values["is_collection_pick"] not in {None, True, False}
+        ):
+            raise ValueError("Unsupported collection pick value.")
+
+    current_state = get_media_state(conn, media_id)
+    normalized_changes = {
+        field: _normalize_state_value(field, value)
+        for field, value in changes.items()
+    }
+    normalized_expected = {
+        field: _normalize_state_value(field, expected_values[field])
+        for field in changes
+    }
+
+    fields_to_write = []
+
+    for field, desired_value in normalized_changes.items():
+        database_value = current_state[field]
+
+        if database_value == desired_value:
+            continue
+
+        if database_value != normalized_expected[field]:
+            raise ConcurrentEditError(
+                f"media_state.{field} changed before the inline update."
+            )
+
+        fields_to_write.append(field)
+
+    if not fields_to_write:
+        return current_state
+
+    values_to_write = {
+        field: current_state[field]
+        for field in ("watch_state", *editable_fields)
+    }
+    values_to_write.update(normalized_changes)
+
+    state_exists = conn.execute(
+        "SELECT 1 FROM media_state WHERE media_id = ?",
+        (media_id,),
+    ).fetchone() is not None
+
+    if all(value is None for value in values_to_write.values()):
+        cursor = conn.execute(
+            """
+            DELETE FROM media_state
+            WHERE media_id = ?
+              AND watch_state IS ?
+              AND impression IS ?
+              AND is_collection_pick IS ?
+            """,
+            (
+                media_id,
+                current_state["watch_state"],
+                current_state["impression"],
+                _to_db_bool(current_state["is_collection_pick"]),
+            ),
+        )
+
+        if cursor.rowcount == 1:
+            return get_media_state(conn, media_id)
+
+        canonical_state = get_media_state(conn, media_id)
+
+        if _state_matches_changes(canonical_state, normalized_changes):
+            return canonical_state
+
+        raise ConcurrentEditError(
+            "media_state changed before the inline update."
+        )
+
+    if not state_exists:
+        try:
+            conn.execute(
+                """
+                INSERT INTO media_state (
+                    media_id,
+                    watch_state,
+                    impression,
+                    is_collection_pick
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    media_id,
+                    values_to_write["watch_state"],
+                    values_to_write["impression"],
+                    _to_db_bool(values_to_write["is_collection_pick"]),
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            canonical_state = get_media_state(conn, media_id)
+
+            if _state_matches_changes(canonical_state, normalized_changes):
+                return canonical_state
+
+            raise ConcurrentEditError(
+                "media_state changed before the inline update."
+            ) from exc
+
+        return get_media_state(conn, media_id)
+
+    assignments = ", ".join(f"{field} = ?" for field in fields_to_write)
+    parameters = [
+        _to_db_bool(normalized_changes[field])
+        if field == "is_collection_pick"
+        else normalized_changes[field]
+        for field in fields_to_write
+    ]
+    expected_predicates = " AND ".join(
+        f"{field} IS ?"
+        for field in fields_to_write
+    )
+    expected_parameters = [
+        _to_db_bool(normalized_expected[field])
+        if field == "is_collection_pick"
+        else normalized_expected[field]
+        for field in fields_to_write
+    ]
+    cursor = conn.execute(
+        f"""
+        UPDATE media_state
+        SET {assignments}, updated_at = CURRENT_TIMESTAMP
+        WHERE media_id = ?
+          AND {expected_predicates}
+        """,
+        (*parameters, media_id, *expected_parameters),
+    )
+    canonical_state = get_media_state(conn, media_id)
+
+    if cursor.rowcount == 1 or _state_matches_changes(
+        canonical_state,
+        normalized_changes,
+    ):
+        return canonical_state
+
+    raise ConcurrentEditError(
+        "media_state changed before the inline update."
+    )
+
+
+def _state_matches_changes(state, changes):
+    return all(
+        state.get(field) == value
+        for field, value in changes.items()
+    )
 
 
 def _apply_media_state_field_changes(
