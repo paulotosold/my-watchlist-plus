@@ -1152,6 +1152,40 @@ def get_tmdb_media_posters(tmdb_id_match):
     raise ValueError(f"Unsupported media_type: {media_type}")
 
 
+def get_tmdb_series_primary_season_posters(series_tmdb_id):
+    series_details = _tmdb_get(f"tv/{series_tmdb_id}")
+    season_posters = []
+    seen_season_nums = set()
+
+    for season in series_details.get("seasons", []):
+        season_num = season.get("season_number")
+        poster_path = season.get("poster_path")
+
+        if (
+            season_num is None
+            or season_num < 1
+            or not poster_path
+            or season_num in seen_season_nums
+        ):
+            continue
+
+        seen_season_nums.add(season_num)
+        season_posters.append({
+            "scope": "season",
+            "filename": poster_path.removeprefix("/"),
+            "source": "tmdb",
+            "curation_status": "pending",
+            "is_default": False,
+            "series_tmdb_id": series_tmdb_id,
+            "season_num": season_num,
+        })
+
+    return sorted(
+        season_posters,
+        key=lambda poster: poster["season_num"],
+    )
+
+
 def get_tmdb_media_user_data(tmdb_id_match=None):
     return {
         "watch_state": "to_watch",

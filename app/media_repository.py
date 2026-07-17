@@ -1056,6 +1056,12 @@ def _save_media_row(conn, metadata):
         if metadata.get(field) in (None, ""):
             raise ValueError(f"metadata.{field} is required.")
 
+    posters_checked_at = (
+        metadata.get("last_tmdb_posters_checked_at")
+        if metadata["media_type"] != "episode"
+        else None
+    )
+
     conn.execute(
         """
         INSERT INTO media (
@@ -1102,7 +1108,7 @@ def _save_media_row(conn, metadata):
             metadata.get("release_date"),
             metadata.get("runtime_min"),
             metadata.get("last_tmdb_metadata_checked_at"),
-            metadata.get("last_tmdb_posters_checked_at"),
+            posters_checked_at,
             metadata.get("last_tmdb_watch_providers_checked_at"),
         ),
     )
@@ -1703,18 +1709,140 @@ def _save_media_watch_providers(conn, media_id, watch_providers):
         )
 
 
+def insert_missing_series_season_posters(conn, series_id, season_posters):
+    if (
+        not isinstance(series_id, int)
+        or isinstance(series_id, bool)
+        or series_id < 1
+    ):
+        raise ValueError("series_id must reference a series.")
+
+    owner = conn.execute(
+        "SELECT media_type FROM media WHERE id = ?",
+        (series_id,),
+    ).fetchone()
+
+    if owner is None or owner["media_type"] != "series":
+        raise ValueError("series_id must reference a series.")
+
+    season_posters = list(season_posters or [])
+
+    if not season_posters:
+        return 0
+
+    posters_by_season = {}
+
+    for poster in season_posters:
+        if not isinstance(poster, dict):
+            raise ValueError("Each season poster must be a dictionary.")
+
+        if poster.get("scope") != "season":
+            raise ValueError("Season poster scope must be 'season'.")
+
+        season_num = poster.get("season_num")
+
+        if (
+            not isinstance(season_num, int)
+            or isinstance(season_num, bool)
+            or season_num < 1
+        ):
+            raise ValueError("Season poster season_num must be a positive integer.")
+
+        filename = poster.get("filename")
+
+        if (
+            not isinstance(filename, str)
+            or not filename.strip()
+            or filename != filename.strip()
+            or filename in {".", ".."}
+            or "/" in filename
+            or "\\" in filename
+            or "\x00" in filename
+        ):
+            raise ValueError("Season poster filename must be a simple filename.")
+
+        source = poster.get("source") or "other"
+        curation_status = poster.get("curation_status") or "pending"
+        is_default = poster.get("is_default", False)
+
+        if source not in {"tmdb", "user", "other"}:
+            raise ValueError("Season poster source is invalid.")
+
+        if curation_status not in {
+            "pending",
+            "selected",
+            "discarded",
+            "failed",
+        }:
+            raise ValueError("Season poster curation_status is invalid.")
+
+        if not isinstance(is_default, bool):
+            raise ValueError("Season poster is_default must be a boolean.")
+
+        if is_default and curation_status != "selected":
+            raise ValueError(
+                "A default season poster must have selected status."
+            )
+
+        posters_by_season.setdefault(season_num, {
+            **poster,
+            "source": source,
+            "curation_status": curation_status,
+            "is_default": is_default,
+        })
+
+    inserted_count = 0
+
+    for season_num, poster in posters_by_season.items():
+        cursor = conn.execute(
+            """
+            INSERT INTO season_posters (
+                series_id,
+                season_num,
+                filename,
+                source,
+                curation_status,
+                is_default
+            )
+            SELECT ?, ?, ?, ?, ?, ?
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM season_posters
+                WHERE series_id = ?
+                  AND season_num = ?
+            )
+            """,
+            (
+                series_id,
+                season_num,
+                poster["filename"],
+                poster.get("source") or "other",
+                poster.get("curation_status") or "pending",
+                _to_db_bool(poster.get("is_default", False)),
+                series_id,
+                season_num,
+            ),
+        )
+        inserted_count += cursor.rowcount
+
+    return inserted_count
+
+
 def _save_media_posters(conn, media_id, metadata, posters):
     posters = _limit_posters(posters, TMDB_MAX_POSTERS_PER_MEDIA)
     posters_checked_at = metadata.get("last_tmdb_posters_checked_at")
 
-    update_media_tmdb_posters_checked_at(conn, media_id, posters_checked_at)
+    if metadata["media_type"] != "episode":
+        update_media_tmdb_posters_checked_at(conn, media_id, posters_checked_at)
 
     media_posters = [
         poster
         for poster in posters
         if poster.get("scope", "media") == "media"
     ]
-    _replace_media_posters(conn, media_id, media_posters)
+
+    if media_posters:
+        _insert_media_posters_if_missing(conn, media_id, media_posters)
 
     if metadata["media_type"] != "episode":
         return
@@ -1729,12 +1857,13 @@ def _save_media_posters(conn, media_id, metadata, posters):
             for poster in posters
             if poster.get("scope") == "season"
         ]
-        _replace_season_posters(
-            conn,
-            series_id,
-            season_num,
-            season_posters,
-        )
+
+        if season_posters:
+            insert_missing_series_season_posters(
+                conn,
+                series_id,
+                season_posters,
+            )
 
     series_posters = [
         poster
@@ -1743,8 +1872,7 @@ def _save_media_posters(conn, media_id, metadata, posters):
     ]
 
     if series_posters:
-        _replace_media_posters(conn, series_id, series_posters)
-        update_media_tmdb_posters_checked_at(conn, series_id, posters_checked_at)
+        _insert_media_posters_if_missing(conn, series_id, series_posters)
 
 def _limit_posters(posters, limit):
     if limit is None:
@@ -1794,6 +1922,18 @@ def _replace_media_posters(conn, media_id, posters):
                 _to_db_bool(poster.get("is_default", False)),
             ),
         )
+
+
+def _insert_media_posters_if_missing(conn, media_id, posters):
+    existing_poster = conn.execute(
+        "SELECT 1 FROM media_posters WHERE media_id = ? LIMIT 1",
+        (media_id,),
+    ).fetchone()
+
+    if existing_poster is not None:
+        return
+
+    _replace_media_posters(conn, media_id, posters)
 
 def _replace_season_posters(conn, series_id, season_num, posters):
     conn.execute(

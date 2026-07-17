@@ -163,12 +163,40 @@ def _save_episode_draft_with_series_context(
         series_tmdb_id,
         "series",
     )
+    existing_episode = media_repository.get_media_by_tmdb_id(
+        conn,
+        media_draft["metadata"].get("tmdb_id"),
+        "episode",
+    )
+    previous_episode_posters_checked_at = (
+        existing_episode["last_tmdb_posters_checked_at"]
+        if existing_episode is not None
+        else None
+    )
+    season_posters, season_poster_downloads = (
+        _download_series_season_posters(
+            series_tmdb_id,
+            poster_dir=poster_dir,
+            poster_size=poster_size,
+            fail_on_poster_error=fail_on_poster_error,
+        )
+    )
+    _merge_poster_downloads(poster_downloads, season_poster_downloads)
+    parent_poster_downloads = _empty_poster_downloads()
+    _merge_poster_downloads(
+        parent_poster_downloads,
+        season_poster_downloads,
+    )
+    series_id = series["id"] if series is not None else None
 
     if series is None:
         series_draft = media_draft_builder.build_media_draft_from_tmdb_match({
             "media_type": "series",
             "tmdb_id": series_tmdb_id,
         })
+        series_draft.setdefault("metadata", {})[
+            "last_tmdb_posters_checked_at"
+        ] = None
         series_save_result = _save_catalog_media_draft_with_posters(
             conn,
             series_draft,
@@ -181,8 +209,18 @@ def _save_episode_draft_with_series_context(
             poster_downloads,
             series_save_result["poster_downloads"],
         )
+        _merge_poster_downloads(
+            parent_poster_downloads,
+            series_save_result["poster_downloads"],
+        )
+        series_id = series_save_result["media_id"]
         series_created = True
 
+    media_repository.insert_missing_series_season_posters(
+        conn,
+        series_id,
+        season_posters,
+    )
     episode_seed_result = _save_series_episode_seeds(
         conn,
         series_tmdb_id,
@@ -197,6 +235,9 @@ def _save_episode_draft_with_series_context(
         episode_seed_result["poster_downloads"],
     )
 
+    media_draft.setdefault("metadata", {})[
+        "last_tmdb_posters_checked_at"
+    ] = None
     original_save_result = _save_single_media_draft_with_posters(
         conn,
         media_draft,
@@ -209,6 +250,16 @@ def _save_episode_draft_with_series_context(
         poster_downloads,
         original_save_result["poster_downloads"],
     )
+    media_draft["metadata"]["last_tmdb_posters_checked_at"] = (
+        previous_episode_posters_checked_at
+    )
+
+    if _poster_downloads_succeeded(parent_poster_downloads):
+        media_repository.update_media_tmdb_posters_checked_at(
+            conn,
+            series_id,
+            tmdb_fetcher.current_sqlite_timestamp(),
+        )
 
     return {
         "media_id": original_save_result["media_id"],
@@ -235,6 +286,27 @@ def _save_series_draft_with_episode_context(
     if series_tmdb_id is None:
         raise ValueError("Series draft requires metadata.tmdb_id.")
 
+    existing_series = media_repository.get_media_by_tmdb_id(
+        conn,
+        series_tmdb_id,
+        "series",
+    )
+    previous_posters_checked_at = (
+        existing_series["last_tmdb_posters_checked_at"]
+        if existing_series is not None
+        else None
+    )
+    season_posters, season_poster_downloads = (
+        _download_series_season_posters(
+            series_tmdb_id,
+            poster_dir=poster_dir,
+            poster_size=poster_size,
+            fail_on_poster_error=fail_on_poster_error,
+        )
+    )
+    media_draft.setdefault("metadata", {})[
+        "last_tmdb_posters_checked_at"
+    ] = None
     series_save_result = _save_single_media_draft_with_posters(
         conn,
         media_draft,
@@ -243,7 +315,26 @@ def _save_series_draft_with_episode_context(
         max_posters_per_media=max_posters_per_media,
         fail_on_poster_error=fail_on_poster_error,
     )
-    poster_downloads = series_save_result["poster_downloads"]
+    poster_downloads = _empty_poster_downloads()
+    _merge_poster_downloads(poster_downloads, season_poster_downloads)
+    _merge_poster_downloads(
+        poster_downloads,
+        series_save_result["poster_downloads"],
+    )
+    parent_poster_downloads = _empty_poster_downloads()
+    _merge_poster_downloads(
+        parent_poster_downloads,
+        season_poster_downloads,
+    )
+    _merge_poster_downloads(
+        parent_poster_downloads,
+        series_save_result["poster_downloads"],
+    )
+    media_repository.insert_missing_series_season_posters(
+        conn,
+        series_save_result["media_id"],
+        season_posters,
+    )
 
     refresh_snapshot = media_draft.get("_metadata_refresh_snapshot") or {}
     snapshot_episodes = refresh_snapshot.get("regular_episodes")
@@ -280,6 +371,19 @@ def _save_series_draft_with_episode_context(
         series_save_result["media_id"],
         media_draft,
     )
+
+    if _poster_downloads_succeeded(parent_poster_downloads):
+        checked_at = tmdb_fetcher.current_sqlite_timestamp()
+        media_repository.update_media_tmdb_posters_checked_at(
+            conn,
+            series_save_result["media_id"],
+            checked_at,
+        )
+        media_draft["metadata"]["last_tmdb_posters_checked_at"] = checked_at
+    else:
+        media_draft["metadata"]["last_tmdb_posters_checked_at"] = (
+            previous_posters_checked_at
+        )
 
     return {
         "media_id": series_save_result["media_id"],
@@ -388,6 +492,7 @@ def _save_single_media_draft_with_posters(
         poster_size=poster_size,
         fail_on_error=fail_on_poster_error,
     )
+    _remove_failed_tmdb_poster_references(media_draft, poster_downloads)
     media_id = media_repository.save_media_draft(conn, media_draft)
 
     return {
@@ -414,6 +519,7 @@ def _save_catalog_media_draft_with_posters(
         poster_size=poster_size,
         fail_on_error=fail_on_poster_error,
     )
+    _remove_failed_tmdb_poster_references(media_draft, poster_downloads)
     media_id = media_repository.save_media_catalog_draft(conn, media_draft)
 
     return {
@@ -457,6 +563,66 @@ def _empty_poster_downloads():
 def _merge_poster_downloads(target, source):
     for key in ("downloaded", "skipped", "failed"):
         target[key].extend(source.get(key, []))
+
+
+def _download_series_season_posters(
+    series_tmdb_id,
+    poster_dir=DEFAULT_POSTER_DIR,
+    poster_size=TMDB_POSTER_SIZE,
+    fail_on_poster_error=False,
+):
+    season_posters = (
+        tmdb_fetcher.get_tmdb_series_primary_season_posters(series_tmdb_id)
+    )
+    poster_downloads = download_missing_draft_posters(
+        {"posters": season_posters},
+        poster_dir=poster_dir,
+        poster_size=poster_size,
+        fail_on_error=fail_on_poster_error,
+    )
+    return (
+        _without_failed_tmdb_poster_references(
+            season_posters,
+            poster_downloads,
+        ),
+        poster_downloads,
+    )
+
+
+def _remove_failed_tmdb_poster_references(media_draft, poster_downloads):
+    media_draft["posters"] = _without_failed_tmdb_poster_references(
+        media_draft.get("posters", []),
+        poster_downloads,
+    )
+
+
+def _without_failed_tmdb_poster_references(posters, poster_downloads):
+    failed_filenames = {
+        _poster_filename_key(failure.get("filename"))
+        for failure in poster_downloads.get("failed", [])
+        if failure.get("filename")
+    }
+
+    if not failed_filenames:
+        return list(posters)
+
+    return [
+        poster
+        for poster in posters
+        if (
+            poster.get("source", "tmdb") != "tmdb"
+            or _poster_filename_key(poster.get("filename"))
+            not in failed_filenames
+        )
+    ]
+
+
+def _poster_filename_key(filename):
+    return str(filename).lstrip("/") if filename else None
+
+
+def _poster_downloads_succeeded(poster_downloads):
+    return not poster_downloads.get("failed")
 
 
 def download_missing_draft_posters(

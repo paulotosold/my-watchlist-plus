@@ -53,6 +53,8 @@ def build_media_draft_from_tmdb_match(tmdb_match):
     posters = app.tmdb_fetcher.get_tmdb_media_posters(tmdb_match)[:1]
     metadata["last_tmdb_posters_checked_at"] = (
         app.tmdb_fetcher.current_sqlite_timestamp()
+        if metadata.get("media_type") == "movie"
+        else None
     )
     user_data = app.tmdb_fetcher.get_tmdb_media_user_data(tmdb_match)
 
