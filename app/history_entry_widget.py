@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -15,19 +15,34 @@ from PySide6.QtWidgets import (
 from app.media_state_controls import (
     COLLECTION_PICK_OPTIONS,
     IMPRESSION_OPTIONS,
+    MEDIA_STATE_COMBO_MIN_HEIGHT,
+    MEDIA_STATE_COMBO_STYLE,
+    MEDIA_STATE_FIELD_SPACING,
+    MEDIA_STATE_FIELD_WIDTH,
     ClickableEntryLabel,
     ComboPopupItemDelegate,
     ComboPopupView,
     DownwardComboBox,
     populate_combo,
+    populate_status_combo,
     set_combo_value,
 )
 
 
 POSTER_WIDTH = 180
 PLACEHOLDER_POSTER_HEIGHT = 270
-DATE_COLUMN_WIDTH = 230
+DATE_COLUMN_WIDTH = 250
 POSTER_DIR = Path(__file__).resolve().parents[1] / "data" / "media_posters"
+
+HISTORY_STATE_FIELDS_STYLE = MEDIA_STATE_COMBO_STYLE + """
+QLabel#historyStateFieldLabel {
+    color: black;
+    font-size: 12px;
+    background: transparent;
+    margin: 0px;
+    padding: 1px 0px;
+}
+"""
 
 
 class HistoryEntryWidget(QWidget):
@@ -40,6 +55,7 @@ class HistoryEntryWidget(QWidget):
         self.entry = entry
         self.state_media_id = entry.state_media_id
         self._confirmed_state = {
+            "watch_state": entry.watch_state,
             "impression": entry.impression,
             "is_collection_pick": entry.is_collection_pick,
         }
@@ -47,6 +63,7 @@ class HistoryEntryWidget(QWidget):
         self.setObjectName("historyEntry")
         self._build_ui()
         self.set_state_values(
+            entry.watch_state,
             entry.impression,
             entry.is_collection_pick,
             confirmed=True,
@@ -82,14 +99,16 @@ class HistoryEntryWidget(QWidget):
         )
         self._render_poster()
 
-        details_widget = QWidget(self)
-        details_layout = QVBoxLayout(details_widget)
+        self.details_widget = QWidget(self)
+        self.details_widget.setFixedWidth(MEDIA_STATE_FIELD_WIDTH)
+        self.details_widget.setStyleSheet(HISTORY_STATE_FIELDS_STYLE)
+        details_layout = QVBoxLayout(self.details_widget)
         details_layout.setContentsMargins(0, 4, 0, 0)
-        details_layout.setSpacing(10)
+        details_layout.setSpacing(MEDIA_STATE_FIELD_SPACING)
 
         self.title_label = ClickableEntryLabel(
             self.entry.title,
-            details_widget,
+            self.details_widget,
         )
         self.title_label.setObjectName("historyTitle")
         self.title_label.setFixedHeight(30)
@@ -101,29 +120,36 @@ class HistoryEntryWidget(QWidget):
             lambda: self.details_requested.emit(self.entry.details_media_id)
         )
 
-        self.impression_combo = self._make_combo(details_widget, width=280)
-        self.collection_combo = self._make_combo(details_widget, width=150)
-
-        impression_row = self._make_combo_row(
-            "Impression:",
-            self.impression_combo,
-            details_widget,
-        )
-        collection_row = self._make_combo_row(
-            "Collection Pick:",
-            self.collection_combo,
-            details_widget,
-        )
+        self.status_combo = self._make_combo(self.details_widget)
+        self.impression_combo = self._make_combo(self.details_widget)
+        self.collection_combo = self._make_combo(self.details_widget)
 
         details_layout.addWidget(self.title_label)
-        details_layout.addLayout(impression_row)
-        details_layout.addLayout(collection_row)
+        self.status_label = self._add_combo_field(
+            details_layout,
+            "Status",
+            self.status_combo,
+        )
+        self.impression_label = self._add_combo_field(
+            details_layout,
+            "Impression",
+            self.impression_combo,
+        )
+        self.collection_label = self._add_combo_field(
+            details_layout,
+            "Collection Pick",
+            self.collection_combo,
+        )
         details_layout.addStretch()
 
         layout.addWidget(self.date_label)
         layout.addWidget(self.poster_label)
-        layout.addWidget(details_widget, 1)
+        layout.addWidget(self.details_widget)
+        layout.addStretch()
 
+        self.status_combo.activated.connect(
+            lambda _index: self._request_state_change("watch_state")
+        )
         self.impression_combo.activated.connect(
             lambda _index: self._request_state_change("impression")
         )
@@ -133,29 +159,21 @@ class HistoryEntryWidget(QWidget):
             )
         )
 
-    def _make_combo(self, parent, *, width):
+    def _make_combo(self, parent):
         combo = DownwardComboBox(parent)
-        combo.setFixedWidth(width)
-        combo.setMinimumHeight(30)
+        combo.setFixedWidth(MEDIA_STATE_FIELD_WIDTH)
+        combo.setMinimumHeight(MEDIA_STATE_COMBO_MIN_HEIGHT)
         view = ComboPopupView(combo)
         view.setItemDelegate(ComboPopupItemDelegate(combo, view))
         combo.setView(view)
         return combo
 
-    def _make_combo_row(self, label_text, combo, parent):
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(8)
-
-        label = QLabel(label_text, parent)
-        label_font = QFont(label.font())
-        label_font.setPointSize(max(label_font.pointSize(), 13))
-        label.setFont(label_font)
-
-        row.addWidget(label)
-        row.addWidget(combo)
-        row.addStretch()
-        return row
+    def _add_combo_field(self, layout, label_text, combo):
+        label = QLabel(label_text, self.details_widget)
+        label.setObjectName("historyStateFieldLabel")
+        layout.addWidget(label)
+        layout.addWidget(combo)
+        return label
 
     def _render_poster(self):
         poster = self.entry.poster or {}
@@ -184,11 +202,11 @@ class HistoryEntryWidget(QWidget):
         self.poster_label.setStyleSheet("background-color: #dedede;")
 
     def _request_state_change(self, field):
-        combo = (
-            self.impression_combo
-            if field == "impression"
-            else self.collection_combo
-        )
+        combo = {
+            "watch_state": self.status_combo,
+            "impression": self.impression_combo,
+            "is_collection_pick": self.collection_combo,
+        }[field]
         expected_value = self._confirmed_state[field]
         desired_value = combo.currentData()
 
@@ -204,13 +222,29 @@ class HistoryEntryWidget(QWidget):
 
     def set_state_values(
         self,
+        watch_state,
         impression,
         is_collection_pick,
         *,
         confirmed,
     ):
-        self.impression_combo.blockSignals(True)
-        self.collection_combo.blockSignals(True)
+        combos = (
+            self.status_combo,
+            self.impression_combo,
+            self.collection_combo,
+        )
+
+        for combo in combos:
+            combo.blockSignals(True)
+
+        if self.status_combo.count() == 0:
+            populate_status_combo(
+                self.status_combo,
+                self.entry.media_type,
+                watch_state,
+            )
+        else:
+            set_combo_value(self.status_combo, watch_state)
 
         if self.impression_combo.count() == 0:
             populate_combo(
@@ -230,17 +264,20 @@ class HistoryEntryWidget(QWidget):
         else:
             set_combo_value(self.collection_combo, is_collection_pick)
 
-        self.impression_combo.blockSignals(False)
-        self.collection_combo.blockSignals(False)
+        for combo in combos:
+            combo.blockSignals(False)
 
         if confirmed:
             self._confirmed_state = {
+                "watch_state": watch_state,
                 "impression": impression,
                 "is_collection_pick": is_collection_pick,
             }
-            self.impression_combo.reset_user_activation_baseline()
-            self.collection_combo.reset_user_activation_baseline()
+
+            for combo in combos:
+                combo.reset_user_activation_baseline()
 
     def set_editing_enabled(self, enabled):
+        self.status_combo.setEnabled(enabled)
         self.impression_combo.setEnabled(enabled)
         self.collection_combo.setEnabled(enabled)

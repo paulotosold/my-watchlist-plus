@@ -12,9 +12,11 @@ from app import media_details_dialog
 from app.media_state_controls import (
     COLLECTION_PICK_OPTIONS,
     IMPRESSION_OPTIONS,
+    STATUS_OPTIONS_BY_MEDIA_TYPE,
     ClickableEntryLabel,
     DownwardComboBox,
     populate_combo,
+    populate_status_combo,
 )
 
 
@@ -68,6 +70,23 @@ class MediaStateControlsTests(unittest.TestCase):
         self.assertEqual(combo.currentData(), "good")
         self.assertEqual(combo.currentText(), "👍 Good")
         combo.close()
+
+    def test_status_options_match_media_type(self):
+        movie_combo = DownwardComboBox()
+        series_combo = DownwardComboBox()
+
+        populate_status_combo(movie_combo, "movie", "watched")
+        populate_status_combo(series_combo, "series", "dropped")
+
+        self.assertEqual(movie_combo.currentText(), "Watched")
+        self.assertEqual(movie_combo.findData("dropped"), -1)
+        self.assertEqual(series_combo.currentText(), "Dropped")
+        self.assertEqual(
+            STATUS_OPTIONS_BY_MEDIA_TYPE["episode"][0],
+            (None, "None"),
+        )
+        movie_combo.close()
+        series_combo.close()
 
 
 if __name__ == "__main__":

@@ -65,11 +65,20 @@ from app.media_state_controls import (
     COLLECTION_PICK_OPTIONS,
     COMBO_POPUP_ITEM_HEIGHT,
     IMPRESSION_OPTIONS,
+    MEDIA_STATE_COMBO_MIN_HEIGHT,
+    MEDIA_STATE_COMBO_STYLE,
+    MEDIA_STATE_FIELD_SPACING,
+    MEDIA_STATE_FIELD_WIDTH,
+    NO_WATCH_STATE_LABELS,
+    STATUS_OPTIONS_BY_MEDIA_TYPE,
+    WATCH_STATE_LABELS,
+    WATCH_STATE_OPTION_ORDER,
     ClickableEntryLabel,
     ComboPopupItemDelegate,
     ComboPopupView,
     DownwardComboBox,
     populate_combo,
+    populate_status_combo,
     set_combo_value,
 )
 from app.watch_history_editor import (
@@ -93,7 +102,6 @@ from app.watch_history_editor import (
     validate_watch_dates,
     watched_episode_keys,
 )
-from app.watch_states import VALID_WATCH_STATES_BY_MEDIA_TYPE
 from db.connection import get_connection
 
 
@@ -123,35 +131,6 @@ WATCH_ENTRY_INLINE_ICON_SIZE = 20
 WATCH_ENTRY_SMART_TO_DATES_SPACING = 8
 WATCH_ENTRY_SEASON_LABEL_WIDTH = 60
 WATCH_ENTRY_SEASON_LABEL_BUTTON_SPACING = 20
-
-WATCH_STATE_OPTION_ORDER = (
-    "to_watch",
-    "watched",
-    "not_interested",
-    "dropped",
-)
-WATCH_STATE_LABELS = {
-    "to_watch": "To Watch",
-    "watched": "Watched",
-    "not_interested": "Not Interested",
-    "dropped": "Dropped",
-}
-NO_WATCH_STATE_LABELS = {
-    "movie": "Not in watchlist",
-    "series": "Not in watchlist",
-    "episode": "No individual status",
-}
-STATUS_OPTIONS_BY_MEDIA_TYPE = {
-    media_type: (
-        (None, NO_WATCH_STATE_LABELS[media_type]),
-        *(
-            (watch_state, WATCH_STATE_LABELS[watch_state])
-            for watch_state in WATCH_STATE_OPTION_ORDER
-            if watch_state in allowed_states
-        ),
-    )
-    for media_type, allowed_states in VALID_WATCH_STATES_BY_MEDIA_TYPE.items()
-}
 
 def open_media_details_dialog(parent, media_draft, media_query=None):
     dialog = MediaDetailsDialog(
@@ -1386,11 +1365,11 @@ class MediaDetailsDialog(QDialog):
 
     def _add_user_data_panel(self, parent_layout):
         panel_widget = QWidget(self)
-        panel_widget.setFixedWidth(190)
+        panel_widget.setFixedWidth(MEDIA_STATE_FIELD_WIDTH)
 
         panel_layout = QVBoxLayout(panel_widget)
         panel_layout.setContentsMargins(0, 0, 0, 0)
-        panel_layout.setSpacing(4)
+        panel_layout.setSpacing(MEDIA_STATE_FIELD_SPACING)
 
         self.status_combo = self._make_combo(
             panel_widget,
@@ -1409,8 +1388,8 @@ class MediaDetailsDialog(QDialog):
 
     def _make_combo(self, parent, change_handler=None):
         combo = DownwardComboBox(parent)
-        combo.setMinimumHeight(30)
-        combo.setFixedWidth(190)
+        combo.setMinimumHeight(MEDIA_STATE_COMBO_MIN_HEIGHT)
+        combo.setFixedWidth(MEDIA_STATE_FIELD_WIDTH)
         view = ComboPopupView(combo)
         view.setItemDelegate(ComboPopupItemDelegate(combo, view))
         combo.setView(view)
@@ -2277,55 +2256,7 @@ class MediaDetailsDialog(QDialog):
                 color: #888888;
             }
 
-            QComboBox {
-                background-color: white;
-                color: black;
-                border: 1px solid #bcbcbc;
-                border-radius: 6px;
-                padding: 4px 28px 4px 8px;
-                font-size: 12px;
-                min-height: 22px;
-            }
-
-            QComboBox:hover {
-                background-color: #f2f2f2;
-            }
-
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 24px;
-                border-left: 1px solid #d0d0d0;
-                border-top-right-radius: 6px;
-                border-bottom-right-radius: 6px;
-            }
-
-            QComboBox::down-arrow {
-                image: url(app/assets/dropdown_arrow.svg);
-                width: 10px;
-                height: 10px;
-            }
-
-            QComboBox QAbstractItemView {
-                background-color: white;
-                color: black;
-                border: none;
-                outline: 0px;
-                selection-background-color: #f2f2f2;
-                selection-color: black;
-            }
-
-            QComboBox QAbstractItemView::item {
-                min-height: 30px;
-                padding: 5px 8px;
-            }
-
-            QComboBox QAbstractItemView::item:hover,
-            QComboBox QAbstractItemView::item:selected {
-                background-color: #f2f2f2;
-                color: black;
-            }
-
+        """ + MEDIA_STATE_COMBO_STYLE + """
             QScrollArea {
                 background: transparent;
                 border: none;
@@ -2367,12 +2298,6 @@ def make_icon_button(icon_name, parent=None, callback=None):
     return button
 
 
-def populate_status_combo(combo, media_type, current_value):
-    options = STATUS_OPTIONS_BY_MEDIA_TYPE.get(
-        media_type,
-        ((None, "Not in watchlist"),),
-    )
-    populate_combo(combo, options, current_value)
 def load_poster_pixmap(poster):
     filename = poster.get("filename")
 

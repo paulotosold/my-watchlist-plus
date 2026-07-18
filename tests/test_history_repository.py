@@ -141,6 +141,8 @@ class HistoryRepositoryTests(unittest.TestCase):
         self.assertEqual(rewatch.details_media_id, episode_1)
         self.assertEqual(rewatch.state_media_id, episode_1)
         self.assertEqual(rewatch.owner_media_ids, (episode_1,))
+        self.assertEqual(rewatch.media_type, "episode")
+        self.assertEqual(rewatch.watch_state, "watched")
         self.assertEqual(rewatch.impression, "meh")
         self.assertTrue(rewatch.is_collection_pick)
         self.assertEqual(
@@ -150,6 +152,8 @@ class HistoryRepositoryTests(unittest.TestCase):
 
         self.assertEqual(movie.watch_history_ids, (movie_history_id,))
         self.assertEqual(movie.details_media_id, movie_id)
+        self.assertEqual(movie.media_type, "movie")
+        self.assertEqual(movie.watch_state, "watched")
         self.assertEqual(movie.formatted_date, "5 Jul 2026, Sun")
         self.assertEqual(movie.poster["filename"], "default.jpg")
 
@@ -162,6 +166,8 @@ class HistoryRepositoryTests(unittest.TestCase):
         self.assertEqual(first_session.formatted_date, "3 Jul 2026, Fri")
         self.assertEqual(first_session.details_media_id, series_id)
         self.assertEqual(first_session.state_media_id, series_id)
+        self.assertEqual(first_session.media_type, "series")
+        self.assertIsNone(first_session.watch_state)
         self.assertEqual(first_session.impression, "good")
         self.assertFalse(first_session.is_collection_pick)
         self.assertEqual(
@@ -620,6 +626,34 @@ class MediaStatePatchTests(unittest.TestCase):
         )
 
         self.assertEqual(state["impression"], "good")
+
+    def test_patch_updates_watch_state_directly(self):
+        state = media_repository.apply_media_state_patch(
+            self.conn,
+            self.media_id,
+            expected_values={"watch_state": "watched"},
+            changes={"watch_state": "to_watch"},
+        )
+
+        self.assertEqual(state["watch_state"], "to_watch")
+        self.assertEqual(state["impression"], "good")
+        self.assertFalse(state["is_collection_pick"])
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT watch_state FROM media_state WHERE media_id = ?",
+                (self.media_id,),
+            ).fetchone()["watch_state"],
+            "to_watch",
+        )
+
+    def test_patch_rejects_watch_state_not_supported_by_media_type(self):
+        with self.assertRaises(ValueError):
+            media_repository.apply_media_state_patch(
+                self.conn,
+                self.media_id,
+                expected_values={"watch_state": "watched"},
+                changes={"watch_state": "dropped"},
+            )
 
     def test_patch_detects_same_field_conflict(self):
         self.conn.execute(

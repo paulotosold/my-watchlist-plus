@@ -1,5 +1,6 @@
 from app.media_card_info_panel import MediaCardInfoPanel
 from app.config import SUBSCRIBED_FLATRATE_PROVIDER_NAMES
+from app.media_state_controls import NONE_WATCH_STATE_LABEL
 
 from copy import deepcopy
 from pathlib import Path
@@ -542,10 +543,7 @@ class MediaCard(QFrame):
         watch_state = self._get_user_data().get("watch_state")
 
         if watch_state is None:
-            if self._get_metadata().get("media_type") == "episode":
-                return "No individual status"
-
-            return "Not in watchlist"
+            return NONE_WATCH_STATE_LABEL
 
         return str(watch_state).replace("_", " ").title()
 

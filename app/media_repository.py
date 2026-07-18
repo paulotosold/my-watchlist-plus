@@ -2866,7 +2866,7 @@ def apply_media_state_patch(
     changes,
 ):
     """Patch History-editable state fields with optimistic concurrency checks."""
-    editable_fields = ("impression", "is_collection_pick")
+    editable_fields = ("watch_state", "impression", "is_collection_pick")
     expected_values = dict(expected_values or {})
     changes = dict(changes or {})
 
@@ -2885,7 +2885,12 @@ def apply_media_state_patch(
         missing = ", ".join(sorted(missing_expected_fields))
         raise ValueError(f"Missing expected media state values: {missing}.")
 
+    media_type = _get_media_type(conn, media_id)
+
     for values in (expected_values, changes):
+        if "watch_state" in values:
+            validate_watch_state(media_type, values["watch_state"])
+
         if "impression" in values and values["impression"] not in {
             None,
             "very_good",
@@ -2932,7 +2937,7 @@ def apply_media_state_patch(
 
     values_to_write = {
         field: current_state[field]
-        for field in ("watch_state", *editable_fields)
+        for field in editable_fields
     }
     values_to_write.update(normalized_changes)
 

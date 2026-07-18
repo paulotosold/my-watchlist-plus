@@ -11,7 +11,7 @@ from PySide6.QtGui import QImage
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app.history_entry_widget import HistoryEntryWidget
+from app.history_entry_widget import HistoryEntryWidget, POSTER_WIDTH
 from app.history_page import HistoryPage
 from app.history_repository import (
     HISTORY_DEFAULT_FILTER_TEXT,
@@ -41,6 +41,8 @@ def make_entry(
     state_media_id=10,
     details_media_id=None,
     title="Movie",
+    media_type="movie",
+    watch_state="watched",
     impression="good",
     is_collection_pick=False,
     poster=None,
@@ -61,6 +63,8 @@ def make_entry(
         formatted_date="10 Jul 2026, Fri",
         sort_key=(1, 3, (), key),
         poster=poster,
+        media_type=media_type,
+        watch_state=watch_state,
         impression=impression,
         is_collection_pick=is_collection_pick,
     )
@@ -260,6 +264,43 @@ class HistoryPageTests(unittest.TestCase):
         self.assertEqual(library_spy.count(), 1)
         self.assertIn("BEGIN IMMEDIATE", self.connections[-1].statements)
 
+    def test_status_activation_saves_once_and_syncs_duplicate_rows(self):
+        self.page.ensure_loaded()
+        library_spy = QSignalSpy(self.page.library_changed)
+        first_widget, second_widget = self.page.entry_widgets
+
+        def persist(_conn, media_id, expected_values, changes):
+            self.assertEqual(media_id, 10)
+            self.assertFalse(first_widget.status_combo.isEnabled())
+            self.assertFalse(second_widget.impression_combo.isEnabled())
+            self.assertEqual(expected_values, {"watch_state": "watched"})
+            self.assertEqual(changes, {"watch_state": "to_watch"})
+            return {
+                "media_id": media_id,
+                "watch_state": "to_watch",
+                "impression": "good",
+                "is_collection_pick": False,
+            }
+
+        with patch(
+            "app.history_page.apply_media_state_patch",
+            side_effect=persist,
+        ) as apply_patch_mock:
+            combo = first_widget.status_combo
+            combo.setCurrentIndex(combo.findData("to_watch"))
+            combo.activated.emit(combo.currentIndex())
+
+        apply_patch_mock.assert_called_once()
+        self.assertEqual(first_widget.status_combo.currentData(), "to_watch")
+        self.assertEqual(second_widget.status_combo.currentData(), "to_watch")
+        self.assertTrue(all(
+            entry.watch_state == "to_watch"
+            for entry in self.page.entries
+        ))
+        self.assertTrue(first_widget.status_combo.isEnabled())
+        self.assertTrue(second_widget.collection_combo.isEnabled())
+        self.assertEqual(library_spy.count(), 1)
+
     def test_failed_save_rolls_back_to_confirmed_values(self):
         self.page.ensure_loaded()
         first_widget, second_widget = self.page.entry_widgets
@@ -355,10 +396,51 @@ class HistoryEntryWidgetTests(unittest.TestCase):
                 widget = HistoryEntryWidget(entry)
 
             try:
-                self.assertEqual(widget.poster_label.width(), 180)
-                self.assertEqual(widget.poster_label.height(), 360)
+                self.assertEqual(widget.poster_label.width(), POSTER_WIDTH)
+                self.assertEqual(widget.poster_label.height(), POSTER_WIDTH * 2)
             finally:
                 widget.close()
+
+    def test_state_fields_match_media_details_layout_and_options(self):
+        widget = HistoryEntryWidget(make_entry(1, media_type="series"))
+
+        try:
+            field_layout = widget.details_widget.layout()
+            expected_widgets = (
+                widget.title_label,
+                widget.status_label,
+                widget.status_combo,
+                widget.impression_label,
+                widget.impression_combo,
+                widget.collection_label,
+                widget.collection_combo,
+            )
+
+            self.assertEqual(widget.details_widget.width(), 190)
+            self.assertEqual(field_layout.spacing(), 4)
+            self.assertEqual(
+                tuple(
+                    field_layout.itemAt(index).widget()
+                    for index in range(len(expected_widgets))
+                ),
+                expected_widgets,
+            )
+            self.assertEqual(widget.status_label.text(), "Status")
+            self.assertEqual(widget.impression_label.text(), "Impression")
+            self.assertEqual(widget.collection_label.text(), "Collection Pick")
+
+            for combo in (
+                widget.status_combo,
+                widget.impression_combo,
+                widget.collection_combo,
+            ):
+                self.assertEqual(combo.width(), 190)
+                self.assertEqual(combo.minimumHeight(), 30)
+
+            self.assertEqual(widget.status_combo.currentData(), "watched")
+            self.assertGreaterEqual(widget.status_combo.findData("dropped"), 0)
+        finally:
+            widget.close()
 
 
 if __name__ == "__main__":

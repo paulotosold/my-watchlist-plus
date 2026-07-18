@@ -30,6 +30,8 @@ class HistoryEntry:
     formatted_date: str
     sort_key: tuple[Any, ...]
     poster: dict[str, Any] | None
+    media_type: str
+    watch_state: str | None
     impression: str | None
     is_collection_pick: bool | None
     episodes: tuple[dict[str, Any], ...] = ()
@@ -115,6 +117,8 @@ def _build_direct_entry(row) -> HistoryEntry:
         ),
         sort_key=watch_history_sort_key(event, release_date),
         poster=choose_history_poster(row),
+        media_type=row["display_media_type"],
+        watch_state=row.get("display_watch_state"),
         impression=row.get("display_impression"),
         is_collection_pick=_optional_bool(
             row.get("display_is_collection_pick")
@@ -202,6 +206,8 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         ),
         sort_key=watch_history_sort_key(event, release_date),
         poster=poster,
+        media_type=representative["display_media_type"],
+        watch_state=representative.get("display_watch_state"),
         impression=representative.get("display_impression"),
         is_collection_pick=_optional_bool(
             representative.get("display_is_collection_pick")
@@ -263,6 +269,8 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
         ),
         sort_key=watch_history_sort_key(event, release_date),
         poster=poster,
+        media_type=representative["owner_media_type"],
+        watch_state=representative.get("owner_watch_state"),
         impression=representative.get("owner_impression"),
         is_collection_pick=_optional_bool(
             representative.get("owner_is_collection_pick")
@@ -355,6 +363,11 @@ _DEFAULT_HISTORY_QUERY = """
         END AS display_media_id,
         CASE
             WHEN owner.media_type = 'episode'
+                THEN COALESCE(series.media_type, owner.media_type)
+            ELSE owner.media_type
+        END AS display_media_type,
+        CASE
+            WHEN owner.media_type = 'episode'
                 THEN COALESCE(series.title, owner.title)
             ELSE owner.title
         END AS display_title,
@@ -364,8 +377,10 @@ _DEFAULT_HISTORY_QUERY = """
             ELSE owner.release_date
         END AS display_release_date,
         summary.first_air_date AS series_first_air_date,
+        owner_state.watch_state AS owner_watch_state,
         owner_state.impression AS owner_impression,
         owner_state.is_collection_pick AS owner_is_collection_pick,
+        display_state.watch_state AS display_watch_state,
         display_state.impression AS display_impression,
         display_state.is_collection_pick AS display_is_collection_pick,
         owner_poster.filename AS owner_poster_filename,

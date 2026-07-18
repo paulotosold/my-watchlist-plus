@@ -26,6 +26,9 @@ from app.top_bar import TopBar
 from db.connection import get_connection
 
 
+HISTORY_BACKGROUND_COLOR = "#F1F1F1"
+
+
 class HistoryPage(QWidget):
     status_message_changed = Signal(str)
     find_media_requested = Signal(str)
@@ -82,6 +85,16 @@ class HistoryPage(QWidget):
             Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
         self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.viewport().setObjectName("historyScrollViewport")
+        self.scroll_area.setStyleSheet(
+            f"""
+            QScrollArea#historyScrollArea,
+            QWidget#historyScrollViewport,
+            QWidget#historyScrollContent {{
+                background-color: {HISTORY_BACKGROUND_COLOR};
+            }}
+            """
+        )
 
         self.scroll_content = QWidget()
         self.scroll_content.setObjectName("historyScrollContent")
@@ -187,6 +200,7 @@ class HistoryPage(QWidget):
             self.entry_widgets.append(widget)
             self._widgets_by_media_id[entry.state_media_id].append(widget)
             self._confirmed_states[entry.state_media_id] = {
+                "watch_state": entry.watch_state,
                 "impression": entry.impression,
                 "is_collection_pick": entry.is_collection_pick,
             }
@@ -275,6 +289,7 @@ class HistoryPage(QWidget):
 
     def _sync_media_widgets(self, media_id, state):
         normalized_state = {
+            "watch_state": state.get("watch_state"),
             "impression": state.get("impression"),
             "is_collection_pick": state.get("is_collection_pick"),
         }
@@ -282,6 +297,7 @@ class HistoryPage(QWidget):
         self.entries = [
             replace(
                 entry,
+                watch_state=normalized_state["watch_state"],
                 impression=normalized_state["impression"],
                 is_collection_pick=normalized_state[
                     "is_collection_pick"
@@ -300,6 +316,7 @@ class HistoryPage(QWidget):
         for widget in self._widgets_by_media_id.get(media_id, ()):
             widget.entry = entries_by_key.get(widget.entry.key, widget.entry)
             widget.set_state_values(
+                normalized_state["watch_state"],
                 normalized_state["impression"],
                 normalized_state["is_collection_pick"],
                 confirmed=True,
