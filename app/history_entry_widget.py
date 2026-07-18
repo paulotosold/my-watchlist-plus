@@ -100,7 +100,6 @@ class HistoryEntryWidget(QWidget):
         self._render_poster()
 
         self.details_widget = QWidget(self)
-        self.details_widget.setFixedWidth(MEDIA_STATE_FIELD_WIDTH)
         self.details_widget.setStyleSheet(HISTORY_STATE_FIELDS_STYLE)
         details_layout = QVBoxLayout(self.details_widget)
         details_layout.setContentsMargins(0, 4, 0, 0)
@@ -144,8 +143,7 @@ class HistoryEntryWidget(QWidget):
 
         layout.addWidget(self.date_label)
         layout.addWidget(self.poster_label)
-        layout.addWidget(self.details_widget)
-        layout.addStretch()
+        layout.addWidget(self.details_widget, 1)
 
         self.status_combo.activated.connect(
             lambda _index: self._request_state_change("watch_state")

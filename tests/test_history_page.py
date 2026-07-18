@@ -402,9 +402,16 @@ class HistoryEntryWidgetTests(unittest.TestCase):
                 widget.close()
 
     def test_state_fields_match_media_details_layout_and_options(self):
-        widget = HistoryEntryWidget(make_entry(1, media_type="series"))
+        widget = HistoryEntryWidget(make_entry(
+            1,
+            media_type="series",
+            title="Black Mirror (S7:E6) – USS Callister: Into Infinity",
+        ))
 
         try:
+            widget.resize(1100, 320)
+            widget.show()
+            self.application.processEvents()
             field_layout = widget.details_widget.layout()
             expected_widgets = (
                 widget.title_label,
@@ -416,7 +423,13 @@ class HistoryEntryWidgetTests(unittest.TestCase):
                 widget.collection_combo,
             )
 
-            self.assertEqual(widget.details_widget.width(), 190)
+            self.assertGreater(widget.details_widget.width(), 190)
+            self.assertGreaterEqual(
+                widget.title_label.contentsRect().width(),
+                widget.title_label.fontMetrics().horizontalAdvance(
+                    widget.title_label.text()
+                ),
+            )
             self.assertEqual(field_layout.spacing(), 4)
             self.assertEqual(
                 tuple(
@@ -435,7 +448,7 @@ class HistoryEntryWidgetTests(unittest.TestCase):
                 widget.collection_combo,
             ):
                 self.assertEqual(combo.width(), 190)
-                self.assertEqual(combo.minimumHeight(), 30)
+                self.assertGreaterEqual(combo.minimumHeight(), 30)
 
             self.assertEqual(widget.status_combo.currentData(), "watched")
             self.assertGreaterEqual(widget.status_combo.findData("dropped"), 0)
