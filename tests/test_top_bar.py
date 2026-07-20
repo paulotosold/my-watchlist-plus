@@ -64,7 +64,9 @@ class TopBarTests(unittest.TestCase):
     def test_labels_and_default_filter_text_are_configurable(self):
         history_bar = TopBar(
             filter_label_text="Filter History:",
-            default_filter_text="All watched media, in chronological order",
+            default_filter_text=(
+                "All watch history entries, in chronological order"
+            ),
             find_media_label_text="Open Media:",
             find_media_placeholder="Find one title",
         )
@@ -73,7 +75,7 @@ class TopBarTests(unittest.TestCase):
             self.assertEqual(history_bar.filter_label.text(), "Filter History:")
             self.assertEqual(
                 history_bar.filter_input.text(),
-                "All watched media, in chronological order",
+                "All watch history entries, in chronological order",
             )
             self.assertEqual(history_bar.find_media_label.text(), "Open Media:")
             self.assertEqual(

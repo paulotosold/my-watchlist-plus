@@ -109,9 +109,19 @@ class HistoryRepositoryTests(unittest.TestCase):
             created_at="2026-07-10 20:00:00",
         )
 
-        excluded_id = self._insert_media(20, "movie", "No Longer Watched")
-        self._set_state(excluded_id, watch_state="to_watch")
-        self._insert_history(excluded_id, "2026-07-15", "2026-07-15")
+        to_watch_id = self._insert_media(20, "movie", "Watch Again")
+        self._set_state(to_watch_id, watch_state="to_watch")
+        to_watch_history_id = self._insert_history(
+            to_watch_id,
+            "2026-07-15",
+            "2026-07-15",
+        )
+        history_only_id = self._insert_media(22, "movie", "History Only")
+        history_only_history_id = self._insert_history(
+            history_only_id,
+            "2026-07-16",
+            "2026-07-16",
+        )
         watched_without_history_id = self._insert_media(
             21,
             "movie",
@@ -130,9 +140,23 @@ class HistoryRepositoryTests(unittest.TestCase):
             if statement.lstrip().upper().startswith(("SELECT", "WITH"))
         ]
         self.assertEqual(len(select_statements), 1)
-        self.assertEqual(len(entries), 3)
+        self.assertEqual(len(entries), 5)
 
-        rewatch, movie, first_session = entries
+        history_only, to_watch, rewatch, movie, first_session = entries
+        self.assertEqual(
+            history_only.watch_history_ids,
+            (history_only_history_id,),
+        )
+        self.assertEqual(history_only.title, "History Only")
+        self.assertIsNone(history_only.watch_state)
+
+        self.assertEqual(
+            to_watch.watch_history_ids,
+            (to_watch_history_id,),
+        )
+        self.assertEqual(to_watch.title, "Watch Again")
+        self.assertEqual(to_watch.watch_state, "to_watch")
+
         self.assertEqual(rewatch.watch_history_ids, (rewatch_id,))
         self.assertEqual(
             rewatch.title,

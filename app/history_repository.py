@@ -11,7 +11,7 @@ from app.media_details_formatters import (
 )
 
 
-HISTORY_DEFAULT_FILTER_TEXT = "All watched media, in chronological order"
+HISTORY_DEFAULT_FILTER_TEXT = "All watch history entries, in chronological order"
 
 
 @dataclass(frozen=True)
@@ -398,9 +398,8 @@ _DEFAULT_HISTORY_QUERY = """
     FROM watch_history wh
     JOIN media owner
         ON owner.id = wh.media_id
-    JOIN media_state owner_state
+    LEFT JOIN media_state owner_state
         ON owner_state.media_id = owner.id
-       AND owner_state.watch_state = 'watched'
     LEFT JOIN episode_details ed
         ON ed.media_id = owner.id
        AND owner.media_type = 'episode'
