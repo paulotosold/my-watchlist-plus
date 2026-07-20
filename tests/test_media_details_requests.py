@@ -32,6 +32,22 @@ class MediaDetailsRequestTests(unittest.TestCase):
         self.assertIsNot(emitted_draft, media_draft)
         card.close()
 
+    def test_info_button_requests_details_without_opening_info_panel(self):
+        card = MediaCard()
+        media_draft = {
+            "media_id": 12,
+            "metadata": {"title": "Test title"},
+        }
+        card.current_media = media_draft
+        spy = QSignalSpy(card.details_requested)
+
+        card.btn_info.click()
+
+        self.assertEqual(spy.count(), 1)
+        self.assertEqual(spy.at(0), [media_draft])
+        self.assertFalse(card.info_panel.isVisible())
+        card.close()
+
     def test_media_board_forwards_card_details_requests(self):
         board = MediaBoard(rows=1, columns=1)
         media_draft = {"media_id": 18}

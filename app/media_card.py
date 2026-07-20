@@ -145,7 +145,7 @@ class MediaCard(QFrame):
 
         # main card clicks
         self.overlay_layer.background_clicked.connect(self.on_overlay_clicked)
-        self.btn_info.clicked.connect(self.on_info_clicked)
+        self.btn_info.clicked.connect(self.request_details)
         self.btn_close.clicked.connect(self.on_close_clicked)
         self.btn_previous.clicked.connect(self.on_previous_clicked)
         self.btn_next.clicked.connect(self.on_next_clicked)
@@ -333,12 +333,6 @@ class MediaCard(QFrame):
         self._save_current_poster_index()
 
         self.update_poster_image()
-
-    def on_info_clicked(self):
-        print("info clicked")
-        self.info_panel.show()
-        self.info_panel.raise_()
-        self.overlay_layer.hide()
 
     def on_close_clicked(self):
         self.clear_pinned()
