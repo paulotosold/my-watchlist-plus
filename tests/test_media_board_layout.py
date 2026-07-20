@@ -4,11 +4,12 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app.media_board import MediaBoard
+from app.media_board import BOARD_BOTTOM_MARGIN, MediaBoard
 from app.watchlist_page import WatchlistPage
 
 
@@ -69,6 +70,67 @@ class MediaBoardLayoutTests(unittest.TestCase):
         self.assertEqual(
             self.board.cards[11].geometry().left(),
             self.board.cards[1].geometry().left(),
+        )
+
+    def test_unused_width_is_split_evenly_around_the_grid(self):
+        cases = (
+            (3, 1000),
+            (3, 1001),
+            (5, 1001),
+            (5, 1002),
+            (10, 1006),
+            (10, 1007),
+        )
+
+        for posters_per_row, width in cases:
+            with self.subTest(
+                posters_per_row=posters_per_row,
+                width=width,
+            ):
+                self.board.resize(width, 400)
+                self.board.set_posters_per_row(posters_per_row)
+                self.board.load_media(
+                    FakeFilteredMedia(posters_per_row + 2)
+                )
+                self.application.processEvents()
+
+                first_card = self.board.cards[0]
+                last_card_in_full_row = self.board.cards[
+                    posters_per_row - 1
+                ]
+                left_gap = first_card.geometry().left()
+                right_gap = (
+                    self.board.rect().right()
+                    - last_card_in_full_row.geometry().right()
+                )
+                spacing_width = (
+                    posters_per_row - 1
+                ) * self.board.grid_layout.horizontalSpacing()
+                unused_width = (
+                    self.board.width()
+                    - posters_per_row * self.board.card_width
+                    - spacing_width
+                )
+
+                self.assertEqual(self.board.width(), width)
+                self.assertEqual(left_gap + right_gap, unused_width)
+                self.assertLessEqual(abs(left_gap - right_gap), 1)
+                self.assertEqual(
+                    self.board.cards[
+                        posters_per_row
+                    ].geometry().left(),
+                    first_card.geometry().left(),
+                )
+
+    def test_content_height_includes_space_after_the_last_row(self):
+        self.board.load_media(FakeFilteredMedia(12))
+        self.application.processEvents()
+
+        last_card = self.board.cards[-1]
+        self.assertEqual(
+            self.board.minimumHeight() - 1
+            - last_card.geometry().bottom(),
+            BOARD_BOTTOM_MARGIN,
         )
 
     def test_empty_and_partial_results_create_no_placeholder_cards(self):
@@ -222,15 +284,47 @@ class WatchlistScrollTests(unittest.TestCase):
             self.application.processEvents()
 
     def test_watchlist_scrolls_only_vertically(self):
+        board = self.page.media_board
         vertical_bar = self.page.scroll_area.verticalScrollBar()
         horizontal_bar = self.page.scroll_area.horizontalScrollBar()
+        viewport = self.page.scroll_area.viewport()
 
         self.assertEqual(
             self.page.scroll_area.horizontalScrollBarPolicy(),
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
         )
+        self.assertEqual(
+            self.page.scroll_area.verticalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
         self.assertGreater(vertical_bar.maximum(), 0)
+        self.assertFalse(vertical_bar.isVisible())
         self.assertEqual(horizontal_bar.maximum(), 0)
+        self.assertEqual(board.width(), viewport.width())
+        spacing = board.grid_layout.horizontalSpacing()
+        expected_card_width = (
+            viewport.width()
+            - (board.posters_per_row - 1) * spacing
+        ) // board.posters_per_row
+        self.assertEqual(
+            board.card_width,
+            expected_card_width,
+        )
+
+        center = viewport.rect().center()
+        wheel_event = QWheelEvent(
+            QPointF(center),
+            QPointF(viewport.mapToGlobal(center)),
+            QPoint(),
+            QPoint(0, -120),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.ScrollUpdate,
+            False,
+        )
+        self.application.sendEvent(viewport, wheel_event)
+        self.application.processEvents()
+        self.assertGreater(vertical_bar.value(), 0)
 
         dismissed_card = self.page.media_board.cards[0]
         dismissed_card.btn_close.click()
@@ -252,6 +346,26 @@ class WatchlistScrollTests(unittest.TestCase):
         self.assertEqual(
             scroll_bar.value() - anchor_card.geometry().top(),
             offset_before,
+        )
+
+    def test_last_row_keeps_bottom_space_at_the_end_of_scroll(self):
+        board = self.page.media_board
+        scroll_bar = self.page.scroll_area.verticalScrollBar()
+        viewport = self.page.scroll_area.viewport()
+        scroll_bar.setValue(scroll_bar.maximum())
+        self._process_layout_events()
+
+        last_card = board.cards[-1]
+        last_card_bottom = last_card.mapToGlobal(
+            last_card.rect().bottomLeft()
+        ).y()
+        viewport_bottom = viewport.mapToGlobal(
+            viewport.rect().bottomLeft()
+        ).y()
+
+        self.assertEqual(
+            viewport_bottom - last_card_bottom,
+            BOARD_BOTTOM_MARGIN,
         )
 
     def test_horizontal_resize_changes_card_size_not_density(self):

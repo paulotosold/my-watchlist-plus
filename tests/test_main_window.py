@@ -392,6 +392,20 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         self.assertEqual(self.window.posters_per_row_control.value(), 6)
         self.assertEqual(self.window.media_board.posters_per_row, 6)
 
+    def test_watchlist_viewport_meets_the_status_bar_without_a_gap(self):
+        central_widget = self.window.centralWidget()
+        viewport = self.window.watchlist_page.scroll_area.viewport()
+        status_bar = self.window.status_bar
+
+        self.assertEqual(
+            central_widget.layout().contentsMargins().bottom(),
+            0,
+        )
+        self.assertEqual(
+            viewport.mapToGlobal(viewport.rect().bottomLeft()).y() + 1,
+            status_bar.mapToGlobal(status_bar.rect().topLeft()).y(),
+        )
+
     def test_window_supports_maximize_and_restore(self):
         self.assertGreater(self.window.maximumWidth(), 1440)
         self.assertGreater(self.window.maximumHeight(), 900)

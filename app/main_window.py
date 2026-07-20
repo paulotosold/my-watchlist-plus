@@ -60,7 +60,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(24, 14, 24, 18)
+        main_layout.setContentsMargins(24, 14, 24, 0)
         main_layout.setSpacing(10)
 
         self.section_tabs = QTabBar(self)

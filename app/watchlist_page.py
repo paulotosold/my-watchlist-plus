@@ -55,7 +55,7 @@ class WatchlistPage(QWidget):
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.scroll_area.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll_area.viewport().setObjectName(
@@ -175,6 +175,13 @@ class WatchlistPage(QWidget):
 
     def _stable_board_width(self):
         viewport_width = self.scroll_area.viewport().width()
+
+        if (
+            self.scroll_area.verticalScrollBarPolicy()
+            == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        ):
+            return viewport_width
+
         scroll_bar = self.scroll_area.verticalScrollBar()
         is_transient = bool(
             self.scroll_area.style().styleHint(

@@ -13,6 +13,7 @@ DEFAULT_POSTERS_PER_ROW = 5
 MAX_POSTERS_PER_ROW = 10
 
 BOARD_TOP_MARGIN = 12
+BOARD_BOTTOM_MARGIN = 12
 BOARD_SPACING = 12
 POSTER_ASPECT_HEIGHT = 3
 POSTER_ASPECT_WIDTH = 2
@@ -46,7 +47,12 @@ class MediaBoard(QWidget):
         )
 
         self.grid_layout = QGridLayout(self)
-        self.grid_layout.setContentsMargins(0, BOARD_TOP_MARGIN, 0, 0)
+        self.grid_layout.setContentsMargins(
+            0,
+            BOARD_TOP_MARGIN,
+            0,
+            BOARD_BOTTOM_MARGIN,
+        )
         self.grid_layout.setHorizontalSpacing(BOARD_SPACING)
         self.grid_layout.setVerticalSpacing(BOARD_SPACING)
         self.grid_layout.setAlignment(
@@ -178,7 +184,6 @@ class MediaBoard(QWidget):
         while self.grid_layout.count():
             self.grid_layout.takeAt(0)
 
-        left, top, right, bottom = self.grid_layout.getContentsMargins()
         spacing = self.grid_layout.horizontalSpacing()
         spacing_width = spacing * max(0, self.posters_per_row - 1)
         layout_width = min(
@@ -189,11 +194,24 @@ class MediaBoard(QWidget):
         )
         available_width = max(
             1,
-            layout_width - left - right - spacing_width,
+            layout_width - spacing_width,
         )
         self.card_width = max(
             1,
             available_width // self.posters_per_row,
+        )
+        cards_width = self.card_width * self.posters_per_row
+        unused_width = max(
+            0,
+            layout_width - cards_width - spacing_width,
+        )
+        left_margin = unused_width // 2
+        right_margin = unused_width - left_margin
+        self.grid_layout.setContentsMargins(
+            left_margin,
+            BOARD_TOP_MARGIN,
+            right_margin,
+            BOARD_BOTTOM_MARGIN,
         )
         self.card_height = max(
             1,
@@ -219,7 +237,10 @@ class MediaBoard(QWidget):
             * self.grid_layout.verticalSpacing()
         )
         self._content_height = (
-            top + bottom + rows_height + rows_spacing
+            BOARD_TOP_MARGIN
+            + BOARD_BOTTOM_MARGIN
+            + rows_height
+            + rows_spacing
             if self.cards
             else 0
         )
