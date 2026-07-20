@@ -184,7 +184,80 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
                 self.assertIsNone(entry)
                 dialog.close()
 
-    def test_cancelling_automatic_entry_keeps_watched_status_and_dirty_state(self):
+    def test_cancelling_automatic_entry_restores_movie_and_episode_status(self):
+        for media_type in ("movie", "episode"):
+            for previous_status in (None, "to_watch"):
+                with self.subTest(
+                    media_type=media_type,
+                    previous_status=previous_status,
+                ), patch(
+                    "app.media_details_dialog.WatchEntryDetailsDialog",
+                ) as watch_entry_dialog:
+                    watch_entry_dialog.return_value.exec.return_value = (
+                        QDialog.Rejected
+                    )
+                    dialog = self._dialog(
+                        media_type=media_type,
+                        watch_state=previous_status,
+                    )
+
+                    self._activate_status(dialog, "watched")
+                    dialog._apply_form_to_draft()
+
+                    self.assertEqual(
+                        dialog.status_combo.currentData(),
+                        previous_status,
+                    )
+                    self.assertEqual(
+                        dialog.media_draft["user_data"]["watch_state"],
+                        previous_status,
+                    )
+                    self.assertEqual(
+                        dialog.media_draft["user_data"]["watch_history"],
+                        [],
+                    )
+                    dialog.close()
+
+    def test_cancelling_manual_entry_does_not_change_watched_status(self):
+        with patch(
+            "app.media_details_dialog.WatchEntryDetailsDialog",
+        ) as watch_entry_dialog:
+            watch_entry_dialog.return_value.exec.return_value = QDialog.Rejected
+            dialog = self._dialog(media_type="movie", watch_state="watched")
+
+            dialog.add_watch_history()
+
+        self.assertEqual(dialog.status_combo.currentData(), "watched")
+        dialog.close()
+
+    def test_cancelling_automatic_entry_keeps_watched_with_existing_history(self):
+        existing_history = [{
+            "id": 20,
+            "date_earliest": "2026-01-01",
+            "date_latest": "2026-01-01",
+        }]
+
+        for media_type in ("movie", "episode"):
+            with self.subTest(media_type=media_type), patch(
+                "app.media_details_dialog.WatchEntryDetailsDialog",
+            ) as watch_entry_dialog:
+                watch_entry_dialog.return_value.exec.return_value = (
+                    QDialog.Rejected
+                )
+                dialog = self._dialog(
+                    media_type=media_type,
+                    watch_history=existing_history,
+                )
+
+                self._activate_status(dialog, "watched")
+
+                self.assertEqual(
+                    dialog.status_combo.currentData(),
+                    "watched",
+                )
+                dialog.close()
+
+    def test_cancelling_automatic_entry_keeps_watched_status_for_series(self):
         with patch(
             "app.media_details_dialog.WatchEntryDetailsDialog",
         ) as watch_entry_dialog:
@@ -273,13 +346,22 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         )
         dialog.close()
 
-    def _dialog(self, media_type="series", watch_state="to_watch"):
+    def _dialog(
+        self,
+        media_type="series",
+        watch_state="to_watch",
+        watch_history=None,
+    ):
+        media_draft = self._series_draft(
+            media_type=media_type,
+            watch_state=watch_state,
+        )
+        media_draft["user_data"]["watch_history"] = list(
+            watch_history or []
+        )
         return MediaDetailsDialog(
             None,
-            self._series_draft(
-                media_type=media_type,
-                watch_state=watch_state,
-            ),
+            media_draft,
             metadata_refresh_manager=self.manager,
         )
 

@@ -1674,9 +1674,9 @@ class MediaDetailsDialog(QDialog):
         if previous_status == "watched" or current_status != "watched":
             return
 
-        self._schedule_new_watch_entry_dialog()
+        self._schedule_new_watch_entry_dialog(previous_status)
 
-    def _schedule_new_watch_entry_dialog(self):
+    def _schedule_new_watch_entry_dialog(self, previous_status):
         if (
             self._is_populating
             or self._metadata_refresh_in_progress
@@ -1693,12 +1693,19 @@ class MediaDetailsDialog(QDialog):
         self._scheduled_watch_entry_generation = generation
         QTimer.singleShot(
             0,
-            lambda generation=generation: (
-                self._open_scheduled_watch_entry_dialog(generation)
+            lambda generation=generation, previous_status=previous_status: (
+                self._open_scheduled_watch_entry_dialog(
+                    generation,
+                    previous_status,
+                )
             ),
         )
 
-    def _open_scheduled_watch_entry_dialog(self, generation):
+    def _open_scheduled_watch_entry_dialog(
+        self,
+        generation,
+        previous_status,
+    ):
         if self._scheduled_watch_entry_generation == generation:
             self._scheduled_watch_entry_generation = None
 
@@ -1717,7 +1724,10 @@ class MediaDetailsDialog(QDialog):
         if active_modal is not None and active_modal is not self:
             return
 
-        self._open_watch_entry_details()
+        self._open_watch_entry_details(
+            automatic_previous_status=previous_status,
+            is_automatic=True,
+        )
 
     def _update_action_buttons(self):
         has_media_id = self.media_draft.get("media_id") is not None
@@ -1940,7 +1950,13 @@ class MediaDetailsDialog(QDialog):
     def add_watch_history(self):
         self._open_watch_entry_details()
 
-    def _open_watch_entry_details(self, entry=None):
+    def _open_watch_entry_details(
+        self,
+        entry=None,
+        *,
+        automatic_previous_status=None,
+        is_automatic=False,
+    ):
         if self._watch_entry_dialog_active:
             return
 
@@ -1953,6 +1969,10 @@ class MediaDetailsDialog(QDialog):
             self._watch_entry_dialog_active = False
 
         if result != QDialog.Accepted:
+            if is_automatic:
+                self._restore_status_after_automatic_entry_cancel(
+                    automatic_previous_status,
+                )
             return
 
         apply_watch_entry_result(
@@ -1980,6 +2000,23 @@ class MediaDetailsDialog(QDialog):
 
         self.mark_dirty()
         self.render_watch_history()
+
+    def _restore_status_after_automatic_entry_cancel(
+        self,
+        previous_status,
+    ):
+        metadata = self.media_draft.get("metadata") or {}
+
+        if metadata.get("media_type") not in {"movie", "episode"}:
+            return
+
+        user_data = self.media_draft.get("user_data") or {}
+
+        if user_data.get("watch_history"):
+            return
+
+        set_combo_value(self.status_combo, previous_status)
+        self.status_combo.reset_user_activation_baseline()
 
     def edit_note(self, entry=None):
         dialog = NoteDetailsDialog(self, entry)
