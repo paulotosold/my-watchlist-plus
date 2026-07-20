@@ -117,9 +117,13 @@ class FakePage(QWidget):
 class FakeWatchlistPage(FakePage):
     def __init__(self, parent=None):
         super().__init__("22 filtered media", parent)
+        self.posters_per_row_values = []
 
     def on_filter_input(self, filter_text):
         self.last_filter_text = filter_text
+
+    def set_posters_per_row(self, value):
+        self.posters_per_row_values.append(value)
 
 
 class FakeHistoryPage(FakePage):
@@ -133,6 +137,21 @@ class FakeConnection:
 
     def __exit__(self, exc_type, exc, traceback):
         return False
+
+
+class FakeWatchlistFilteredMedia:
+    def __init__(self, count=8):
+        self.media_list = [
+            {
+                "media_id": index,
+                "metadata": {"title": f"Media {index}"},
+                "posters": [],
+            }
+            for index in range(count)
+        ]
+
+    def refresh(self):
+        return self.media_list
 
 
 class MainWindowShellTests(unittest.TestCase):
@@ -186,6 +205,47 @@ class MainWindowShellTests(unittest.TestCase):
         self.window.section_tabs.setCurrentIndex(0)
         self.window.section_tabs.setCurrentIndex(1)
         self.assertEqual(history_page.load_count, 1)
+
+    def test_window_starts_large_and_can_resize_down_to_its_minimum(self):
+        self.assertEqual(self.window.size().toTuple(), (1440, 900))
+        self.assertEqual(self.window.minimumSize().toTuple(), (900, 600))
+
+        self.window.resize(1000, 650)
+        self.application.processEvents()
+        self.assertEqual(self.window.size().toTuple(), (1000, 650))
+
+        self.window.resize(700, 400)
+        self.application.processEvents()
+        self.assertEqual(self.window.size().toTuple(), (900, 600))
+
+    def test_posters_control_is_watchlist_only_and_preserves_status(self):
+        control = self.window.posters_per_row_control
+
+        self.assertFalse(control.isHidden())
+        self.assertEqual(control.posters_per_row, 5)
+        self.assertEqual(
+            self.window.status_bar.currentMessage(),
+            "22 filtered media",
+        )
+
+        control.increase_button.click()
+
+        self.assertEqual(control.posters_per_row, 6)
+        self.assertEqual(
+            self.window.watchlist_page.posters_per_row_values,
+            [6],
+        )
+        self.assertEqual(
+            self.window.status_bar.currentMessage(),
+            "22 filtered media",
+        )
+
+        self.window.section_tabs.setCurrentIndex(1)
+        self.assertTrue(control.isHidden())
+
+        self.window.section_tabs.setCurrentIndex(0)
+        self.assertFalse(control.isHidden())
+        self.assertEqual(control.posters_per_row, 6)
 
     def test_status_messages_from_inactive_pages_are_ignored(self):
         self.window.history_page.status_message_changed.emit("new history")
@@ -260,6 +320,90 @@ class MainWindowShellTests(unittest.TestCase):
         get_media.assert_called_once()
         build_draft.assert_called_once()
         open_details.assert_called_once_with(self.window, media_draft)
+
+
+class MainWindowWatchlistIntegrationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.filtered_media = FakeWatchlistFilteredMedia()
+        self.filtered_media_patch = patch(
+            "app.watchlist_page.FilteredMedia",
+            return_value=self.filtered_media,
+        )
+        self.history_connection_patch = patch(
+            "app.history_page.get_connection",
+            return_value=FakeConnection(),
+        )
+        self.history_entries_patch = patch(
+            "app.history_page.load_default_history_entries",
+            return_value=[],
+        )
+        self.filtered_media_patch.start()
+        self.history_connection_patch.start()
+        self.history_entries_patch.start()
+        self.window = MainWindow()
+        self.window.show()
+        self._process_events()
+
+    def tearDown(self):
+        self.window.close()
+        self.history_entries_patch.stop()
+        self.history_connection_patch.stop()
+        self.filtered_media_patch.stop()
+        self.application.processEvents()
+
+    def _process_events(self):
+        for _ in range(6):
+            self.application.processEvents()
+
+    def test_status_control_reflows_the_real_board_and_survives_tabs(self):
+        original_cards = list(self.window.media_board.cards)
+
+        self.window.posters_per_row_control.increase_button.click()
+        self._process_events()
+
+        self.assertEqual(self.window.media_board.posters_per_row, 6)
+        self.assertEqual(self.window.media_board.cards, original_cards)
+        self.assertEqual(self.window.media_board.row_count, 2)
+        self.assertEqual(
+            self.window.status_bar.currentMessage(),
+            "8 filtered media",
+        )
+
+        self.window.section_tabs.setCurrentIndex(1)
+        self.window.resize(1000, 650)
+        self._process_events()
+
+        self.assertTrue(self.window.posters_per_row_control.isHidden())
+        self.assertEqual(self.window.size().toTuple(), (1000, 650))
+        self.assertEqual(
+            self.window.history_page.scroll_area
+            .horizontalScrollBar().maximum(),
+            0,
+        )
+
+        self.window.section_tabs.setCurrentIndex(0)
+        self._process_events()
+
+        self.assertFalse(self.window.posters_per_row_control.isHidden())
+        self.assertEqual(self.window.posters_per_row_control.value(), 6)
+        self.assertEqual(self.window.media_board.posters_per_row, 6)
+
+    def test_window_supports_maximize_and_restore(self):
+        self.assertGreater(self.window.maximumWidth(), 1440)
+        self.assertGreater(self.window.maximumHeight(), 900)
+
+        self.window.showMaximized()
+        self._process_events()
+        self.assertTrue(self.window.isMaximized())
+
+        self.window.showNormal()
+        self._process_events()
+        self.assertFalse(self.window.isMaximized())
+        self.assertEqual(self.window.size().toTuple(), (1440, 900))
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from app.library_filter import DEFAULT_FILTER_TEXT
 from app.media_details_dialog import open_media_details_dialog
 from app.media_draft_builder import build_media_draft_from_db
 from app.media_repository import get_media_by_id
+from app.posters_per_row_control import PostersPerRowControl
 from app.watchlist_page import WatchlistPage
 from db.connection import get_connection
 
@@ -48,7 +49,8 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("My Watchlist+")
-        self.setFixedSize(1440, 900)
+        self.setMinimumSize(900, 600)
+        self.resize(1440, 900)
 
         central_widget = QWidget()
         central_widget.setObjectName("central-widget")
@@ -78,6 +80,8 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.page_stack, 1)
 
         self.status_bar = self.statusBar()
+        self.posters_per_row_control = PostersPerRowControl(self)
+        self.status_bar.addPermanentWidget(self.posters_per_row_control)
         self._pages = []
 
         self.watchlist_page = WatchlistPage(self)
@@ -90,8 +94,12 @@ class MainWindow(QMainWindow):
         self.media_board = self.watchlist_page.media_board
 
         self.section_tabs.currentChanged.connect(self._activate_page)
+        self.posters_per_row_control.value_changed.connect(
+            self._on_posters_per_row_changed
+        )
         self.section_tabs.setCurrentIndex(0)
         self.page_stack.setCurrentIndex(0)
+        self._update_posters_per_row_control_visibility()
         self.watchlist_page.ensure_loaded()
         self._show_active_status()
 
@@ -135,8 +143,24 @@ class MainWindow(QMainWindow):
 
         self.page_stack.setCurrentIndex(index)
         page = self._pages[index]
+        self._update_posters_per_row_control_visibility()
         page.ensure_loaded()
         self._show_active_status()
+
+    def _on_posters_per_row_changed(self, posters_per_row):
+        setter = getattr(
+            self.watchlist_page,
+            "set_posters_per_row",
+            None,
+        )
+
+        if callable(setter):
+            setter(posters_per_row)
+
+    def _update_posters_per_row_control_visibility(self):
+        self.posters_per_row_control.setVisible(
+            self.active_page is self.watchlist_page
+        )
 
     def _on_page_status_message(self, page, message):
         if page is self.active_page:

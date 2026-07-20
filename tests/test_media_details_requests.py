@@ -1,5 +1,6 @@
 import os
 import unittest
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -49,9 +50,10 @@ class MediaDetailsRequestTests(unittest.TestCase):
         card.close()
 
     def test_media_board_forwards_card_details_requests(self):
-        board = MediaBoard(rows=1, columns=1)
         media_draft = {"media_id": 18}
-        board.cards[0].current_media = media_draft
+        filtered_media = SimpleNamespace(media_list=[media_draft])
+        board = MediaBoard()
+        board.load_media(filtered_media)
         spy = QSignalSpy(board.details_requested)
 
         board.cards[0].request_details()

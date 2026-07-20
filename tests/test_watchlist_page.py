@@ -29,14 +29,30 @@ class FakeFilteredMedia:
 class FakeMediaBoard(QWidget):
     details_requested = Signal(object)
 
-    def __init__(self, rows, columns, parent=None):
+    def __init__(self, posters_per_row=5, parent=None):
         super().__init__(parent)
-        self.rows = rows
-        self.columns = columns
+        self.posters_per_row = posters_per_row
+        self.cards = []
         self.loaded_media = []
+        self.reflow_count = 0
+        self.layout_width = None
 
     def load_media(self, filtered_media):
         self.loaded_media.append(filtered_media)
+
+    def set_posters_per_row(self, value):
+        if value == self.posters_per_row:
+            return False
+
+        self.posters_per_row = value
+        return True
+
+    def set_layout_width(self, value):
+        self.layout_width = value
+        return True
+
+    def reflow_cards(self):
+        self.reflow_count += 1
 
 
 class WatchlistPageTests(unittest.TestCase):
@@ -77,6 +93,12 @@ class WatchlistPageTests(unittest.TestCase):
             self.page.top_bar.filter_input.text(),
             DEFAULT_FILTER_TEXT,
         )
+        self.assertEqual(self.page.posters_per_row, 5)
+
+    def test_posters_per_row_is_forwarded_to_the_board(self):
+        self.assertTrue(self.page.set_posters_per_row(7))
+        self.assertEqual(self.page.media_board.posters_per_row, 7)
+        self.assertFalse(self.page.set_posters_per_row(7))
 
     def test_invalidate_defers_refresh_until_ensure_loaded(self):
         current_filtered_media = self.page.filtered_media

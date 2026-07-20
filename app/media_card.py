@@ -84,25 +84,28 @@ def get_media_key(media_draft):
     return media_draft.get("media_id")
 
 class MediaCard(QFrame):
+    BASE_CARD_WIDTH = 269
+    BASE_SQUARE_BUTTON_SIZE = 42
+    BASE_PIN_BUTTON_WIDTH = 140
+    BASE_PIN_BUTTON_HEIGHT = 42
+    BASE_MARGIN = 6
+    MINIMUM_HITBOX_SIZE = 24
+
     state_changed = Signal()
     details_requested = Signal(object)
+    dismiss_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.is_disabled = True
-        self.is_hidden = False #substituir a check do pix por isso aqui
         self.is_pinned = False
 
         self.filtered_media = None
         self.current_media = None
-        self.media_history = []
-        self.current_index_in_history = -1
         self.poster_index = 0
         self.poster_filenames = []
         self.poster_index_by_media_key = {}
-        self.next_media_provider = None
-        self.has_next_media_provider = None
 
         # layer 1 – poster
         self.poster_pixmap = QPixmap()
@@ -125,19 +128,34 @@ class MediaCard(QFrame):
         #)
 
         # layer 2 – decorative overlay displayed when pinned
+        self.pin_pixmap = QPixmap("app/assets/pinned_overlay.png")
         self.pin_layer = QLabel(self)
         self.pin_layer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.pin_layer.setScaledContents(True)
+        self.pin_layer.setScaledContents(False)
 
         # layer 3 – interaction overlay
         self.overlay_layer = MediaCardOverlay(self)
         self.overlay_layer.hide()
 
-        self.btn_info = self.make_button("app/assets/media_card_icons/info.png", self.overlay_layer)
-        self.btn_close = self.make_button("app/assets/media_card_icons/close.png", self.overlay_layer)
-        self.btn_previous = self.make_button("app/assets/media_card_icons/prev.png", self.overlay_layer)
-        self.btn_next = self.make_button("app/assets/media_card_icons/next.png", self.overlay_layer)
-        self.btn_pin = self.make_button("app/assets/media_card_icons/pin.png", self.overlay_layer, size=(140, 42))
+        square_button_size = (
+            self.BASE_SQUARE_BUTTON_SIZE,
+            self.BASE_SQUARE_BUTTON_SIZE,
+        )
+        self.btn_info = self.make_button(
+            "app/assets/media_card_icons/info.png",
+            self.overlay_layer,
+            size=square_button_size,
+        )
+        self.btn_close = self.make_button(
+            "app/assets/media_card_icons/close.png",
+            self.overlay_layer,
+            size=square_button_size,
+        )
+        self.btn_pin = self.make_button(
+            "app/assets/media_card_icons/pin.png",
+            self.overlay_layer,
+            size=(self.BASE_PIN_BUTTON_WIDTH, self.BASE_PIN_BUTTON_HEIGHT),
+        )
 
         # layer 4 – info panel
         self.info_panel = MediaCardInfoPanel(self)
@@ -147,8 +165,6 @@ class MediaCard(QFrame):
         self.overlay_layer.background_clicked.connect(self.on_overlay_clicked)
         self.btn_info.clicked.connect(self.request_details)
         self.btn_close.clicked.connect(self.on_close_clicked)
-        self.btn_previous.clicked.connect(self.on_previous_clicked)
-        self.btn_next.clicked.connect(self.on_next_clicked)
         self.btn_pin.clicked.connect(self.on_pin_clicked)
 
         # info panel clicks
@@ -164,7 +180,11 @@ class MediaCard(QFrame):
 
     def make_button(self, icon_img_path, parent, size=(42, 42)):
         btn = QToolButton(parent)
-        btn.setFixedSize(size[0], size[1])
+        btn.base_icon_size = QSize(*size)
+        btn.setFixedSize(
+            max(self.MINIMUM_HITBOX_SIZE, size[0]),
+            max(self.MINIMUM_HITBOX_SIZE, size[1]),
+        )
         btn.setIcon(QIcon(icon_img_path))
         btn.setIconSize(QSize(size[0], size[1]))
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -182,84 +202,26 @@ class MediaCard(QFrame):
 
         return btn
 
-    def set_media_provider_callbacks(
-        self,
-        next_media_provider,
-        has_next_media_provider,
-    ):
-        self.next_media_provider = next_media_provider
-        self.has_next_media_provider = has_next_media_provider
-
     def set_filtered_media(self, filtered_media):
         self.filtered_media = filtered_media
-        self._update_navigation_buttons()
 
     def init_card_session(self, filtered_media, media_draft=None):
-        self.is_disabled = False
-        self.is_hidden = False
         self.filtered_media = filtered_media
-        self.media_history = []
-        self.current_index_in_history = -1
         self.poster_index = 0
         self.poster_filenames = []
-        self.poster_index_by_media_key = {}
-        self.show_card_elements()
         self.info_panel.hide()
 
         if media_draft is None:
-            self.load_next_media()
-        else:
-            self.add_media_to_history(media_draft)
+            self.clear_card()
+            self.filtered_media = filtered_media
+            return
 
-    def load_next_media(self):
-        if self.has_next_in_history():
-            self.current_index_in_history += 1
-            self.load_current_history_media()
-            return True
-
-        if self.next_media_provider is None:
-            return False
-
-        next_media = self.next_media_provider(self)
-
-        if next_media is None:
-            self._update_navigation_buttons()
-            return False
-
-        self.add_media_to_history(next_media)
-        return True
-
-    def add_media_to_history(self, media_draft):
-        if self.current_index_in_history < len(self.media_history) - 1:
-            self.media_history = self.media_history[:self.current_index_in_history + 1]
-
-        self.media_history.append(deepcopy(media_draft))
-        self.current_index_in_history = len(self.media_history) - 1
-        self.load_current_history_media()
-
-    def load_current_history_media(self):
-        if self.current_index_in_history < 0:
-            return False
-
-        if self.current_index_in_history >= len(self.media_history):
-            return False
-
-        self.load_card_media(self.media_history[self.current_index_in_history])
-        return True
-
-    def load_previous_media(self):
-        if self.is_hidden:
-            return self.load_current_history_media()
-
-        if self.current_index_in_history <= 0:
-            return False
-
-        self.current_index_in_history -= 1
-        return self.load_current_history_media()
+        self.is_disabled = False
+        self.show_card_elements()
+        self.load_card_media(media_draft)
 
     def load_card_media(self, media_draft):
         self.current_media = deepcopy(media_draft)
-        self.is_hidden = False
         self.poster_filenames = self._get_poster_filenames()
         self.poster_index = self._get_initial_poster_index()
         self._save_current_poster_index()
@@ -291,11 +253,6 @@ class MediaCard(QFrame):
 
         streaming_label, streaming_value, has_streaming = self._get_subscription_streaming_info()
         self.info_panel.set_streaming_info(streaming_label, streaming_value, has_streaming)
-        self._update_navigation_buttons()
-
-        #media_list = self.filtered_media.media_list
-        #current_index = self.filtered_media.next_media_index
-        #self.filtered_media.next_media_index = (current_index + 1) % len(media_list)
 
     def update_poster_image(self):
         if not self.poster_filenames:
@@ -313,16 +270,9 @@ class MediaCard(QFrame):
             self.poster_pixmap = QPixmap()
             return
 
-        #self.poster_pixmap = QPixmap("images/posters/" + poster_filename)
-        self.poster_layer.setPixmap(
-           self.poster_pixmap.scaledToWidth(
-               self.width(),
-               Qt.TransformationMode.SmoothTransformation
-           )
-        )
+        self._render_poster()
 
     def on_overlay_clicked(self):
-        print("overlay clicked")
         if self.poster_pixmap.isNull():
             return
 
@@ -336,26 +286,7 @@ class MediaCard(QFrame):
 
     def on_close_clicked(self):
         self.clear_pinned()
-        self.is_hidden = True
-        self.hide_card_elements()
-        self._update_navigation_buttons()
-        self.state_changed.emit()
-
-    def on_previous_clicked(self):
-        if not self._can_go_previous():
-            return
-
-        self.clear_pinned()
-        if self.load_previous_media():
-            self.state_changed.emit()
-
-    def on_next_clicked(self):
-        if not self._can_go_next():
-            return
-
-        self.clear_pinned()
-        if self.load_next_media():
-            self.state_changed.emit()
+        self.dismiss_requested.emit()
 
     def clear_pinned(self):
         self.is_pinned = False
@@ -369,11 +300,10 @@ class MediaCard(QFrame):
     def update_pin_status(self):
         if self.is_pinned:
             self.btn_pin.setIcon(QIcon("app/assets/media_card_icons/unpin.png"))
-            pixmap = QPixmap("app/assets/pinned_overlay.png")
-            if pixmap.isNull():
+            if self.pin_pixmap.isNull():
                 self.pin_layer.clear()
                 return
-            self.pin_layer.setPixmap(pixmap)
+            self._render_pin_overlay()
 
         else:
             self.btn_pin.setIcon(QIcon("app/assets/media_card_icons/pin.png"))
@@ -402,87 +332,30 @@ class MediaCard(QFrame):
         self.info_panel.hide()
         self.poster_layer.clear()
         self.poster_pixmap = QPixmap()
-        self.btn_next.show()
-        self.overlay_layer.show()
-        self.overlay_layer.raise_()
-        self._update_navigation_buttons()
+        self.overlay_layer.hide()
 
     def show_card_elements(self):
         self.btn_info.show()
         self.btn_close.show()
-        self.btn_next.show()
         self.btn_pin.show()
-        self._update_navigation_buttons()
 
     def clear_card(self):
         self.is_disabled = True
-        self.is_hidden = False
         self.is_pinned = False
         self.filtered_media = None
         self.current_media = None
-        self.media_history = []
-        self.current_index_in_history = -1
         self.poster_index = 0
         self.poster_filenames = []
         self.pin_layer.clear()
         self.update_pin_status()
         self.hide_card_elements()
-        self.btn_previous.hide()
-        self.btn_next.hide()
         self.overlay_layer.hide()
 
-    def refresh_navigation_buttons(self):
-        self._update_navigation_buttons()
-
     def has_visible_media(self):
-        return (
-            not self.is_disabled
-            and not self.is_hidden
-            and self.current_media is not None
-        )
+        return not self.is_disabled and self.current_media is not None
 
     def get_current_media_key(self):
         return get_media_key(self.current_media)
-
-    def has_next_in_history(self):
-        return self.current_index_in_history + 1 < len(self.media_history)
-
-    def _update_navigation_buttons(self):
-        if self.is_disabled:
-            self.btn_previous.hide()
-            self.btn_next.hide()
-            return
-
-        self.btn_previous.show()
-        self._set_button_active(self.btn_previous, self._can_go_previous())
-
-        self.btn_next.show()
-        self._set_button_active(self.btn_next, self._can_go_next())
-
-    def _set_button_active(self, button, is_active):
-        button.setEnabled(True)
-        button.setCursor(
-            Qt.CursorShape.PointingHandCursor
-            if is_active
-            else Qt.CursorShape.ArrowCursor
-        )
-
-        opacity = button.graphicsEffect()
-
-        if opacity is not None:
-            opacity.setOpacity(0.9 if is_active else 0.0)
-
-    def _can_go_previous(self):
-        return self.is_hidden or self.current_index_in_history > 0
-
-    def _can_go_next(self):
-        if self.has_next_in_history():
-            return True
-
-        if self.has_next_media_provider is None:
-            return False
-
-        return self.has_next_media_provider(self)
 
     def _get_metadata(self):
         return self.current_media.get("metadata", {}) if self.current_media else {}
@@ -663,6 +536,63 @@ class MediaCard(QFrame):
     def _poster_path(self, filename):
         return Path("data/media_posters") / filename.lstrip("/")
 
+    def _render_poster(self):
+        if self.poster_pixmap.isNull() or self.poster_layer.size().isEmpty():
+            self.poster_layer.clear()
+            return
+
+        scaled_pixmap = self.poster_pixmap.scaled(
+            self.poster_layer.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.poster_layer.setPixmap(scaled_pixmap)
+
+    def _render_pin_overlay(self):
+        if (
+            not self.is_pinned
+            or self.pin_pixmap.isNull()
+            or self.pin_layer.size().isEmpty()
+        ):
+            self.pin_layer.clear()
+            return
+
+        scaled_pixmap = self.pin_pixmap.scaled(
+            self.pin_layer.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.pin_layer.setPixmap(scaled_pixmap)
+
+    def _scale_button(self, button, scale_factor):
+        base_size = button.base_icon_size
+        icon_width = max(1, round(base_size.width() * scale_factor))
+        icon_height = max(1, round(base_size.height() * scale_factor))
+        hitbox_width = max(self.MINIMUM_HITBOX_SIZE, icon_width)
+        hitbox_height = max(self.MINIMUM_HITBOX_SIZE, icon_height)
+
+        button.setFixedSize(hitbox_width, hitbox_height)
+        button.setIconSize(QSize(icon_width, icon_height))
+
+    def _layout_buttons(self):
+        card_width = self.width()
+        card_height = self.height()
+        scale_factor = card_width / self.BASE_CARD_WIDTH
+        margin = max(0, round(self.BASE_MARGIN * scale_factor))
+
+        for button in (self.btn_info, self.btn_close, self.btn_pin):
+            self._scale_button(button, scale_factor)
+
+        self.btn_info.move(margin, margin)
+        self.btn_close.move(
+            card_width - self.btn_close.width() - margin,
+            margin,
+        )
+
+        pin_x = (card_width - self.btn_pin.width()) // 2
+        pin_y = card_height - self.btn_pin.height() - margin
+        self.btn_pin.move(pin_x, pin_y)
+
     def show_card(self):
         if self.is_disabled:
             return
@@ -675,43 +605,13 @@ class MediaCard(QFrame):
         rect = self.rect()
 
         self.poster_layer.setGeometry(rect)
-
-        # if not self.poster_pixmap.isNull():
-        #     scaled = self.poster_pixmap.scaled(
-        #         self.poster_layer.size(),
-        #         Qt.AspectRatioMode.KeepAspectRatio,
-        #         Qt.TransformationMode.SmoothTransformation
-        #     )
-        #
-        #     self.poster_layer.setPixmap(scaled)
-        #     self.poster_layer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        if not self.poster_pixmap.isNull():
-           scaled = self.poster_pixmap.scaledToWidth(
-               self.poster_layer.width(),
-               Qt.TransformationMode.SmoothTransformation
-           )
-           self.poster_layer.setPixmap(scaled)
-
-        #self.poster_correction_layer.setGeometry(rect)
         self.pin_layer.setGeometry(rect)
         self.overlay_layer.setGeometry(rect)
         self.info_panel.setGeometry(rect)
 
-        margin = 6
-        w = self.btn_info.width()
-        h = self.btn_info.height()
-
-        self.btn_info.move(margin, margin)
-        self.btn_close.move(rect.width() - w - margin, margin)
-
-        self.btn_previous.move(margin, rect.height() - h - margin)
-        self.btn_next.move(rect.width() - w - margin, rect.height() - h - margin)
-
-        print("#5")
-        pin_x = (rect.width() - self.btn_pin.width()) // 2
-        pin_y = rect.height() - self.btn_pin.height() - margin
-        self.btn_pin.move(pin_x, pin_y)
+        self._render_poster()
+        self._render_pin_overlay()
+        self._layout_buttons()
 
     def enterEvent(self, event):
         if not self.info_panel.isVisible() and not self.is_disabled:
@@ -720,7 +620,7 @@ class MediaCard(QFrame):
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        if not self.info_panel.isVisible() and not self.is_hidden:
+        if not self.info_panel.isVisible() and not self.is_disabled:
             self.overlay_layer.hide()
         super().leaveEvent(event)
 
