@@ -17,8 +17,8 @@ from app.library_filter import DEFAULT_FILTER_TEXT
 from app.media_details_dialog import open_media_details_dialog
 from app.media_draft_builder import build_media_draft_from_db
 from app.media_repository import get_media_by_id
-from app.posters_per_row_control import PostersPerRowControl
 from app.watchlist_page import WatchlistPage
+from app.watchlist_status_control import WatchlistStatusBar
 from db.connection import get_connection
 
 
@@ -79,9 +79,14 @@ class MainWindow(QMainWindow):
         self.page_stack = QStackedWidget(self)
         main_layout.addWidget(self.page_stack, 1)
 
-        self.status_bar = self.statusBar()
-        self.posters_per_row_control = PostersPerRowControl(self)
-        self.status_bar.addPermanentWidget(self.posters_per_row_control)
+        self.status_bar = WatchlistStatusBar(self)
+        self.setStatusBar(self.status_bar)
+        self.watchlist_status_control = (
+            self.status_bar.watchlist_control
+        )
+        self.posters_per_row_control = (
+            self.watchlist_status_control.poster_size_control
+        )
         self._pages = []
 
         self.watchlist_page = WatchlistPage(self)
@@ -97,9 +102,20 @@ class MainWindow(QMainWindow):
         self.posters_per_row_control.value_changed.connect(
             self._on_posters_per_row_changed
         )
+        self.watchlist_status_control.reload_requested.connect(
+            self._reload_watchlist
+        )
+        self.watchlist_status_control.pinned_only_requested.connect(
+            self._set_watchlist_pinned_only
+        )
+        self.watchlist_status_control.clear_all_pins_requested.connect(
+            self._clear_all_watchlist_pins
+        )
+        self.watchlist_page.watchlist_state_changed.connect(
+            self._on_watchlist_state_changed
+        )
         self.section_tabs.setCurrentIndex(0)
         self.page_stack.setCurrentIndex(0)
-        self._update_posters_per_row_control_visibility()
         self.watchlist_page.ensure_loaded()
         self._show_active_status()
 
@@ -143,7 +159,6 @@ class MainWindow(QMainWindow):
 
         self.page_stack.setCurrentIndex(index)
         page = self._pages[index]
-        self._update_posters_per_row_control_visibility()
         page.ensure_loaded()
         self._show_active_status()
 
@@ -157,14 +172,52 @@ class MainWindow(QMainWindow):
         if callable(setter):
             setter(posters_per_row)
 
+    def _update_watchlist_status_visibility(self):
+        is_watchlist = self.active_page is self.watchlist_page
+        self.watchlist_status_control.setVisible(is_watchlist)
+        self.posters_per_row_control.setVisible(is_watchlist)
+
     def _update_posters_per_row_control_visibility(self):
-        self.posters_per_row_control.setVisible(
-            self.active_page is self.watchlist_page
-        )
+        self._update_watchlist_status_visibility()
 
     def _on_page_status_message(self, page, message):
-        if page is self.active_page:
+        if page is self.active_page and page is not self.watchlist_page:
             self.status_bar.showMessage(message)
+
+    def _on_watchlist_state_changed(
+        self,
+        filtered_count,
+        pinned_count,
+        pinned_only,
+    ):
+        self.watchlist_status_control.set_state(
+            filtered_count,
+            pinned_count,
+            pinned_only,
+        )
+
+    def _sync_watchlist_status(self):
+        self._on_watchlist_state_changed(
+            self.watchlist_page.filtered_count,
+            self.watchlist_page.pinned_count,
+            self.watchlist_page.pinned_only,
+        )
+
+    def _reload_watchlist(self):
+        reload_button = self.watchlist_status_control.reload_button
+        reload_button.setEnabled(False)
+
+        try:
+            self.watchlist_page.reload_default_filter()
+        finally:
+            reload_button.setEnabled(True)
+            self._sync_watchlist_status()
+
+    def _set_watchlist_pinned_only(self, pinned_only):
+        self.watchlist_page.set_pinned_only(pinned_only)
+
+    def _clear_all_watchlist_pins(self):
+        self.watchlist_page.clear_all_pins()
 
     def _on_page_library_changed(self, source_page):
         for page in self._pages:
@@ -244,6 +297,13 @@ class MainWindow(QMainWindow):
 
     def _show_active_status(self):
         page = self.active_page
+        self._update_watchlist_status_visibility()
+
+        if page is self.watchlist_page:
+            self.status_bar.clearMessage()
+            self._sync_watchlist_status()
+            return
+
         self.status_bar.showMessage(page.status_message if page else "")
 
     def _update_status_bar(self):

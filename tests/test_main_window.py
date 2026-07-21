@@ -8,7 +8,7 @@ os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QSizeGrip, QWidget
 
 from app.library_filter import DEFAULT_FILTER_TEXT
 from app.main_window import MainWindow
@@ -115,15 +115,51 @@ class FakePage(QWidget):
 
 
 class FakeWatchlistPage(FakePage):
+    watchlist_state_changed = Signal(int, int, bool)
+
     def __init__(self, parent=None):
-        super().__init__("22 filtered media", parent)
+        super().__init__("22 filtered titles", parent)
+        self.filtered_count = 22
+        self.pinned_count = 0
+        self.pinned_only = False
         self.posters_per_row_values = []
+        self.pinned_only_values = []
+        self.reload_count = 0
+        self.clear_all_pins_count = 0
 
     def on_filter_input(self, filter_text):
         self.last_filter_text = filter_text
 
     def set_posters_per_row(self, value):
         self.posters_per_row_values.append(value)
+
+    def reload_default_filter(self):
+        self.reload_count += 1
+        self.pinned_only = False
+        self.watchlist_state_changed.emit(
+            self.filtered_count,
+            self.pinned_count,
+            self.pinned_only,
+        )
+
+    def set_pinned_only(self, pinned_only):
+        self.pinned_only_values.append(pinned_only)
+        self.pinned_only = bool(pinned_only and self.pinned_count)
+        self.watchlist_state_changed.emit(
+            self.filtered_count,
+            self.pinned_count,
+            self.pinned_only,
+        )
+
+    def clear_all_pins(self):
+        self.clear_all_pins_count += 1
+        self.pinned_count = 0
+        self.pinned_only = False
+        self.watchlist_state_changed.emit(
+            self.filtered_count,
+            self.pinned_count,
+            self.pinned_only,
+        )
 
 
 class FakeHistoryPage(FakePage):
@@ -188,7 +224,19 @@ class MainWindowShellTests(unittest.TestCase):
         self.assertEqual(self.window.history_page.load_count, 0)
         self.assertEqual(
             self.window.status_bar.currentMessage(),
-            "22 filtered media",
+            "",
+        )
+        self.assertFalse(self.window.watchlist_status_control.isHidden())
+        self.assertEqual(
+            self.window.watchlist_status_control.filtered_button.text(),
+            "22 filtered titles",
+        )
+        self.assertEqual(
+            self.window.watchlist_status_control.pinned_button.text(),
+            "0 pinned",
+        )
+        self.assertFalse(
+            self.window.watchlist_status_control.pinned_button.isEnabled()
         )
 
         history_page = self.window.history_page
@@ -225,19 +273,19 @@ class MainWindowShellTests(unittest.TestCase):
         self.assertEqual(control.posters_per_row, 5)
         self.assertEqual(
             self.window.status_bar.currentMessage(),
-            "22 filtered media",
+            "",
         )
 
-        control.increase_button.click()
+        control.plus_button.click()
 
-        self.assertEqual(control.posters_per_row, 6)
+        self.assertEqual(control.posters_per_row, 4)
         self.assertEqual(
             self.window.watchlist_page.posters_per_row_values,
-            [6],
+            [4],
         )
         self.assertEqual(
             self.window.status_bar.currentMessage(),
-            "22 filtered media",
+            "",
         )
 
         self.window.section_tabs.setCurrentIndex(1)
@@ -245,23 +293,54 @@ class MainWindowShellTests(unittest.TestCase):
 
         self.window.section_tabs.setCurrentIndex(0)
         self.assertFalse(control.isHidden())
-        self.assertEqual(control.posters_per_row, 6)
+        self.assertEqual(control.posters_per_row, 4)
 
     def test_status_messages_from_inactive_pages_are_ignored(self):
         self.window.history_page.status_message_changed.emit("new history")
         self.assertEqual(
             self.window.status_bar.currentMessage(),
-            "22 filtered media",
+            "",
         )
 
-        self.window.watchlist_page.status_message = "21 filtered media"
+        self.window.watchlist_page.status_message = "21 filtered titles"
         self.window.watchlist_page.status_message_changed.emit(
-            "21 filtered media"
+            "21 filtered titles"
         )
         self.assertEqual(
             self.window.status_bar.currentMessage(),
-            "21 filtered media",
+            "",
         )
+
+        self.window.section_tabs.setCurrentIndex(1)
+        self.window.history_page.status_message_changed.emit("new history")
+        self.assertEqual(
+            self.window.status_bar.currentMessage(),
+            "new history",
+        )
+
+    def test_watchlist_status_actions_are_forwarded_to_the_page(self):
+        control = self.window.watchlist_status_control
+        self.window.watchlist_page.pinned_count = 2
+        self.window.watchlist_page.watchlist_state_changed.emit(
+            22,
+            2,
+            False,
+        )
+
+        control.pinned_button.click()
+        control.filtered_button.click()
+        control.clear_all_pins_action.trigger()
+        control.reload_button.click()
+
+        self.assertEqual(
+            self.window.watchlist_page.pinned_only_values,
+            [True, False],
+        )
+        self.assertEqual(
+            self.window.watchlist_page.clear_all_pins_count,
+            1,
+        )
+        self.assertEqual(self.window.watchlist_page.reload_count, 1)
 
     def test_inline_history_change_only_invalidates_other_pages(self):
         self.window.section_tabs.setCurrentIndex(1)
@@ -361,16 +440,21 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
 
     def test_status_control_reflows_the_real_board_and_survives_tabs(self):
         original_cards = list(self.window.media_board.cards)
+        original_card_width = self.window.media_board.card_width
 
-        self.window.posters_per_row_control.increase_button.click()
+        self.window.posters_per_row_control.plus_button.click()
         self._process_events()
 
-        self.assertEqual(self.window.media_board.posters_per_row, 6)
+        self.assertEqual(self.window.media_board.posters_per_row, 4)
+        self.assertGreater(
+            self.window.media_board.card_width,
+            original_card_width,
+        )
         self.assertEqual(self.window.media_board.cards, original_cards)
         self.assertEqual(self.window.media_board.row_count, 2)
         self.assertEqual(
             self.window.status_bar.currentMessage(),
-            "8 filtered media",
+            "",
         )
 
         self.window.section_tabs.setCurrentIndex(1)
@@ -389,8 +473,72 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         self._process_events()
 
         self.assertFalse(self.window.posters_per_row_control.isHidden())
-        self.assertEqual(self.window.posters_per_row_control.value(), 6)
-        self.assertEqual(self.window.media_board.posters_per_row, 6)
+        self.assertEqual(self.window.posters_per_row_control.value(), 4)
+        self.assertEqual(self.window.media_board.posters_per_row, 4)
+
+    def test_status_scope_counts_and_clear_all_follow_the_real_board(self):
+        board = self.window.media_board
+        control = self.window.watchlist_status_control
+        original_cards = list(board.cards)
+
+        self.assertEqual(control.filtered_button.text(), "8 filtered titles")
+        self.assertEqual(control.pinned_button.text(), "0 pinned")
+        self.assertFalse(control.pinned_button.isEnabled())
+
+        original_cards[1].on_pin_clicked()
+        original_cards[5].on_pin_clicked()
+        self._process_events()
+
+        self.assertEqual(control.pinned_button.text(), "2 pinned")
+        self.assertTrue(control.pinned_button.isEnabled())
+
+        control.pinned_button.click()
+        self._process_events()
+
+        self.assertTrue(board.pinned_only)
+        self.assertEqual(
+            board.visible_cards,
+            [original_cards[1], original_cards[5]],
+        )
+        self.assertEqual(control.filtered_button.text(), "8 filtered titles")
+        self.assertTrue(control.pinned_button.isChecked())
+
+        control.clear_all_pins_action.trigger()
+        self._process_events()
+
+        self.assertFalse(board.pinned_only)
+        self.assertEqual(board.cards, original_cards)
+        self.assertEqual(board.visible_cards, original_cards)
+        self.assertEqual(control.pinned_button.text(), "0 pinned")
+        self.assertFalse(control.pinned_button.isEnabled())
+        self.assertTrue(control.filtered_button.isChecked())
+
+    def test_reload_restores_closed_cards_and_forces_filtered_scope(self):
+        board = self.window.media_board
+        control = self.window.watchlist_status_control
+        pinned_card = board.cards[3]
+        pinned_card.on_pin_clicked()
+        board.cards[0].btn_close.click()
+        self._process_events()
+        pinned_index_before_reload = board.cards.index(pinned_card)
+
+        control.pinned_button.click()
+        self._process_events()
+        self.assertTrue(board.pinned_only)
+        self.assertEqual(control.filtered_button.text(), "7 filtered titles")
+
+        control.reload_button.click()
+        self._process_events()
+
+        self.assertFalse(board.pinned_only)
+        self.assertEqual(len(board.cards), 8)
+        self.assertEqual(
+            board.cards.index(pinned_card),
+            pinned_index_before_reload,
+        )
+        self.assertTrue(pinned_card.is_pinned)
+        self.assertEqual(control.filtered_button.text(), "8 filtered titles")
+        self.assertEqual(control.pinned_button.text(), "1 pinned")
 
     def test_watchlist_viewport_meets_the_status_bar_without_a_gap(self):
         central_widget = self.window.centralWidget()
@@ -405,6 +553,47 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
             viewport.mapToGlobal(viewport.rect().bottomLeft()).y() + 1,
             status_bar.mapToGlobal(status_bar.rect().topLeft()).y(),
         )
+
+    def test_status_segments_fill_the_status_bar_height(self):
+        status_bar = self.window.status_bar
+        control = self.window.watchlist_status_control
+        segments = control.segment_container
+
+        self.assertEqual(control.geometry().top(), 0)
+        self.assertEqual(control.height(), status_bar.height())
+        self.assertGreater(control.width(), control.minimumSizeHint().width())
+        self.assertEqual(
+            segments.mapTo(
+                status_bar,
+                segments.rect().topLeft(),
+            ).y(),
+            0,
+        )
+        self.assertEqual(
+            segments.mapTo(
+                status_bar,
+                segments.rect().bottomLeft(),
+            ).y(),
+            status_bar.rect().bottom(),
+        )
+
+    def test_status_content_does_not_collapse_before_grip_layout(self):
+        status_bar = self.window.status_bar
+        control = self.window.watchlist_status_control
+        size_grip = status_bar.findChild(QSizeGrip)
+
+        self.assertIsNotNone(size_grip)
+        for transient_x in (0, 1):
+            with self.subTest(transient_x=transient_x):
+                size_grip.setGeometry(transient_x, 0, 17, 17)
+                size_grip.show()
+
+                status_bar._layout_watchlist_control()
+
+                self.assertEqual(
+                    control.width(),
+                    status_bar.width() - size_grip.width(),
+                )
 
     def test_window_supports_maximize_and_restore(self):
         self.assertGreater(self.window.maximumWidth(), 1440)

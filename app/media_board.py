@@ -21,6 +21,7 @@ POSTER_ASPECT_WIDTH = 2
 
 class MediaBoard(QWidget):
     details_requested = Signal(object)
+    view_state_changed = Signal(int, int, bool)
 
     def __init__(
         self,
@@ -34,6 +35,7 @@ class MediaBoard(QWidget):
         )
         self.cards = []
         self.filtered_media = None
+        self._pinned_only = False
         self.card_width = 0
         self.card_height = 0
         self.row_count = 0
@@ -62,6 +64,21 @@ class MediaBoard(QWidget):
         self._reflow_timer = QTimer(self)
         self._reflow_timer.setSingleShot(True)
         self._reflow_timer.timeout.connect(self.reflow_cards)
+
+    @property
+    def visible_cards(self):
+        if not self._pinned_only:
+            return list(self.cards)
+
+        return [card for card in self.cards if card.is_pinned]
+
+    @property
+    def pinned_count(self):
+        return sum(card.is_pinned for card in self.cards)
+
+    @property
+    def pinned_only(self):
+        return self._pinned_only
 
     def load_media(self, filtered_media):
         self.filtered_media = filtered_media
@@ -146,7 +163,37 @@ class MediaBoard(QWidget):
             self._dispose_card(card)
 
         self.cards = [card for card in target_cards if card is not None]
+        self._leave_pinned_only_if_empty()
         self.reflow_cards()
+        self._emit_view_state_changed()
+
+    def set_pinned_only(self, pinned_only):
+        pinned_only = bool(pinned_only)
+
+        if pinned_only and self.pinned_count == 0:
+            pinned_only = False
+
+        if pinned_only == self._pinned_only:
+            return False
+
+        self._pinned_only = pinned_only
+        self.reflow_cards()
+        self._emit_view_state_changed()
+        return True
+
+    def clear_all_pins(self):
+        pinned_cards = [card for card in self.cards if card.is_pinned]
+
+        if not pinned_cards:
+            return False
+
+        for card in pinned_cards:
+            card.clear_pinned()
+
+        self._pinned_only = False
+        self.reflow_cards()
+        self._emit_view_state_changed()
+        return True
 
     def set_posters_per_row(self, posters_per_row):
         clamped_value = self._clamp_posters_per_row(posters_per_row)
@@ -173,7 +220,9 @@ class MediaBoard(QWidget):
 
         self.cards.remove(card)
         self._dispose_card(card)
+        self._leave_pinned_only_if_empty()
         self.reflow_cards()
+        self._emit_view_state_changed()
 
     def reflow_cards(self):
         if self._reflow_timer.isActive():
@@ -222,15 +271,23 @@ class MediaBoard(QWidget):
             ),
         )
 
-        for index, card in enumerate(self.cards):
-            row, column = divmod(index, self.posters_per_row)
+        visible_cards = self.visible_cards
+        visible_card_set = set(visible_cards)
+
+        for card in self.cards:
             card.setFixedSize(self.card_width, self.card_height)
+
+            if card not in visible_card_set:
+                card.hide()
+
+        for index, card in enumerate(visible_cards):
+            row, column = divmod(index, self.posters_per_row)
             self.grid_layout.addWidget(card, row, column)
             card.show()
 
         self.row_count = ceil(
-            len(self.cards) / self.posters_per_row
-        ) if self.cards else 0
+            len(visible_cards) / self.posters_per_row
+        ) if visible_cards else 0
         rows_height = self.row_count * self.card_height
         rows_spacing = (
             max(0, self.row_count - 1)
@@ -241,7 +298,7 @@ class MediaBoard(QWidget):
             + BOARD_BOTTOM_MARGIN
             + rows_height
             + rows_spacing
-            if self.cards
+            if visible_cards
             else 0
         )
 
@@ -268,10 +325,34 @@ class MediaBoard(QWidget):
     def _create_card(self):
         card = MediaCard(self)
         card.details_requested.connect(self.details_requested.emit)
+        card.state_changed.connect(
+            lambda current_card=card: self._on_card_state_changed(
+                current_card
+            )
+        )
         card.dismiss_requested.connect(
             lambda current_card=card: self.dismiss_card(current_card)
         )
         return card
+
+    def _on_card_state_changed(self, card):
+        if card not in self.cards:
+            return
+
+        self._leave_pinned_only_if_empty()
+        self.reflow_cards()
+        self._emit_view_state_changed()
+
+    def _leave_pinned_only_if_empty(self):
+        if self._pinned_only and self.pinned_count == 0:
+            self._pinned_only = False
+
+    def _emit_view_state_changed(self):
+        self.view_state_changed.emit(
+            len(self.cards),
+            self.pinned_count,
+            self._pinned_only,
+        )
 
     def _dispose_card(self, card):
         self.grid_layout.removeWidget(card)

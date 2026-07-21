@@ -3,7 +3,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication
 
@@ -34,68 +34,94 @@ class PostersPerRowControlTests(unittest.TestCase):
             self.control.posters_per_row,
             DEFAULT_POSTERS_PER_ROW,
         )
-        self.assertEqual(self.control.title_label.text(), "Posters per row")
+        self.assertEqual(self.control.title_label.text(), "Poster size")
+        self.assertFalse(hasattr(self.control, "value_label"))
+        self.assertFalse(self.control.minus_button.icon().isNull())
+        self.assertFalse(self.control.plus_button.icon().isNull())
         self.assertEqual(
-            self.control.decrease_button.text(),
-            "\N{MINUS SIGN}",
-        )
-        self.assertEqual(self.control.value_label.text(), "5")
-        self.assertEqual(self.control.increase_button.text(), "+")
-        self.assertEqual(
-            self.control.decrease_button.accessibleName(),
-            "Decrease posters per row",
+            self.control.minus_button.iconSize(),
+            QSize(20, 20),
         )
         self.assertEqual(
-            self.control.increase_button.accessibleName(),
-            "Increase posters per row",
+            self.control.minus_button.size(),
+            QSize(24, 24),
+        )
+        self.assertFalse(self.control.minus_button.autoRaise())
+        self.assertIn(
+            "background: transparent",
+            self.control.minus_button.styleSheet(),
+        )
+        self.assertIn(
+            "QToolButton:disabled",
+            self.control.minus_button.styleSheet(),
         )
         self.assertEqual(
-            self.control.value_label.accessibleName(),
-            "Current posters per row: 5",
+            self.control.minus_button.accessibleName(),
+            "Decrease poster size",
         )
         self.assertEqual(
-            self.control.decrease_button.focusPolicy(),
+            self.control.plus_button.accessibleName(),
+            "Increase poster size",
+        )
+        self.assertEqual(
+            self.control.accessibleName(),
+            "Poster size: 5 posters per row",
+        )
+        self.assertEqual(
+            self.control.minus_button.focusPolicy(),
             Qt.FocusPolicy.StrongFocus,
         )
-        self.assertTrue(self.control.decrease_button.toolTip())
-        self.assertTrue(self.control.increase_button.toolTip())
+        self.assertTrue(self.control.minus_button.toolTip())
+        self.assertTrue(self.control.plus_button.toolTip())
+
+    def test_minus_makes_posters_smaller_and_plus_makes_them_larger(self):
+        spy = QSignalSpy(self.control.value_changed)
+
+        self.control.minus_button.click()
+        self.control.plus_button.click()
+
+        self.assertEqual(self.control.posters_per_row, 5)
+        self.assertEqual(
+            [spy.at(index)[0] for index in range(spy.count())],
+            [6, 5],
+        )
 
     def test_buttons_clamp_at_limits_without_extra_emissions(self):
         spy = QSignalSpy(self.control.value_changed)
 
         for _ in range(10):
-            self.control.decrease_button.click()
-
-        self.assertEqual(
-            self.control.posters_per_row,
-            MIN_POSTERS_PER_ROW,
-        )
-        self.assertFalse(self.control.decrease_button.isEnabled())
-        self.assertEqual(spy.count(), 2)
-
-        for _ in range(10):
-            self.control.increase_button.click()
+            self.control.minus_button.click()
 
         self.assertEqual(
             self.control.posters_per_row,
             MAX_POSTERS_PER_ROW,
         )
-        self.assertFalse(self.control.increase_button.isEnabled())
+        self.assertFalse(self.control.minus_button.isEnabled())
+        self.assertEqual(spy.count(), 5)
+
+        for _ in range(10):
+            self.control.plus_button.click()
+
         self.assertEqual(
-            self.control.value_label.accessibleName(),
-            "Current posters per row: 10",
+            self.control.posters_per_row,
+            MIN_POSTERS_PER_ROW,
+        )
+        self.assertFalse(self.control.plus_button.isEnabled())
+        self.assertEqual(
+            self.control.accessibleName(),
+            "Poster size: 3 posters per row",
         )
         self.assertEqual(
             [spy.at(index)[0] for index in range(spy.count())],
-            [4, 3, 4, 5, 6, 7, 8, 9, 10],
+            [6, 7, 8, 9, 10, 9, 8, 7, 6, 5, 4, 3],
         )
 
     def test_space_activates_the_focused_tool_button(self):
         spy = QSignalSpy(self.control.value_changed)
-        self.control.increase_button.setFocus()
+        self.control.minus_button.setFocus()
 
         QTest.keyClick(
-            self.control.increase_button,
+            self.control.minus_button,
             Qt.Key.Key_Space,
         )
 

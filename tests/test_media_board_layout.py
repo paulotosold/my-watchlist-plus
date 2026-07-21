@@ -178,6 +178,170 @@ class MediaBoardLayoutTests(unittest.TestCase):
         )
         self.assertFalse(self.board.set_posters_per_row(10))
 
+    def test_pinned_projection_restores_the_exact_canonical_grid(self):
+        self.board.load_media(FakeFilteredMedia(12))
+        self.application.processEvents()
+        original_cards = list(self.board.cards)
+        original_geometries = [
+            card.geometry().getRect() for card in original_cards
+        ]
+        original_cards[2].poster_index = 4
+        original_cards[2].on_pin_clicked()
+        original_cards[8].on_pin_clicked()
+
+        self.assertTrue(self.board.set_pinned_only(True))
+        self.application.processEvents()
+
+        self.assertEqual(self.board.cards, original_cards)
+        self.assertEqual(
+            self.board.visible_cards,
+            [original_cards[2], original_cards[8]],
+        )
+        self.assertEqual(self.board.pinned_count, 2)
+        self.assertTrue(self.board.pinned_only)
+        self.assertEqual(self.board.row_count, 1)
+        self.assertFalse(original_cards[2].isHidden())
+        self.assertFalse(original_cards[8].isHidden())
+
+        for card in original_cards:
+            self.assertEqual(
+                card.size().toTuple(),
+                (self.board.card_width, self.board.card_height),
+            )
+
+            if card not in self.board.visible_cards:
+                self.assertTrue(card.isHidden())
+
+        self.assertTrue(self.board.set_pinned_only(False))
+        self.application.processEvents()
+
+        self.assertEqual(self.board.cards, original_cards)
+        self.assertEqual(self.board.visible_cards, original_cards)
+        self.assertEqual(
+            [card.geometry().getRect() for card in original_cards],
+            original_geometries,
+        )
+        self.assertEqual(original_cards[2].poster_index, 4)
+        self.assertFalse(self.board.pinned_only)
+
+    def test_view_state_signal_is_aggregated_once_per_operation(self):
+        spy = QSignalSpy(self.board.view_state_changed)
+        filtered_media = FakeFilteredMedia(6)
+
+        self.board.load_media(filtered_media)
+        self.assertEqual(spy.count(), 1)
+        self.assertEqual(spy.at(0), [6, 0, False])
+
+        pinned_card = self.board.cards[1]
+        pinned_card.on_pin_clicked()
+        self.assertEqual(spy.count(), 2)
+        self.assertEqual(spy.at(1), [6, 1, False])
+
+        self.assertTrue(self.board.set_pinned_only(True))
+        self.assertEqual(spy.count(), 3)
+        self.assertEqual(spy.at(2), [6, 1, True])
+
+        pinned_card.on_pin_clicked()
+        self.assertEqual(spy.count(), 4)
+        self.assertEqual(spy.at(3), [6, 0, False])
+        self.assertFalse(self.board.pinned_only)
+        self.assertEqual(self.board.visible_cards, self.board.cards)
+
+        self.assertFalse(self.board.set_pinned_only(True))
+        self.assertFalse(self.board.clear_all_pins())
+        self.assertEqual(spy.count(), 4)
+
+        self.board.load_media(filtered_media)
+        self.assertEqual(spy.count(), 5)
+        self.assertEqual(spy.at(4), [6, 0, False])
+
+        self.board.cards[0].on_pin_clicked()
+        self.assertEqual(spy.count(), 6)
+
+    def test_clear_all_pins_emits_once_and_returns_to_filtered(self):
+        self.board.load_media(FakeFilteredMedia(9))
+        self.board.cards[1].on_pin_clicked()
+        self.board.cards[7].on_pin_clicked()
+        self.board.set_pinned_only(True)
+        spy = QSignalSpy(self.board.view_state_changed)
+
+        self.assertTrue(self.board.clear_all_pins())
+        self.application.processEvents()
+
+        self.assertEqual(spy.count(), 1)
+        self.assertEqual(spy.at(0), [9, 0, False])
+        self.assertFalse(self.board.pinned_only)
+        self.assertEqual(self.board.pinned_count, 0)
+        self.assertEqual(self.board.visible_cards, self.board.cards)
+        self.assertTrue(all(not card.is_pinned for card in self.board.cards))
+
+        self.assertFalse(self.board.clear_all_pins())
+        self.assertEqual(spy.count(), 1)
+
+    def test_unpin_and_dismiss_update_pinned_projection(self):
+        self.board.load_media(FakeFilteredMedia(8))
+        first_pinned = self.board.cards[1]
+        second_pinned = self.board.cards[5]
+        first_pinned.on_pin_clicked()
+        second_pinned.on_pin_clicked()
+        self.board.set_pinned_only(True)
+        spy = QSignalSpy(self.board.view_state_changed)
+
+        first_pinned.on_pin_clicked()
+        self.application.processEvents()
+
+        self.assertEqual(spy.count(), 1)
+        self.assertEqual(spy.at(0), [8, 1, True])
+        self.assertTrue(first_pinned.isHidden())
+        self.assertEqual(self.board.visible_cards, [second_pinned])
+        self.assertEqual(
+            second_pinned.geometry().left(),
+            self.board.grid_layout.contentsMargins().left(),
+        )
+
+        second_pinned.btn_close.click()
+        self.application.processEvents()
+
+        self.assertEqual(spy.count(), 2)
+        self.assertEqual(spy.at(1), [7, 0, False])
+        self.assertFalse(self.board.pinned_only)
+        self.assertNotIn(second_pinned, self.board.cards)
+        self.assertEqual(self.board.visible_cards, self.board.cards)
+
+    def test_refresh_reconciles_canonical_roster_while_pinned_only(self):
+        filtered_media = FakeFilteredMedia(8)
+        self.board.load_media(filtered_media)
+        first_pinned = self.board.cards[2]
+        second_pinned = self.board.cards[6]
+        first_pinned.on_pin_clicked()
+        second_pinned.on_pin_clicked()
+        self.board.set_pinned_only(True)
+        spy = QSignalSpy(self.board.view_state_changed)
+
+        filtered_media.media_list = list(
+            reversed(filtered_media.media_list)
+        )
+        self.board.load_media(filtered_media)
+        self.application.processEvents()
+
+        self.assertEqual(spy.count(), 1)
+        self.assertEqual(spy.at(0), [8, 2, True])
+        self.assertIs(self.board.cards[2], first_pinned)
+        self.assertIs(self.board.cards[6], second_pinned)
+        self.assertEqual(
+            self.board.visible_cards,
+            [first_pinned, second_pinned],
+        )
+
+        filtered_media.media_list = [make_media(0), make_media(1)]
+        self.board.load_media(filtered_media)
+        self.application.processEvents()
+
+        self.assertEqual(spy.count(), 2)
+        self.assertEqual(spy.at(1), [2, 0, False])
+        self.assertFalse(self.board.pinned_only)
+        self.assertEqual(self.board.visible_cards, self.board.cards)
+
     def test_pin_keeps_its_logical_position_during_refresh(self):
         filtered_media = FakeFilteredMedia(8)
         self.board.load_media(filtered_media)
@@ -329,7 +493,7 @@ class WatchlistScrollTests(unittest.TestCase):
         dismissed_card = self.page.media_board.cards[0]
         dismissed_card.btn_close.click()
         self.application.processEvents()
-        self.assertEqual(self.page.status_message, "20 filtered media")
+        self.assertEqual(self.page.status_message, "19 filtered titles")
 
     def test_reflow_keeps_the_anchor_card_at_the_same_vertical_offset(self):
         board = self.page.media_board

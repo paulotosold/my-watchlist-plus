@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from pathlib import Path
+
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
 
 from app.media_board import (
@@ -10,8 +13,25 @@ from app.media_board import (
 )
 
 
+ASSETS_DIRECTORY = Path(__file__).resolve().parent / "assets"
+STATUS_ICON_SIZE = 20
+STATUS_BUTTON_SIZE = 24
+ICON_BUTTON_STYLE = """
+QToolButton {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+QToolButton:disabled {
+    background: transparent;
+    border: none;
+    color: #8a8a8a;
+}
+"""
+
+
 class PostersPerRowControl(QWidget):
-    """Compact status-bar control for changing the Watchlist density."""
+    """Status-bar control expressing grid density as poster size."""
 
     value_changed = Signal(int)
 
@@ -24,46 +44,38 @@ class PostersPerRowControl(QWidget):
         super().__init__(parent)
 
         self.setObjectName("postersPerRowControl")
-        self.setAccessibleName("Posters per row")
         self._value = self._clamp(value)
 
-        self.title_label = QLabel("Posters per row", self)
-        self.title_label.setObjectName("postersPerRowLabel")
+        self.title_label = QLabel("Poster size", self)
+        self.title_label.setObjectName("posterSizeLabel")
 
-        self.decrease_button = self._make_button(
-            "\N{MINUS SIGN}",
-            object_name="decreasePostersPerRowButton",
-            accessible_name="Decrease posters per row",
-            tooltip="Show fewer posters per row",
+        self.minus_button = self._make_button(
+            "status_bar_minus.png",
+            object_name="decreasePosterSizeButton",
+            accessible_name="Decrease poster size",
+            tooltip="Decrease poster size (show more posters per row)",
         )
-        self.minus_button = self.decrease_button
+        self.plus_button = self._make_button(
+            "status_bar_plus.png",
+            object_name="increasePosterSizeButton",
+            accessible_name="Increase poster size",
+            tooltip="Increase poster size (show fewer posters per row)",
+        )
 
-        self.value_label = QLabel(str(self._value), self)
-        self.value_label.setObjectName("postersPerRowValue")
-        self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.value_label.setMinimumWidth(
-            self.value_label.fontMetrics().horizontalAdvance("10")
-        )
-        self._update_accessible_value()
-
-        self.increase_button = self._make_button(
-            "+",
-            object_name="increasePostersPerRowButton",
-            accessible_name="Increase posters per row",
-            tooltip="Show more posters per row",
-        )
-        self.plus_button = self.increase_button
+        # Compatibility aliases use the visual poster-size semantics.
+        self.decrease_button = self.minus_button
+        self.increase_button = self.plus_button
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         layout.addWidget(self.title_label)
-        layout.addWidget(self.decrease_button)
-        layout.addWidget(self.value_label)
-        layout.addWidget(self.increase_button)
+        layout.addWidget(self.minus_button)
+        layout.addWidget(self.plus_button)
 
-        self.decrease_button.clicked.connect(self.decrement)
-        self.increase_button.clicked.connect(self.increment)
+        self.minus_button.clicked.connect(self.increment)
+        self.plus_button.clicked.connect(self.decrement)
+        self._update_accessible_value()
         self._update_button_states()
 
     def value(self):
@@ -81,7 +93,6 @@ class PostersPerRowControl(QWidget):
             return
 
         self._value = clamped_value
-        self.value_label.setText(str(self._value))
         self._update_accessible_value()
         self._update_button_states()
         self.value_changed.emit(self._value)
@@ -101,7 +112,7 @@ class PostersPerRowControl(QWidget):
 
     def _make_button(
         self,
-        text,
+        icon_filename,
         *,
         object_name,
         accessible_name,
@@ -109,8 +120,14 @@ class PostersPerRowControl(QWidget):
     ):
         button = QToolButton(self)
         button.setObjectName(object_name)
-        button.setText(text)
-        button.setAutoRaise(True)
+        button.setIcon(
+            QIcon(str(ASSETS_DIRECTORY / icon_filename))
+        )
+        button.setIconSize(
+            QSize(STATUS_ICON_SIZE, STATUS_ICON_SIZE)
+        )
+        button.setFixedSize(STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
+        button.setStyleSheet(ICON_BUTTON_STYLE)
         button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setAccessibleName(accessible_name)
@@ -118,14 +135,14 @@ class PostersPerRowControl(QWidget):
         return button
 
     def _update_button_states(self):
-        self.decrease_button.setEnabled(
-            self._value > MIN_POSTERS_PER_ROW
-        )
-        self.increase_button.setEnabled(
+        self.minus_button.setEnabled(
             self._value < MAX_POSTERS_PER_ROW
+        )
+        self.plus_button.setEnabled(
+            self._value > MIN_POSTERS_PER_ROW
         )
 
     def _update_accessible_value(self):
-        self.value_label.setAccessibleName(
-            f"Current posters per row: {self._value}"
+        self.setAccessibleName(
+            f"Poster size: {self._value} posters per row"
         )
