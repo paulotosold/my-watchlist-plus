@@ -147,7 +147,12 @@ class MainWindow(QMainWindow):
                 message,
             )
         )
-        page.find_media_requested.connect(self.on_find_media_input)
+        page.find_media_requested.connect(
+            lambda media_query, source_page=page: self.on_find_media_input(
+                media_query,
+                source_page=source_page,
+            )
+        )
         page.details_requested.connect(self.on_details_requested)
         page.library_changed.connect(
             lambda source=page: self._on_page_library_changed(source)
@@ -238,12 +243,19 @@ class MainWindow(QMainWindow):
         self.filtered_media = FilteredMedia()
         self.refresh_media_view()
 
-    def on_find_media_input(self, media_query):
+    def on_find_media_input(self, media_query, *, source_page=None):
         print("Find Media:", media_query)
         result = handle_find_media_input(self, media_query)
 
         if result and result.get("status") in {"saved", "deleted"}:
-            self.refresh_media_view()
+            source_page = source_page or getattr(self, "active_page", None)
+            top_bar = getattr(source_page, "top_bar", None)
+            find_media_input = getattr(top_bar, "find_media_input", None)
+
+            if find_media_input is not None:
+                find_media_input.clear()
+
+            self._refresh_after_media_change()
 
         return result
 
@@ -265,7 +277,7 @@ class MainWindow(QMainWindow):
         result = open_media_details_dialog(self, media_draft)
 
         if result and result.get("status") in {"saved", "deleted"}:
-            self.refresh_media_view()
+            self._refresh_after_media_change()
 
         return result
 
@@ -291,6 +303,20 @@ class MainWindow(QMainWindow):
             page.invalidate()
 
         if active_page is not None:
+            active_page.ensure_loaded()
+
+        self._show_active_status()
+
+    def _refresh_after_media_change(self):
+        """Synchronize edits without rebuilding the watchlist grid."""
+        active_page = self.active_page
+        self.watchlist_page.refresh_preserving_grid()
+
+        for page in self._pages:
+            if page is not self.watchlist_page:
+                page.invalidate()
+
+        if active_page is not None and active_page is not self.watchlist_page:
             active_page.ensure_loaded()
 
         self._show_active_status()

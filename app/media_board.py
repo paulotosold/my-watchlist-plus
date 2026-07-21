@@ -167,6 +167,60 @@ class MediaBoard(QWidget):
         self.reflow_cards()
         self._emit_view_state_changed()
 
+    def reconcile_media(self, filtered_media, previously_filtered_media):
+        """Refresh visible cards without rebuilding the current grid order."""
+        self.filtered_media = filtered_media
+        media_list = list(
+            filtered_media.media_list if filtered_media else []
+        )
+        previous_media_keys = {
+            get_media_key(media_draft)
+            for media_draft in previously_filtered_media
+            if get_media_key(media_draft) is not None
+        }
+        refreshed_media_by_key = {}
+
+        for media_draft in media_list:
+            media_key = get_media_key(media_draft)
+
+            if media_key is not None and media_key not in refreshed_media_by_key:
+                refreshed_media_by_key[media_key] = media_draft
+
+        reconciled_cards = []
+        reused_media_keys = set()
+
+        for card in list(self.cards):
+            media_key = card.get_current_media_key()
+            refreshed_media = refreshed_media_by_key.get(media_key)
+
+            if refreshed_media is None or media_key in reused_media_keys:
+                self._dispose_card(card)
+                continue
+
+            card.init_card_session(filtered_media, refreshed_media)
+            reconciled_cards.append(card)
+            reused_media_keys.add(media_key)
+
+        for media_draft in media_list:
+            media_key = get_media_key(media_draft)
+
+            if (
+                media_key is None
+                or media_key in previous_media_keys
+                or media_key in reused_media_keys
+            ):
+                continue
+
+            card = self._create_card()
+            card.init_card_session(filtered_media, media_draft)
+            reconciled_cards.append(card)
+            reused_media_keys.add(media_key)
+
+        self.cards = reconciled_cards
+        self._leave_pinned_only_if_empty()
+        self.reflow_cards()
+        self._emit_view_state_changed()
+
     def set_pinned_only(self, pinned_only):
         pinned_only = bool(pinned_only)
 

@@ -8,7 +8,7 @@ os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QApplication, QSizeGrip, QWidget
+from PySide6.QtWidgets import QApplication, QLineEdit, QSizeGrip, QWidget
 
 from app.library_filter import DEFAULT_FILTER_TEXT
 from app.main_window import MainWindow
@@ -69,20 +69,34 @@ class MainWindowInputTests(unittest.TestCase):
             ("cancelled", False),
         ):
             with self.subTest(status=status):
-                harness = SimpleNamespace(refresh_media_view=Mock())
+                find_media_input = Mock()
+                source_page = SimpleNamespace(
+                    top_bar=SimpleNamespace(
+                        find_media_input=find_media_input,
+                    )
+                )
+                harness = SimpleNamespace(
+                    _refresh_after_media_change=Mock(),
+                )
 
                 with patch(
                     "app.main_window.handle_find_media_input",
                     return_value={"status": status},
                 ) as handler:
-                    MainWindow.on_find_media_input(harness, "tt1234567")
+                    MainWindow.on_find_media_input(
+                        harness,
+                        "tt1234567",
+                        source_page=source_page,
+                    )
 
                 handler.assert_called_once_with(harness, "tt1234567")
 
                 if should_refresh:
-                    harness.refresh_media_view.assert_called_once_with()
+                    find_media_input.clear.assert_called_once_with()
+                    harness._refresh_after_media_change.assert_called_once_with()
                 else:
-                    harness.refresh_media_view.assert_not_called()
+                    find_media_input.clear.assert_not_called()
+                    harness._refresh_after_media_change.assert_not_called()
 
 
 class FakePage(QWidget):
@@ -94,7 +108,9 @@ class FakePage(QWidget):
     def __init__(self, status_message, parent=None):
         super().__init__(parent)
         self.status_message = status_message
-        self.top_bar = object()
+        self.top_bar = SimpleNamespace(
+            find_media_input=QLineEdit(self),
+        )
         self.media_board = object()
         self.filtered_media = object()
         self.is_invalidated = True
@@ -125,6 +141,7 @@ class FakeWatchlistPage(FakePage):
         self.posters_per_row_values = []
         self.pinned_only_values = []
         self.reload_count = 0
+        self.preserved_refresh_count = 0
         self.clear_all_pins_count = 0
 
     def on_filter_input(self, filter_text):
@@ -141,6 +158,10 @@ class FakeWatchlistPage(FakePage):
             self.pinned_count,
             self.pinned_only,
         )
+
+    def refresh_preserving_grid(self):
+        self.preserved_refresh_count += 1
+        self.is_invalidated = False
 
     def set_pinned_only(self, pinned_only):
         self.pinned_only_values.append(pinned_only)
@@ -358,6 +379,12 @@ class MainWindowShellTests(unittest.TestCase):
     def test_saved_find_refreshes_active_and_defers_inactive_page(self):
         self.window.section_tabs.setCurrentIndex(1)
         history_load_count = self.window.history_page.load_count
+        self.window.watchlist_page.top_bar.find_media_input.setText(
+            "keep this query"
+        )
+        self.window.history_page.top_bar.find_media_input.setText(
+            "tt1234567"
+        )
 
         with patch(
             "app.main_window.handle_find_media_input",
@@ -370,7 +397,37 @@ class MainWindowShellTests(unittest.TestCase):
             self.window.history_page.load_count,
             history_load_count + 1,
         )
-        self.assertTrue(self.window.watchlist_page.is_invalidated)
+        self.assertEqual(
+            self.window.watchlist_page.preserved_refresh_count,
+            1,
+        )
+        self.assertFalse(self.window.watchlist_page.is_invalidated)
+        self.assertEqual(
+            self.window.watchlist_page.top_bar.find_media_input.text(),
+            "keep this query",
+        )
+        self.assertEqual(
+            self.window.history_page.top_bar.find_media_input.text(),
+            "",
+        )
+
+    def test_cancelled_find_preserves_origin_input_and_does_not_refresh(self):
+        find_media_input = self.window.watchlist_page.top_bar.find_media_input
+        find_media_input.setText("unresolved query")
+
+        with patch(
+            "app.main_window.handle_find_media_input",
+            return_value={"status": "cancelled"},
+        ):
+            self.window.watchlist_page.find_media_requested.emit(
+                "unresolved query"
+            )
+
+        self.assertEqual(find_media_input.text(), "unresolved query")
+        self.assertEqual(
+            self.window.watchlist_page.preserved_refresh_count,
+            0,
+        )
 
     def test_history_details_loads_one_full_draft_on_click(self):
         media_row = {"id": 42}
@@ -399,6 +456,27 @@ class MainWindowShellTests(unittest.TestCase):
         get_media.assert_called_once()
         build_draft.assert_called_once()
         open_details.assert_called_once_with(self.window, media_draft)
+
+    def test_saved_history_details_uses_stable_watchlist_refresh(self):
+        media_draft = {"media_id": 42, "metadata": {"title": "Movie"}}
+        self.window.section_tabs.setCurrentIndex(1)
+        history_load_count = self.window.history_page.load_count
+
+        with patch(
+            "app.main_window.open_media_details_dialog",
+            return_value={"status": "saved"},
+        ) as open_details:
+            self.window.history_page.details_requested.emit(media_draft)
+
+        open_details.assert_called_once_with(self.window, media_draft)
+        self.assertEqual(
+            self.window.watchlist_page.preserved_refresh_count,
+            1,
+        )
+        self.assertEqual(
+            self.window.history_page.load_count,
+            history_load_count + 1,
+        )
 
 
 class MainWindowWatchlistIntegrationTests(unittest.TestCase):

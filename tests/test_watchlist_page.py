@@ -38,6 +38,7 @@ class FakeMediaBoard(QWidget):
         self.pinned_count = 0
         self.pinned_only = False
         self.loaded_media = []
+        self.reconciled_media = []
         self.reflow_count = 0
         self.layout_width = None
 
@@ -51,6 +52,13 @@ class FakeMediaBoard(QWidget):
 
         self.set_cards(cards)
         self._emit_view_state()
+
+    def reconcile_media(self, filtered_media, previously_filtered_media):
+        self.reconciled_media.append((
+            filtered_media,
+            list(previously_filtered_media),
+        ))
+        self.load_media(filtered_media)
 
     def set_posters_per_row(self, value):
         if value == self.posters_per_row:
@@ -243,6 +251,20 @@ class WatchlistPageTests(unittest.TestCase):
             self.page.media_board.loaded_media[-1],
             self.page.filtered_media,
         )
+
+    def test_automatic_refresh_reconciles_against_previous_filter_roster(self):
+        previous_media = list(self.page.filtered_media.media_list)
+        current_filtered_media = self.page.filtered_media
+
+        result = self.page.refresh_preserving_grid()
+
+        self.assertEqual(current_filtered_media.refresh_count, 2)
+        self.assertEqual(result, current_filtered_media.media_list)
+        self.assertEqual(
+            self.page.media_board.reconciled_media,
+            [(current_filtered_media, previous_media)],
+        )
+        self.assertFalse(self.page.is_invalidated)
 
     def test_exact_default_filter_replaces_the_filtered_media(self):
         original_filtered_media = self.page.filtered_media

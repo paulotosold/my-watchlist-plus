@@ -209,6 +209,20 @@ class WatchlistPage(QWidget):
         self._is_loaded = True
         self._is_invalidated = False
 
+    def refresh_preserving_grid(self):
+        previous_media = list(self.filtered_media.media_list)
+        anchor = self._capture_scroll_anchor()
+
+        self.filtered_media.refresh()
+        self.media_board.reconcile_media(
+            self.filtered_media,
+            previous_media,
+        )
+        self._is_loaded = True
+        self._is_invalidated = False
+        self._restore_scroll_anchor_later(anchor)
+        return self.filtered_media.media_list
+
     def _on_board_view_state_changed(
         self,
         filtered_count,

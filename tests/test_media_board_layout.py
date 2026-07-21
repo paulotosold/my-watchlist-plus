@@ -1,11 +1,13 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtGui import QImage, QWheelEvent
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
@@ -24,10 +26,16 @@ def make_media(media_id):
 class FakeFilteredMedia:
     def __init__(self, count=0):
         self.media_list = [make_media(index) for index in range(count)]
+        self.next_media_list = None
         self.refresh_count = 0
 
     def refresh(self):
         self.refresh_count += 1
+
+        if self.next_media_list is not None:
+            self.media_list = list(self.next_media_list)
+            self.next_media_list = None
+
         return self.media_list
 
 
@@ -407,6 +415,64 @@ class MediaBoardLayoutTests(unittest.TestCase):
             set(range(7)),
         )
 
+    def test_stable_reconcile_preserves_survivors_and_appends_only_new_media(self):
+        filtered_media = FakeFilteredMedia(7)
+
+        self.board.load_media(filtered_media)
+        previous_media = list(filtered_media.media_list)
+        cards_by_key = {
+            card.get_current_media_key(): card
+            for card in self.board.cards
+        }
+        dismissed_card = cards_by_key[2]
+        surviving_card = cards_by_key[3]
+        dismissed_card.btn_close.click()
+
+        with tempfile.TemporaryDirectory() as directory:
+            poster_path = Path(directory) / "poster.png"
+            image = QImage(2, 3, QImage.Format.Format_RGB32)
+            image.fill(Qt.GlobalColor.darkGray)
+            self.assertTrue(image.save(str(poster_path)))
+            posters = [
+                {
+                    "filename": f"poster-{index}.png",
+                    "curation_status": "selected",
+                }
+                for index in range(3)
+            ]
+            surviving_media = make_media(3)
+            surviving_media["posters"] = posters
+            surviving_card._poster_path = lambda _filename: poster_path
+            surviving_card.load_card_media(surviving_media)
+            surviving_card.poster_index = 2
+            surviving_card._save_current_poster_index()
+            surviving_card.on_pin_clicked()
+            self.board.set_pinned_only(True)
+
+            filtered_media.media_list = [
+                make_media(media_id)
+                for media_id in (8, 7, 6, 5, 3, 2, 1, 0)
+            ]
+            filtered_media.media_list[4]["posters"] = posters
+            self.board.reconcile_media(filtered_media, previous_media)
+
+            self.assertEqual(surviving_card.poster_index, 2)
+
+        self.assertEqual(
+            [card.get_current_media_key() for card in self.board.cards],
+            [0, 1, 3, 5, 6, 8, 7],
+        )
+        self.assertIs(self.board.cards[0], cards_by_key[0])
+        self.assertIs(self.board.cards[1], cards_by_key[1])
+        self.assertIs(self.board.cards[2], surviving_card)
+        self.assertIs(self.board.cards[3], cards_by_key[5])
+        self.assertIs(self.board.cards[4], cards_by_key[6])
+        self.assertNotIn(dismissed_card, self.board.cards)
+        self.assertNotIn(cards_by_key[4], self.board.cards)
+        self.assertTrue(surviving_card.is_pinned)
+        self.assertTrue(self.board.pinned_only)
+        self.assertEqual(self.board.visible_cards, [surviving_card])
+
     def test_details_signal_still_forwards_after_multiple_reflows(self):
         media_draft = make_media(42)
         self.board.load_media(FakeFilteredMedia(1))
@@ -510,6 +576,31 @@ class WatchlistScrollTests(unittest.TestCase):
         self.assertEqual(
             scroll_bar.value() - anchor_card.geometry().top(),
             offset_before,
+        )
+
+    def test_stable_refresh_restores_scroll_after_survivors_compact(self):
+        board = self.page.media_board
+        scroll_bar = self.page.scroll_area.verticalScrollBar()
+        anchor_card = board.cards[10]
+        scroll_bar.setValue(anchor_card.geometry().top() + 17)
+        self.application.processEvents()
+        offset_before = scroll_bar.value() - anchor_card.geometry().top()
+        self.filtered_media.next_media_list = [
+            make_media(media_id)
+            for media_id in range(1, 21)
+        ]
+
+        self.page.refresh_preserving_grid()
+        self._process_layout_events()
+
+        self.assertIn(anchor_card, board.cards)
+        self.assertEqual(
+            scroll_bar.value() - anchor_card.geometry().top(),
+            offset_before,
+        )
+        self.assertEqual(
+            [card.get_current_media_key() for card in board.cards],
+            list(range(1, 21)),
         )
 
     def test_last_row_keeps_bottom_space_at_the_end_of_scroll(self):
