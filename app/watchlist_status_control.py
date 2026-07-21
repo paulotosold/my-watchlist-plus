@@ -125,6 +125,22 @@ class WatchlistStatusControl(QWidget):
             tooltip="Show pinned media only",
             context_menu=True,
         )
+        self.poster_size_control = PostersPerRowControl(self)
+
+        # macOS gives tool buttons a smaller class font. Reapplying the
+        # label's size marks it as explicit while retaining system styling.
+        status_text_font = self.poster_size_control.title_label.font()
+        if status_text_font.pixelSize() > 0:
+            status_text_font.setPixelSize(
+                status_text_font.pixelSize()
+            )
+        else:
+            status_text_font.setPointSizeF(
+                status_text_font.pointSizeF()
+            )
+
+        self.filtered_button.setFont(status_text_font)
+        self.pinned_button.setFont(status_text_font)
 
         filtered_metrics = self.filtered_button.fontMetrics()
         pinned_metrics = self.pinned_button.fontMetrics()
@@ -168,7 +184,6 @@ class WatchlistStatusControl(QWidget):
         self.pinned_context_menu.addAction(
             self.clear_all_pins_action
         )
-        self.poster_size_control = PostersPerRowControl(self)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(

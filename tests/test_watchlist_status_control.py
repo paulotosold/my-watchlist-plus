@@ -80,6 +80,23 @@ class WatchlistStatusControlTests(unittest.TestCase):
             self.control.poster_size_control.title_label.text(),
             "Poster size",
         )
+        status_text_font = (
+            self.control.poster_size_control.title_label.font()
+        )
+        self.assertEqual(
+            self.control.filtered_button.font().pointSizeF(),
+            status_text_font.pointSizeF(),
+        )
+        self.assertEqual(
+            self.control.pinned_button.font().pointSizeF(),
+            status_text_font.pointSizeF(),
+        )
+        poster_size_label = self.control.poster_size_control.title_label
+        poster_size_text_height = poster_size_label.fontMetrics().height()
+        self.assertEqual(
+            self.control.filtered_button.fontMetrics().height(),
+            poster_size_text_height,
+        )
 
     def test_set_state_updates_counts_and_selection_without_emitting(self):
         scope_spy = QSignalSpy(self.control.pinned_only_requested)
