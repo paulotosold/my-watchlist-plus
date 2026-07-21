@@ -9,7 +9,7 @@ os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from PySide6.QtCore import QDate, QSize
-from PySide6.QtWidgets import QApplication, QDialog, QScrollArea
+from PySide6.QtWidgets import QApplication, QDialog, QScrollArea, QToolButton
 
 from app.media_details_dialog import WatchEntryDetailsDialog
 from app.watch_history_editor import apply_watch_entry_result
@@ -132,6 +132,26 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             dialog.smart_button.click()
 
         print_mock.assert_called_once_with("  watched yesterday  ")
+
+    def test_smart_and_date_inputs_use_the_builtin_clear_button(self):
+        dialog = self._dialog(self._movie_draft())
+        dialog.show()
+
+        for input_widget in (
+            dialog.smart_input,
+            dialog.date_earliest_input,
+            dialog.date_latest_input,
+        ):
+            with self.subTest(input_widget=input_widget):
+                self.assertTrue(input_widget.isClearButtonEnabled())
+                input_widget.setText("clear me")
+                self.application.processEvents()
+                clear_button = input_widget.findChild(QToolButton)
+
+                self.assertIsNotNone(clear_button)
+                self.assertTrue(clear_button.isVisible())
+                clear_button.click()
+                self.assertEqual(input_widget.text(), "")
 
     def test_inline_date_buttons_have_expected_size_and_icons(self):
         dialog = self._dialog(self._movie_draft())

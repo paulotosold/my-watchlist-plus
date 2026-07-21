@@ -63,6 +63,7 @@ class TopBar(QWidget):
 
         self.filter_input = QLineEdit()
         self.filter_input.setFixedHeight(input_box_height)
+        self.filter_input.setClearButtonEnabled(True)
         self.filter_input.setText(self.default_filter_text)
         self.filter_input.setStyleSheet(INPUT_BOX_STYLE)
 
@@ -76,6 +77,7 @@ class TopBar(QWidget):
 
         self.find_media_input = QLineEdit()
         self.find_media_input.setFixedHeight(input_box_height)
+        self.find_media_input.setClearButtonEnabled(True)
         self.find_media_input.setPlaceholderText(self.find_media_placeholder)
         self.find_media_input.setStyleSheet(INPUT_BOX_STYLE)
 

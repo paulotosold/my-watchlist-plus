@@ -8,7 +8,7 @@ os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from PySide6.QtCore import QObject, Signal, Qt
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QToolButton
 
 from app.media_details_dialog import MediaDetailsDialog
 from app.watch_history_editor import get_series_episodes
@@ -153,6 +153,27 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         dialog.reject()
 
         self.assertEqual(self.manager.cancelled_ids, ["refresh-job"])
+
+    def test_find_media_and_smart_inputs_use_the_builtin_clear_button(self):
+        dialog = self._dialog()
+        dialog.show()
+
+        for input_widget in (
+            dialog.find_media_input,
+            dialog.smart_input,
+        ):
+            with self.subTest(input_widget=input_widget):
+                self.assertTrue(input_widget.isClearButtonEnabled())
+                input_widget.setText("clear me")
+                self.application.processEvents()
+                clear_button = input_widget.findChild(QToolButton)
+
+                self.assertIsNotNone(clear_button)
+                self.assertTrue(clear_button.isVisible())
+                clear_button.click()
+                self.assertEqual(input_widget.text(), "")
+
+        dialog.close()
 
     def test_initial_watched_status_does_not_open_watch_entry_details(self):
         with patch(

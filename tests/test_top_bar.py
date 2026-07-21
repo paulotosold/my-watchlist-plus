@@ -50,7 +50,28 @@ class TopBarTests(unittest.TestCase):
 
         self.assertEqual(spy.count(), 0)
         self.assertFalse(self.top_bar.filter_button.icon().isNull())
-        self.assertEqual(len(self.top_bar.findChildren(QToolButton)), 1)
+        direct_tool_buttons = [
+            button
+            for button in self.top_bar.findChildren(QToolButton)
+            if button.parent() is self.top_bar
+        ]
+        self.assertEqual(direct_tool_buttons, [self.top_bar.filter_button])
+
+    def test_text_inputs_use_the_builtin_clear_button(self):
+        for input_widget in (
+            self.top_bar.filter_input,
+            self.top_bar.find_media_input,
+        ):
+            with self.subTest(input_widget=input_widget):
+                self.assertTrue(input_widget.isClearButtonEnabled())
+                input_widget.setText("clear me")
+                self.application.processEvents()
+                clear_button = input_widget.findChild(QToolButton)
+
+                self.assertIsNotNone(clear_button)
+                self.assertTrue(clear_button.isVisible())
+                clear_button.click()
+                self.assertEqual(input_widget.text(), "")
 
     def test_find_media_enter_emits_the_trimmed_query(self):
         spy = QSignalSpy(self.top_bar.find_media_submitted)

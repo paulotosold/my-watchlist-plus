@@ -600,6 +600,7 @@ class WatchEntryDetailsDialog(QDialog):
 
         self.smart_input = QLineEdit(self)
         self.smart_input.setFixedHeight(32)
+        self.smart_input.setClearButtonEnabled(True)
         self.smart_button = QPushButton("Smart Fill", self)
         self.smart_button.setMinimumHeight(32)
         self.smart_button.setFixedWidth(DETAIL_BUTTON_WIDTH)
@@ -670,6 +671,7 @@ class WatchEntryDetailsDialog(QDialog):
         input_widget = QLineEdit(self)
         input_widget.setFixedHeight(32)
         input_widget.setFixedWidth(WATCH_ENTRY_DATE_INPUT_WIDTH)
+        input_widget.setClearButtonEnabled(True)
         input_widget.textChanged.connect(self._refresh_state)
         return input_widget
 
@@ -1168,6 +1170,7 @@ class MediaDetailsDialog(QDialog):
         main_layout.setSpacing(14)
 
         self.find_media_input = QLineEdit(self)
+        self.find_media_input.setClearButtonEnabled(True)
         self.find_media_input.setText(media_query or "")
         self.find_media_input.setFixedHeight(32)
 
@@ -1290,6 +1293,7 @@ class MediaDetailsDialog(QDialog):
 
         self.smart_input = QLineEdit(lower_block)
         self.smart_input.setFixedHeight(32)
+        self.smart_input.setClearButtonEnabled(True)
         self.smart_button = QPushButton("Smart Fill", lower_block)
         self.smart_button.setMinimumHeight(32)
         self.smart_button.setFixedWidth(DETAIL_BUTTON_WIDTH)
