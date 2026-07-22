@@ -11,6 +11,7 @@ from app.media_details_formatters import (
     build_watch_history_display_entries,
     format_code_or_name_list,
     format_date_range,
+    format_metadata_date,
     format_people_with_jobs,
     format_runtime_minutes,
     format_watch_provider_checked_at,
@@ -36,12 +37,94 @@ class MediaDetailsHelperTests(unittest.TestCase):
             "en, ja",
         )
         self.assertEqual(
+            format_code_or_name_list(
+                [
+                    {"code": "en", "name": "English"},
+                    {"code": "es", "name": "Spanish"},
+                ],
+                "name",
+            ),
+            "English, Spanish",
+        )
+        self.assertEqual(
             format_people_with_jobs([
                 {"name": "Drew Goddard", "job": "Screenplay"},
                 {"name": "Andy Weir"},
             ]),
             "Drew Goddard (Screenplay), Andy Weir",
         )
+
+    def test_format_metadata_date_matches_watch_history_style(self):
+        self.assertEqual(
+            format_metadata_date("2026-07-17"),
+            "17 Jul 2026, Fri",
+        )
+        self.assertEqual(format_metadata_date("invalid"), "invalid")
+        self.assertIsNone(format_metadata_date(None))
+
+    def test_metadata_rows_format_dates_languages_and_countries(self):
+        rows = build_metadata_display_rows({
+            "metadata": {
+                "tmdb_id": 1,
+                "imdb_id": None,
+                "media_type": "movie",
+                "title": "Example",
+                "original_title": "Example",
+                "production_status": "Released",
+                "release_date": "2026-07-17",
+                "runtime_min": 120,
+                "genres": [],
+                "spoken_languages": [
+                    {"code": "en", "name": "English"},
+                    {"code": "es", "name": "Spanish"},
+                ],
+                "origin_language": {"code": "es", "name": "Spanish"},
+                "production_countries": [
+                    {"code": "ES", "name": "Spain"},
+                    {"code": "FI", "name": "Finland"},
+                ],
+                "production_companies": [],
+                "directors": [],
+                "writers": [],
+                "actors": [],
+            },
+            "series_view": None,
+        })
+        row_texts = [row["text"] for row in rows]
+
+        self.assertIn("Release Date: 17 Jul 2026, Fri", row_texts)
+        self.assertIn("Spoken Languages: English, Spanish", row_texts)
+        self.assertIn("Origin Language: Spanish", row_texts)
+        self.assertIn("Production Countries: Spain, Finland", row_texts)
+
+    def test_series_metadata_rows_format_first_and_last_air_dates(self):
+        rows = build_metadata_display_rows({
+            "metadata": {
+                "tmdb_id": 1,
+                "imdb_id": None,
+                "media_type": "series",
+                "title": "Example",
+                "original_title": "Example",
+                "production_status": "Ended",
+                "genres": [],
+                "spoken_languages": [],
+                "origin_language": None,
+                "production_countries": [],
+                "production_companies": [],
+                "creators": [],
+                "actors": [],
+            },
+            "series_view": {
+                "summary": {
+                    "first_air_date": "2024-01-01",
+                    "last_air_date": "2026-07-17",
+                },
+            },
+        })
+        row_texts = [row["text"] for row in rows]
+
+        self.assertIn("First Air Date: 1 Jan 2024, Mon", row_texts)
+        self.assertIn("Last Air Date: 17 Jul 2026, Fri", row_texts)
 
     def test_metadata_rows_show_none_for_empty_values(self):
         rows = build_metadata_display_rows({

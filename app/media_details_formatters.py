@@ -37,8 +37,16 @@ def build_metadata_display_rows(media_draft):
 
     if media_type == "series":
         summary = series_view.get("summary") or {}
-        add_metadata_row(rows, "First Air Date", summary.get("first_air_date"))
-        add_metadata_row(rows, "Last Air Date", summary.get("last_air_date"))
+        add_metadata_row(
+            rows,
+            "First Air Date",
+            format_metadata_date(summary.get("first_air_date")),
+        )
+        add_metadata_row(
+            rows,
+            "Last Air Date",
+            format_metadata_date(summary.get("last_air_date")),
+        )
         add_metadata_row(
             rows,
             "Total Runtime",
@@ -52,24 +60,28 @@ def build_metadata_display_rows(media_draft):
         add_metadata_row(rows, "Season Count", summary.get("season_count"))
         add_metadata_row(rows, "Episode Count", summary.get("episode_count"))
     else:
-        add_metadata_row(rows, "Release Date", metadata.get("release_date"))
+        add_metadata_row(
+            rows,
+            "Release Date",
+            format_metadata_date(metadata.get("release_date")),
+        )
         add_metadata_row(rows, "Runtime", format_runtime_minutes(metadata.get("runtime_min")))
 
     add_metadata_row(rows, "Genres", format_name_list(metadata.get("genres")))
     add_metadata_row(
         rows,
         "Spoken Languages",
-        format_code_or_name_list(metadata.get("spoken_languages"), "code"),
+        format_code_or_name_list(metadata.get("spoken_languages"), "name"),
     )
     add_metadata_row(
         rows,
         "Origin Language",
-        format_code_or_name(metadata.get("origin_language"), "code"),
+        format_code_or_name(metadata.get("origin_language"), "name"),
     )
     add_metadata_row(
         rows,
         "Production Countries",
-        format_code_or_name_list(metadata.get("production_countries"), "code"),
+        format_code_or_name_list(metadata.get("production_countries"), "name"),
     )
     add_metadata_row(
         rows,
@@ -188,6 +200,18 @@ def format_runtime_minutes(minutes, approximate=False):
     return f"{prefix}{remaining_minutes}min"
 
 
+def format_metadata_date(value):
+    if not value:
+        return None
+
+    parsed = parse_date(value)
+
+    if parsed is None:
+        return str(value)
+
+    return format_date_range(parsed, parsed)
+
+
 def format_media_type(media_type):
     if media_type is None:
         return None
@@ -211,7 +235,8 @@ def format_code_or_name(item, key):
         return None
 
     if isinstance(item, dict):
-        return item.get(key) or item.get("name")
+        fallback_key = "code" if key == "name" else "name"
+        return item.get(key) or item.get(fallback_key)
 
     return str(item)
 
