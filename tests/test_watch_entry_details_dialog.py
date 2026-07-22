@@ -8,10 +8,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from PySide6.QtCore import QDate, QSize
+from PySide6.QtCore import QDate, QSize, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QScrollArea, QToolButton
 
 from app.media_details_dialog import WatchEntryDetailsDialog
+from app.top_bar import INPUT_BOX_STYLE
 from app.watch_history_editor import apply_watch_entry_result
 
 
@@ -124,13 +126,16 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         dialog.date_latest_input.setText("invalid")
         self.assertFalse(dialog.save_entry_button.isEnabled())
 
-    def test_smart_fill_prints_the_input_text(self):
+    def test_smart_fill_uses_label_main_input_style_and_enter(self):
         dialog = self._dialog(self._movie_draft())
         dialog.smart_input.setText("  watched yesterday  ")
 
         with patch("builtins.print") as print_mock:
-            dialog.smart_button.click()
+            QTest.keyClick(dialog.smart_input, Qt.Key.Key_Return)
 
+        self.assertEqual(dialog.smart_label.text(), "Smart Fill:")
+        self.assertEqual(dialog.smart_input.styleSheet(), INPUT_BOX_STYLE)
+        self.assertFalse(hasattr(dialog, "smart_button"))
         print_mock.assert_called_once_with("  watched yesterday  ")
 
     def test_smart_and_date_inputs_use_the_builtin_clear_button(self):

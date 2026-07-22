@@ -8,9 +8,11 @@ os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from PySide6.QtCore import QObject, Signal, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QToolButton
 
 from app.media_details_dialog import MediaDetailsDialog
+from app.top_bar import FIND_MEDIA_INPUT_PLACEHOLDER, INPUT_BOX_STYLE
 from app.watch_history_editor import get_series_episodes
 
 
@@ -173,6 +175,42 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
                 clear_button.click()
                 self.assertEqual(input_widget.text(), "")
 
+        dialog.close()
+
+    def test_find_media_and_smart_fill_use_labels_and_main_input_style(self):
+        dialog = self._dialog()
+
+        self.assertEqual(dialog.find_media_label.text(), "Find Media:")
+        self.assertEqual(dialog.smart_label.text(), "Smart Fill:")
+        self.assertEqual(
+            dialog.find_media_input.placeholderText(),
+            FIND_MEDIA_INPUT_PLACEHOLDER,
+        )
+
+        for input_widget in (dialog.find_media_input, dialog.smart_input):
+            with self.subTest(input_widget=input_widget):
+                self.assertEqual(input_widget.styleSheet(), INPUT_BOX_STYLE)
+
+        self.assertFalse(hasattr(dialog, "find_media_button"))
+        self.assertFalse(hasattr(dialog, "smart_button"))
+        dialog.close()
+
+    def test_find_media_and_smart_fill_are_submitted_with_enter(self):
+        dialog = self._dialog()
+        dialog.find_media_input.setText("tt1234567")
+        dialog.smart_input.setText("watched yesterday")
+
+        with patch(
+            "app.media_details_dialog.resolve_media_draft_from_query",
+            return_value=None,
+        ) as resolve_media:
+            QTest.keyClick(dialog.find_media_input, Qt.Key.Key_Return)
+
+        with patch("builtins.print") as print_mock:
+            QTest.keyClick(dialog.smart_input, Qt.Key.Key_Return)
+
+        resolve_media.assert_called_once_with(dialog, "tt1234567")
+        print_mock.assert_called_once_with("Smart Fill clicked")
         dialog.close()
 
     def test_initial_watched_status_does_not_open_watch_entry_details(self):

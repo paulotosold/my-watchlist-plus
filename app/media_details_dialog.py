@@ -81,6 +81,7 @@ from app.media_state_controls import (
     populate_status_combo,
     set_combo_value,
 )
+from app.top_bar import FIND_MEDIA_INPUT_PLACEHOLDER, INPUT_BOX_STYLE
 from app.watch_history_editor import (
     WATCH_ENTRY_DATE_INPUT_WIDTH,
     WATCH_ENTRY_EPISODE_BUTTON_BORDER_RADIUS,
@@ -596,18 +597,17 @@ class WatchEntryDetailsDialog(QDialog):
 
         smart_layout = QHBoxLayout()
         smart_layout.setContentsMargins(0, 0, 0, 0)
-        smart_layout.setSpacing(16)
+        smart_layout.setSpacing(8)
 
         self.smart_input = QLineEdit(self)
         self.smart_input.setFixedHeight(32)
         self.smart_input.setClearButtonEnabled(True)
-        self.smart_button = QPushButton("Smart Fill", self)
-        self.smart_button.setMinimumHeight(32)
-        self.smart_button.setFixedWidth(DETAIL_BUTTON_WIDTH)
-        self.smart_button.clicked.connect(self._smart_fill)
+        self.smart_input.setStyleSheet(INPUT_BOX_STYLE)
+        self.smart_input.returnPressed.connect(self._smart_fill)
 
+        self.smart_label = QLabel("Smart Fill:", self)
+        smart_layout.addWidget(self.smart_label)
         smart_layout.addWidget(self.smart_input, stretch=1)
-        smart_layout.addWidget(self.smart_button)
         main_layout.addLayout(smart_layout)
         main_layout.addSpacing(WATCH_ENTRY_SMART_TO_DATES_SPACING)
 
@@ -1173,17 +1173,16 @@ class MediaDetailsDialog(QDialog):
         self.find_media_input.setClearButtonEnabled(True)
         self.find_media_input.setText(media_query or "")
         self.find_media_input.setFixedHeight(32)
-
-        self.find_media_button = QPushButton("Find Media", self)
-        self.find_media_button.setMinimumHeight(32)
-        self.find_media_button.setFixedWidth(DETAIL_BUTTON_WIDTH)
-        self.find_media_button.clicked.connect(self.find_media)
+        self.find_media_input.setPlaceholderText(FIND_MEDIA_INPUT_PLACEHOLDER)
+        self.find_media_input.setStyleSheet(INPUT_BOX_STYLE)
+        self.find_media_input.returnPressed.connect(self.find_media)
 
         find_media_layout = QHBoxLayout()
         find_media_layout.setContentsMargins(0, 0, 0, 0)
-        find_media_layout.setSpacing(16)
+        find_media_layout.setSpacing(8)
+        self.find_media_label = QLabel("Find Media:", self)
+        find_media_layout.addWidget(self.find_media_label)
         find_media_layout.addWidget(self.find_media_input, stretch=1)
-        find_media_layout.addWidget(self.find_media_button)
 
         upper_layout = QHBoxLayout()
         upper_layout.setContentsMargins(0, 0, 0, 0)
@@ -1289,18 +1288,17 @@ class MediaDetailsDialog(QDialog):
 
         smart_layout = QHBoxLayout()
         smart_layout.setContentsMargins(0, 0, 0, 0)
-        smart_layout.setSpacing(16)
+        smart_layout.setSpacing(8)
 
         self.smart_input = QLineEdit(lower_block)
         self.smart_input.setFixedHeight(32)
         self.smart_input.setClearButtonEnabled(True)
-        self.smart_button = QPushButton("Smart Fill", lower_block)
-        self.smart_button.setMinimumHeight(32)
-        self.smart_button.setFixedWidth(DETAIL_BUTTON_WIDTH)
-        self.smart_button.clicked.connect(self.smart_fill)
+        self.smart_input.setStyleSheet(INPUT_BOX_STYLE)
+        self.smart_input.returnPressed.connect(self.smart_fill)
 
+        self.smart_label = QLabel("Smart Fill:", lower_block)
+        smart_layout.addWidget(self.smart_label)
         smart_layout.addWidget(self.smart_input, stretch=1)
-        smart_layout.addWidget(self.smart_button)
         lower_layout.addLayout(smart_layout)
 
         columns_layout = QHBoxLayout()
@@ -1884,7 +1882,6 @@ class MediaDetailsDialog(QDialog):
         self.providers_block.action_button.setEnabled(not is_busy)
         self.posters_block.action_button.setEnabled(not is_busy)
         self.find_media_input.setEnabled(not is_busy)
-        self.find_media_button.setEnabled(not is_busy)
         self.lower_block.setEnabled(not is_busy)
 
         if is_busy:
