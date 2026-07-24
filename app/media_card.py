@@ -3,6 +3,7 @@ from app.config import SUBSCRIBED_FLATRATE_PROVIDER_NAMES
 from app.media_state_controls import NONE_WATCH_STATE_LABEL
 
 from copy import deepcopy
+from functools import lru_cache
 from pathlib import Path
 import random
 
@@ -10,7 +11,14 @@ from PIL import Image
 import numpy as np
 
 from PySide6.QtCore import Qt, QSize, Signal
-from PySide6.QtGui import QPixmap, QIcon, QImage, QPainter, QColor
+from PySide6.QtGui import (
+    QColor,
+    QIcon,
+    QImage,
+    QImageReader,
+    QPainter,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QLabel,
     QWidget,
@@ -18,6 +26,32 @@ from PySide6.QtWidgets import (
     QToolButton,
     QGraphicsOpacityEffect,
 )
+
+
+MEDIA_CARD_ICON_HEIGHT = 32
+MEDIA_CARD_BUTTON_MARGIN = 8
+
+
+@lru_cache(maxsize=None)
+def _icon_dimensions_for_height(icon_img_path, icon_height):
+    source_size = QImageReader(str(icon_img_path)).size()
+
+    if (
+        not source_size.isValid()
+        or source_size.width() <= 0
+        or source_size.height() <= 0
+    ):
+        return icon_height, icon_height
+
+    icon_width = max(
+        1,
+        round(
+            icon_height
+            * source_size.width()
+            / source_size.height()
+        ),
+    )
+    return icon_width, icon_height
 
 
 class MediaCardOverlay(QWidget):
@@ -84,13 +118,6 @@ def get_media_key(media_draft):
     return media_draft.get("media_id")
 
 class MediaCard(QFrame):
-    BASE_CARD_WIDTH = 269
-    BASE_SQUARE_BUTTON_SIZE = 42
-    BASE_PIN_BUTTON_WIDTH = 140
-    BASE_PIN_BUTTON_HEIGHT = 42
-    BASE_MARGIN = 6
-    MINIMUM_HITBOX_SIZE = 24
-
     state_changed = Signal()
     details_requested = Signal(object)
     dismiss_requested = Signal()
@@ -137,24 +164,17 @@ class MediaCard(QFrame):
         self.overlay_layer = MediaCardOverlay(self)
         self.overlay_layer.hide()
 
-        square_button_size = (
-            self.BASE_SQUARE_BUTTON_SIZE,
-            self.BASE_SQUARE_BUTTON_SIZE,
-        )
         self.btn_info = self.make_button(
             "app/assets/media_card_icons/info.png",
             self.overlay_layer,
-            size=square_button_size,
         )
         self.btn_close = self.make_button(
             "app/assets/media_card_icons/close.png",
             self.overlay_layer,
-            size=square_button_size,
         )
         self.btn_pin = self.make_button(
             "app/assets/media_card_icons/pin.png",
             self.overlay_layer,
-            size=(self.BASE_PIN_BUTTON_WIDTH, self.BASE_PIN_BUTTON_HEIGHT),
         )
 
         # layer 4 – info panel
@@ -178,15 +198,17 @@ class MediaCard(QFrame):
         self.overlay_layer.raise_()
         self.info_panel.raise_()
 
-    def make_button(self, icon_img_path, parent, size=(42, 42)):
+    def make_button(self, icon_img_path, parent):
         btn = QToolButton(parent)
-        btn.base_icon_size = QSize(*size)
-        btn.setFixedSize(
-            max(self.MINIMUM_HITBOX_SIZE, size[0]),
-            max(self.MINIMUM_HITBOX_SIZE, size[1]),
+        icon_size = QSize(
+            *_icon_dimensions_for_height(
+                icon_img_path,
+                MEDIA_CARD_ICON_HEIGHT,
+            )
         )
+        btn.setFixedSize(icon_size)
         btn.setIcon(QIcon(icon_img_path))
-        btn.setIconSize(QSize(size[0], size[1]))
+        btn.setIconSize(icon_size)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setStyleSheet("""
             QToolButton {
@@ -564,33 +586,27 @@ class MediaCard(QFrame):
         )
         self.pin_layer.setPixmap(scaled_pixmap)
 
-    def _scale_button(self, button, scale_factor):
-        base_size = button.base_icon_size
-        icon_width = max(1, round(base_size.width() * scale_factor))
-        icon_height = max(1, round(base_size.height() * scale_factor))
-        hitbox_width = max(self.MINIMUM_HITBOX_SIZE, icon_width)
-        hitbox_height = max(self.MINIMUM_HITBOX_SIZE, icon_height)
-
-        button.setFixedSize(hitbox_width, hitbox_height)
-        button.setIconSize(QSize(icon_width, icon_height))
-
     def _layout_buttons(self):
         card_width = self.width()
         card_height = self.height()
-        scale_factor = card_width / self.BASE_CARD_WIDTH
-        margin = max(0, round(self.BASE_MARGIN * scale_factor))
 
-        for button in (self.btn_info, self.btn_close, self.btn_pin):
-            self._scale_button(button, scale_factor)
-
-        self.btn_info.move(margin, margin)
+        self.btn_info.move(
+            MEDIA_CARD_BUTTON_MARGIN,
+            MEDIA_CARD_BUTTON_MARGIN,
+        )
         self.btn_close.move(
-            card_width - self.btn_close.width() - margin,
-            margin,
+            card_width
+            - self.btn_close.width()
+            - MEDIA_CARD_BUTTON_MARGIN,
+            MEDIA_CARD_BUTTON_MARGIN,
         )
 
         pin_x = (card_width - self.btn_pin.width()) // 2
-        pin_y = card_height - self.btn_pin.height() - margin
+        pin_y = (
+            card_height
+            - self.btn_pin.height()
+            - MEDIA_CARD_BUTTON_MARGIN
+        )
         self.btn_pin.move(pin_x, pin_y)
 
     def show_card(self):

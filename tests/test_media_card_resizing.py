@@ -7,11 +7,37 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QImageReader
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app.media_card import MediaCard
+from app.media_card import (
+    MEDIA_CARD_BUTTON_MARGIN,
+    MEDIA_CARD_ICON_HEIGHT,
+    MediaCard,
+    _icon_dimensions_for_height,
+)
+
+
+ICON_DIRECTORY = Path("app/assets/media_card_icons")
+
+
+def expected_icon_size(filename):
+    source_size = QImageReader(
+        str(ICON_DIRECTORY / filename)
+    ).size()
+
+    if not source_size.isValid():
+        raise AssertionError(f"Invalid test icon: {filename}")
+
+    return (
+        round(
+            MEDIA_CARD_ICON_HEIGHT
+            * source_size.width()
+            / source_size.height()
+        ),
+        MEDIA_CARD_ICON_HEIGHT,
+    )
 
 
 class MediaCardResizingTests(unittest.TestCase):
@@ -28,44 +54,122 @@ class MediaCardResizingTests(unittest.TestCase):
         self.card.close()
         self.application.processEvents()
 
-    def test_icons_scale_from_the_reference_width_with_usable_hitboxes(self):
-        for width in (72, 269, 450):
+    def test_icons_keep_fixed_sizes_and_margins_during_resizing(self):
+        expected_info_size = expected_icon_size("info.png")
+        expected_close_size = expected_icon_size("close.png")
+        expected_pin_size = expected_icon_size("pin.png")
+        expected_unpin_size = expected_icon_size("unpin.png")
+        expected_pin_width = round(
+            MEDIA_CARD_ICON_HEIGHT * 364 / 128
+        )
+
+        self.assertEqual(
+            expected_info_size,
+            (MEDIA_CARD_ICON_HEIGHT, MEDIA_CARD_ICON_HEIGHT),
+        )
+        self.assertEqual(
+            expected_close_size,
+            (MEDIA_CARD_ICON_HEIGHT, MEDIA_CARD_ICON_HEIGHT),
+        )
+        self.assertEqual(
+            expected_pin_size,
+            (expected_pin_width, MEDIA_CARD_ICON_HEIGHT),
+        )
+        self.assertEqual(
+            expected_unpin_size,
+            (expected_pin_width, MEDIA_CARD_ICON_HEIGHT),
+        )
+
+        for width in (72, 269, 450, 72):
             with self.subTest(width=width):
-                self.card.setFixedSize(width, round(width * 1.5))
+                height = round(width * 1.5)
+                self.card.setFixedSize(width, height)
                 self.application.processEvents()
-                expected_square_icon = max(
-                    1,
-                    round(42 * width / 269),
-                )
-                expected_pin_width = max(
-                    1,
-                    round(140 * width / 269),
-                )
 
                 self.assertEqual(
                     self.card.btn_info.iconSize().toTuple(),
-                    (expected_square_icon, expected_square_icon),
+                    expected_info_size,
                 )
-                self.assertGreaterEqual(self.card.btn_info.width(), 24)
-                self.assertGreaterEqual(self.card.btn_close.width(), 24)
-                self.assertGreaterEqual(self.card.btn_pin.height(), 24)
                 self.assertEqual(
-                    self.card.btn_pin.iconSize().width(),
-                    expected_pin_width,
+                    self.card.btn_info.size().toTuple(),
+                    expected_info_size,
                 )
-                self.assertGreaterEqual(self.card.btn_info.geometry().left(), 0)
-                self.assertLessEqual(
-                    self.card.btn_close.geometry().right(),
-                    self.card.rect().right(),
+                self.assertEqual(
+                    self.card.btn_close.iconSize().toTuple(),
+                    expected_close_size,
                 )
-                self.assertLessEqual(
-                    self.card.btn_pin.geometry().bottom(),
-                    self.card.rect().bottom(),
+                self.assertEqual(
+                    self.card.btn_close.size().toTuple(),
+                    expected_close_size,
                 )
-                self.assertLess(
-                    self.card.btn_info.geometry().right(),
-                    self.card.btn_close.geometry().left(),
+                self.assertEqual(
+                    self.card.btn_pin.iconSize().toTuple(),
+                    expected_pin_size,
                 )
+                self.assertEqual(
+                    self.card.btn_pin.size().toTuple(),
+                    expected_pin_size,
+                )
+                self.assertEqual(
+                    self.card.btn_info.x(),
+                    MEDIA_CARD_BUTTON_MARGIN,
+                )
+                self.assertEqual(
+                    self.card.btn_info.y(),
+                    MEDIA_CARD_BUTTON_MARGIN,
+                )
+                self.assertEqual(
+                    self.card.btn_close.y(),
+                    MEDIA_CARD_BUTTON_MARGIN,
+                )
+                self.assertEqual(
+                    width
+                    - self.card.btn_close.x()
+                    - self.card.btn_close.width(),
+                    MEDIA_CARD_BUTTON_MARGIN,
+                )
+                self.assertEqual(
+                    self.card.btn_pin.x(),
+                    (width - self.card.btn_pin.width()) // 2,
+                )
+                self.assertEqual(
+                    height
+                    - self.card.btn_pin.y()
+                    - self.card.btn_pin.height(),
+                    MEDIA_CARD_BUTTON_MARGIN,
+                )
+
+    def test_pin_and_unpin_keep_the_same_size_and_geometry(self):
+        self.card.setFixedSize(269, 404)
+        self.application.processEvents()
+        initial_size = self.card.btn_pin.size()
+        initial_icon_size = self.card.btn_pin.iconSize()
+        initial_geometry = self.card.btn_pin.geometry()
+
+        self.card.on_pin_clicked()
+        self.application.processEvents()
+
+        self.assertTrue(self.card.is_pinned)
+        self.assertEqual(self.card.btn_pin.size(), initial_size)
+        self.assertEqual(self.card.btn_pin.iconSize(), initial_icon_size)
+        self.assertEqual(self.card.btn_pin.geometry(), initial_geometry)
+
+        self.card.on_pin_clicked()
+        self.application.processEvents()
+
+        self.assertFalse(self.card.is_pinned)
+        self.assertEqual(self.card.btn_pin.size(), initial_size)
+        self.assertEqual(self.card.btn_pin.iconSize(), initial_icon_size)
+        self.assertEqual(self.card.btn_pin.geometry(), initial_geometry)
+
+    def test_invalid_icon_dimensions_fall_back_to_a_square(self):
+        self.assertEqual(
+            _icon_dimensions_for_height(
+                "app/assets/media_card_icons/missing.png",
+                MEDIA_CARD_ICON_HEIGHT,
+            ),
+            (MEDIA_CARD_ICON_HEIGHT, MEDIA_CARD_ICON_HEIGHT),
+        )
 
     def test_resizing_always_scales_from_the_original_poster(self):
         with tempfile.TemporaryDirectory() as directory:
