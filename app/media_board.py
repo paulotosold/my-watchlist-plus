@@ -8,9 +8,9 @@ from PySide6.QtWidgets import QGridLayout, QSizePolicy, QWidget
 from app.media_card import MediaCard, get_media_key
 
 
-MIN_POSTERS_PER_ROW = 3
+MIN_POSTERS_PER_ROW = 2
 DEFAULT_POSTERS_PER_ROW = 5
-MAX_POSTERS_PER_ROW = 10
+MAX_POSTERS_PER_ROW = 8
 
 BOARD_TOP_MARGIN = 12
 BOARD_BOTTOM_MARGIN = 12

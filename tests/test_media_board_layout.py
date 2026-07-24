@@ -82,12 +82,12 @@ class MediaBoardLayoutTests(unittest.TestCase):
 
     def test_unused_width_is_split_evenly_around_the_grid(self):
         cases = (
-            (3, 1000),
-            (3, 1001),
+            (2, 1000),
+            (2, 1001),
             (5, 1001),
             (5, 1002),
-            (10, 1006),
-            (10, 1007),
+            (8, 1006),
+            (8, 1007),
         )
 
         for posters_per_row, width in cases:
@@ -167,15 +167,15 @@ class MediaBoardLayoutTests(unittest.TestCase):
         original_cards[4].on_pin_clicked()
         original_cards[6].poster_index = 2
 
-        self.assertTrue(self.board.set_posters_per_row(3))
+        self.assertTrue(self.board.set_posters_per_row(2))
         self.application.processEvents()
 
         self.assertEqual(self.board.cards, original_cards)
-        self.assertEqual(self.board.row_count, 4)
+        self.assertEqual(self.board.row_count, 6)
         self.assertTrue(self.board.cards[4].is_pinned)
         self.assertEqual(self.board.cards[6].poster_index, 2)
 
-        self.assertTrue(self.board.set_posters_per_row(10))
+        self.assertTrue(self.board.set_posters_per_row(8))
         self.application.processEvents()
 
         self.assertEqual(self.board.cards, original_cards)
@@ -184,7 +184,7 @@ class MediaBoardLayoutTests(unittest.TestCase):
             self.board.card_height,
             round(self.board.card_width * 1.5),
         )
-        self.assertFalse(self.board.set_posters_per_row(10))
+        self.assertFalse(self.board.set_posters_per_row(8))
 
     def test_pinned_projection_restores_the_exact_canonical_grid(self):
         self.board.load_media(FakeFilteredMedia(12))
@@ -479,8 +479,8 @@ class MediaBoardLayoutTests(unittest.TestCase):
         self.board.cards[0].load_card_media(media_draft)
         spy = QSignalSpy(self.board.details_requested)
 
-        self.board.set_posters_per_row(3)
-        self.board.set_posters_per_row(10)
+        self.board.set_posters_per_row(2)
+        self.board.set_posters_per_row(8)
         self.board.cards[0].btn_info.click()
 
         self.assertEqual(spy.count(), 1)

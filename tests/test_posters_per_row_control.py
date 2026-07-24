@@ -97,7 +97,7 @@ class PostersPerRowControlTests(unittest.TestCase):
             MAX_POSTERS_PER_ROW,
         )
         self.assertFalse(self.control.minus_button.isEnabled())
-        self.assertEqual(spy.count(), 5)
+        self.assertEqual(spy.count(), 3)
 
         for _ in range(10):
             self.control.plus_button.click()
@@ -109,11 +109,11 @@ class PostersPerRowControlTests(unittest.TestCase):
         self.assertFalse(self.control.plus_button.isEnabled())
         self.assertEqual(
             self.control.accessibleName(),
-            "Poster size: 3 posters per row",
+            "Poster size: 2 posters per row",
         )
         self.assertEqual(
             [spy.at(index)[0] for index in range(spy.count())],
-            [6, 7, 8, 9, 10, 9, 8, 7, 6, 5, 4, 3],
+            [6, 7, 8, 7, 6, 5, 4, 3, 2],
         )
 
     def test_space_activates_the_focused_tool_button(self):
