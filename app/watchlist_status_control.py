@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.history_status_control import HistoryStatusControl
 from app.posters_per_row_control import (
     ICON_BUTTON_STYLE,
     PostersPerRowControl,
@@ -349,31 +350,44 @@ class WatchlistStatusControl(QWidget):
 
 
 class WatchlistStatusBar(QStatusBar):
-    """Status bar whose Watchlist controls fill its full height."""
+    """Full-width status host for the Watchlist and History pages."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.watchlist_control = WatchlistStatusControl(self)
+        self.history_control = HistoryStatusControl(self)
+        self.history_control.hide()
         self._layout_timer = QTimer(self)
         self._layout_timer.setSingleShot(True)
         self._layout_timer.timeout.connect(
-            self._layout_watchlist_control
+            self._layout_page_controls
         )
         self.setFixedHeight(STATUS_BAR_HEIGHT)
-        self._layout_watchlist_control()
+        self._layout_page_controls()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._layout_watchlist_control()
+        self._layout_page_controls()
         self._layout_timer.start(0)
 
     def showEvent(self, event):
         super().showEvent(event)
-        self._layout_watchlist_control()
+        self._layout_page_controls()
         self._layout_timer.start(0)
 
+    def set_active_control(self, page_name):
+        is_watchlist = page_name == "watchlist"
+        is_history = page_name == "history"
+        self.watchlist_control.setVisible(is_watchlist)
+        self.history_control.setVisible(is_history)
+        self._layout_page_controls()
+
     def _layout_watchlist_control(self):
+        """Compatibility alias for the former single-control host."""
+        self._layout_page_controls()
+
+    def _layout_page_controls(self):
         available_width = self.width()
         size_grip = self.findChild(QSizeGrip)
 
@@ -388,13 +402,19 @@ class WatchlistStatusBar(QStatusBar):
         if available_width <= 0 and self.width() > 0:
             available_width = self.width()
 
-        self.watchlist_control.setGeometry(
-            0,
-            0,
-            max(0, available_width),
-            self.height(),
-        )
-        self.watchlist_control.raise_()
+        for control in (
+            self.watchlist_control,
+            self.history_control,
+        ):
+            control.setGeometry(
+                0,
+                0,
+                max(0, available_width),
+                self.height(),
+            )
+
+            if control.isVisible():
+                control.raise_()
 
         if size_grip is not None:
             size_grip.raise_()

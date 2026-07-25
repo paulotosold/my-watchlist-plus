@@ -84,6 +84,9 @@ class MainWindow(QMainWindow):
         self.watchlist_status_control = (
             self.status_bar.watchlist_control
         )
+        self.history_status_control = (
+            self.status_bar.history_control
+        )
         self.posters_per_row_control = (
             self.watchlist_status_control.poster_size_control
         )
@@ -102,6 +105,12 @@ class MainWindow(QMainWindow):
         self.posters_per_row_control.value_changed.connect(
             self._on_posters_per_row_changed
         )
+        self.history_status_control.view_mode_requested.connect(
+            self._set_history_view_mode
+        )
+        self.history_status_control.posters_per_row_requested.connect(
+            self._set_history_posters_per_row
+        )
         self.watchlist_status_control.reload_requested.connect(
             self._reload_watchlist
         )
@@ -114,6 +123,17 @@ class MainWindow(QMainWindow):
         self.watchlist_page.watchlist_state_changed.connect(
             self._on_watchlist_state_changed
         )
+        history_view_state_changed = getattr(
+            self.history_page,
+            "view_state_changed",
+            None,
+        )
+
+        if history_view_state_changed is not None:
+            history_view_state_changed.connect(
+                self._on_history_view_state_changed
+            )
+
         self.section_tabs.setCurrentIndex(0)
         self.page_stack.setCurrentIndex(0)
         self.watchlist_page.ensure_loaded()
@@ -179,15 +199,23 @@ class MainWindow(QMainWindow):
 
     def _update_watchlist_status_visibility(self):
         is_watchlist = self.active_page is self.watchlist_page
-        self.watchlist_status_control.setVisible(is_watchlist)
+        is_history = self.active_page is self.history_page
+        active_control = (
+            "watchlist"
+            if is_watchlist
+            else "history"
+            if is_history
+            else None
+        )
+        self.status_bar.set_active_control(active_control)
         self.posters_per_row_control.setVisible(is_watchlist)
 
     def _update_posters_per_row_control_visibility(self):
         self._update_watchlist_status_visibility()
 
-    def _on_page_status_message(self, page, message):
-        if page is self.active_page and page is not self.watchlist_page:
-            self.status_bar.showMessage(message)
+    def _on_page_status_message(self, page, _message):
+        if page is self.active_page and page is self.history_page:
+            self._sync_history_status()
 
     def _on_watchlist_state_changed(
         self,
@@ -206,6 +234,66 @@ class MainWindow(QMainWindow):
             self.watchlist_page.filtered_count,
             self.watchlist_page.pinned_count,
             self.watchlist_page.pinned_only,
+        )
+
+    def _set_history_view_mode(self, view_mode):
+        setter = getattr(self.history_page, "set_view_mode", None)
+
+        if callable(setter):
+            setter(view_mode)
+
+        self._sync_history_status()
+
+    def _set_history_posters_per_row(self, posters_per_row):
+        setter = getattr(
+            self.history_page,
+            "set_posters_per_row",
+            None,
+        )
+
+        if callable(setter):
+            setter(posters_per_row)
+
+        self._sync_history_status()
+
+    def _on_history_view_state_changed(
+        self,
+        view_mode,
+        posters_per_row,
+    ):
+        self._sync_history_status(
+            view_mode=view_mode,
+            posters_per_row=posters_per_row,
+        )
+
+    def _sync_history_status(
+        self,
+        *,
+        view_mode=None,
+        posters_per_row=None,
+    ):
+        watched_count = _status_message_count(
+            getattr(self.history_page, "status_message", "")
+        )
+
+        view_mode = view_mode or getattr(
+            self.history_page,
+            "view_mode",
+            "list",
+        )
+        posters_per_row = (
+            posters_per_row
+            if posters_per_row is not None
+            else getattr(
+                self.history_page,
+                "posters_per_row",
+                18,
+            )
+        )
+        self.history_status_control.set_state(
+            watched_count,
+            view_mode,
+            posters_per_row,
         )
 
     def _reload_watchlist(self):
@@ -330,7 +418,22 @@ class MainWindow(QMainWindow):
             self._sync_watchlist_status()
             return
 
-        self.status_bar.showMessage(page.status_message if page else "")
+        self.status_bar.clearMessage()
+
+        if page is self.history_page:
+            self._sync_history_status()
 
     def _update_status_bar(self):
         self._show_active_status()
+
+
+def _status_message_count(message):
+    first_token = str(message).strip().split(maxsplit=1)
+
+    if not first_token:
+        return 0
+
+    try:
+        return max(0, int(first_token[0]))
+    except ValueError:
+        return 0

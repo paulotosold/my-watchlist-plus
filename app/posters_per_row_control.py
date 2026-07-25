@@ -40,8 +40,15 @@ class PostersPerRowControl(QWidget):
         parent=None,
         *,
         value=DEFAULT_POSTERS_PER_ROW,
+        minimum=MIN_POSTERS_PER_ROW,
+        maximum=MAX_POSTERS_PER_ROW,
     ):
         super().__init__(parent)
+
+        self._minimum = int(minimum)
+        self._maximum = int(maximum)
+        if self._minimum > self._maximum:
+            raise ValueError("minimum cannot be greater than maximum")
 
         self.setObjectName("postersPerRowControl")
         self._value = self._clamp(value)
@@ -85,6 +92,14 @@ class PostersPerRowControl(QWidget):
     def posters_per_row(self):
         return self._value
 
+    @property
+    def minimum(self):
+        return self._minimum
+
+    @property
+    def maximum(self):
+        return self._maximum
+
     def set_value(self, value):
         clamped_value = self._clamp(value)
 
@@ -103,11 +118,10 @@ class PostersPerRowControl(QWidget):
     def increment(self):
         self.set_value(self._value + 1)
 
-    @staticmethod
-    def _clamp(value):
+    def _clamp(self, value):
         return max(
-            MIN_POSTERS_PER_ROW,
-            min(MAX_POSTERS_PER_ROW, int(value)),
+            self._minimum,
+            min(self._maximum, int(value)),
         )
 
     def _make_button(
@@ -136,10 +150,10 @@ class PostersPerRowControl(QWidget):
 
     def _update_button_states(self):
         self.minus_button.setEnabled(
-            self._value < MAX_POSTERS_PER_ROW
+            self._value < self._maximum
         )
         self.plus_button.setEnabled(
-            self._value > MIN_POSTERS_PER_ROW
+            self._value > self._minimum
         )
 
     def _update_accessible_value(self):

@@ -184,8 +184,39 @@ class FakeWatchlistPage(FakePage):
 
 
 class FakeHistoryPage(FakePage):
+    view_state_changed = Signal(str, int)
+
     def __init__(self, parent=None):
         super().__init__("19 watched entries", parent)
+        self.entries = [object() for _ in range(19)]
+        self.view_mode = "list"
+        self.posters_per_row = 18
+        self.view_mode_values = []
+        self.history_posters_per_row_values = []
+
+    def set_view_mode(self, view_mode):
+        if view_mode == self.view_mode:
+            return False
+
+        self.view_mode = view_mode
+        self.view_mode_values.append(view_mode)
+        self.view_state_changed.emit(
+            self.view_mode,
+            self.posters_per_row,
+        )
+        return True
+
+    def set_posters_per_row(self, posters_per_row):
+        if posters_per_row == self.posters_per_row:
+            return False
+
+        self.posters_per_row = posters_per_row
+        self.history_posters_per_row_values.append(posters_per_row)
+        self.view_state_changed.emit(
+            self.view_mode,
+            self.posters_per_row,
+        )
+        return True
 
 
 class FakeConnection:
@@ -248,6 +279,7 @@ class MainWindowShellTests(unittest.TestCase):
             "",
         )
         self.assertFalse(self.window.watchlist_status_control.isHidden())
+        self.assertTrue(self.window.history_status_control.isHidden())
         self.assertEqual(
             self.window.watchlist_status_control.filtered_label.text(),
             "22 filtered titles",
@@ -268,6 +300,12 @@ class MainWindowShellTests(unittest.TestCase):
         self.assertEqual(history_page.load_count, 1)
         self.assertEqual(
             self.window.status_bar.currentMessage(),
+            "",
+        )
+        self.assertTrue(self.window.watchlist_status_control.isHidden())
+        self.assertFalse(self.window.history_status_control.isHidden())
+        self.assertEqual(
+            self.window.history_status_control.count_label.text(),
             "19 watched entries",
         )
 
@@ -316,6 +354,36 @@ class MainWindowShellTests(unittest.TestCase):
         self.assertFalse(control.isHidden())
         self.assertEqual(control.posters_per_row, 5)
 
+    def test_history_view_controls_are_forwarded_and_remembered(self):
+        self.window.section_tabs.setCurrentIndex(1)
+        control = self.window.history_status_control
+
+        self.assertEqual(control.view_mode, "list")
+        self.assertTrue(control.poster_size_control.isHidden())
+
+        control.grid_view_button.click()
+
+        self.assertEqual(
+            self.window.history_page.view_mode_values,
+            ["grid"],
+        )
+        self.assertEqual(control.view_mode, "grid")
+        self.assertFalse(control.poster_size_control.isHidden())
+
+        control.poster_size_control.minus_button.click()
+
+        self.assertEqual(
+            self.window.history_page.history_posters_per_row_values,
+            [19],
+        )
+        self.assertEqual(control.posters_per_row, 19)
+
+        self.window.section_tabs.setCurrentIndex(0)
+        self.window.section_tabs.setCurrentIndex(1)
+
+        self.assertEqual(control.view_mode, "grid")
+        self.assertEqual(control.posters_per_row, 19)
+
     def test_status_messages_from_inactive_pages_are_ignored(self):
         self.window.history_page.status_message_changed.emit("new history")
         self.assertEqual(
@@ -336,7 +404,7 @@ class MainWindowShellTests(unittest.TestCase):
         self.window.history_page.status_message_changed.emit("new history")
         self.assertEqual(
             self.window.status_bar.currentMessage(),
-            "new history",
+            "",
         )
 
     def test_watchlist_status_actions_are_forwarded_to_the_page(self):
@@ -692,6 +760,35 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
                     control.width(),
                     status_bar.width() - size_grip.width(),
                 )
+
+    def test_history_status_uses_full_width_and_twelve_pixel_insets(self):
+        self.window.section_tabs.setCurrentIndex(1)
+        self._process_events()
+        status_bar = self.window.status_bar
+        control = self.window.history_status_control
+        size_grip = status_bar.findChild(QSizeGrip)
+
+        self.assertFalse(control.isHidden())
+        self.assertTrue(self.window.watchlist_status_control.isHidden())
+        self.assertEqual(control.geometry().top(), 0)
+        self.assertEqual(control.height(), status_bar.height())
+        self.assertEqual(
+            control.width(),
+            status_bar.width() - size_grip.width(),
+        )
+        self.assertEqual(
+            control.count_label.mapTo(
+                control,
+                control.count_label.rect().topLeft(),
+            ).x(),
+            12,
+        )
+        self.assertEqual(
+            control.width()
+            - control.grid_view_button.geometry().right()
+            - 1,
+            12,
+        )
 
     def test_window_supports_maximize_and_restore(self):
         self.assertGreater(self.window.maximumWidth(), 1440)

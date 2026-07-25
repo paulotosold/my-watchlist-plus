@@ -128,6 +128,64 @@ class PostersPerRowControlTests(unittest.TestCase):
         self.assertEqual(spy.count(), 1)
         self.assertEqual(spy.at(0), [7])
 
+    def test_custom_history_range_defaults_to_eighteen(self):
+        control = PostersPerRowControl(
+            value=18,
+            minimum=6,
+            maximum=24,
+        )
+        control.show()
+        self.application.processEvents()
+        self.addCleanup(control.close)
+
+        self.assertEqual(control.posters_per_row, 18)
+        self.assertEqual(control.minimum, 6)
+        self.assertEqual(control.maximum, 24)
+        self.assertEqual(
+            control.accessibleName(),
+            "Poster size: 18 posters per row",
+        )
+        self.assertTrue(control.minus_button.isEnabled())
+        self.assertTrue(control.plus_button.isEnabled())
+
+    def test_custom_history_range_clamps_at_six_and_twenty_four(self):
+        control = PostersPerRowControl(
+            value=18,
+            minimum=6,
+            maximum=24,
+        )
+        control.show()
+        self.application.processEvents()
+        self.addCleanup(control.close)
+        spy = QSignalSpy(control.value_changed)
+
+        control.set_value(25)
+
+        self.assertEqual(control.posters_per_row, 24)
+        self.assertFalse(control.minus_button.isEnabled())
+        self.assertTrue(control.plus_button.isEnabled())
+
+        control.set_value(5)
+
+        self.assertEqual(control.posters_per_row, 6)
+        self.assertTrue(control.minus_button.isEnabled())
+        self.assertFalse(control.plus_button.isEnabled())
+        self.assertEqual(
+            [spy.at(index)[0] for index in range(spy.count())],
+            [24, 6],
+        )
+
+    def test_rejects_a_range_whose_minimum_exceeds_its_maximum(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "minimum cannot be greater than maximum",
+        ):
+            PostersPerRowControl(
+                value=18,
+                minimum=24,
+                maximum=6,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
