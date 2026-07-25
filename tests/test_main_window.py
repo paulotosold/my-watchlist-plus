@@ -249,15 +249,15 @@ class MainWindowShellTests(unittest.TestCase):
         )
         self.assertFalse(self.window.watchlist_status_control.isHidden())
         self.assertEqual(
-            self.window.watchlist_status_control.filtered_button.text(),
+            self.window.watchlist_status_control.filtered_label.text(),
             "22 filtered titles",
         )
         self.assertEqual(
             self.window.watchlist_status_control.pinned_button.text(),
             "0 pinned",
         )
-        self.assertFalse(
-            self.window.watchlist_status_control.pinned_button.isEnabled()
+        self.assertTrue(
+            self.window.watchlist_status_control.pinned_pill.isHidden()
         )
 
         history_page = self.window.history_page
@@ -349,8 +349,8 @@ class MainWindowShellTests(unittest.TestCase):
         )
 
         control.pinned_button.click()
-        control.filtered_button.click()
-        control.clear_all_pins_action.trigger()
+        control.pinned_button.click()
+        control.clear_pins_button.click()
         control.reload_button.click()
 
         self.assertEqual(
@@ -559,16 +559,16 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         control = self.window.watchlist_status_control
         original_cards = list(board.cards)
 
-        self.assertEqual(control.filtered_button.text(), "8 filtered titles")
+        self.assertEqual(control.filtered_label.text(), "8 filtered titles")
         self.assertEqual(control.pinned_button.text(), "0 pinned")
-        self.assertFalse(control.pinned_button.isEnabled())
+        self.assertTrue(control.pinned_pill.isHidden())
 
         original_cards[1].on_pin_clicked()
         original_cards[5].on_pin_clicked()
         self._process_events()
 
         self.assertEqual(control.pinned_button.text(), "2 pinned")
-        self.assertTrue(control.pinned_button.isEnabled())
+        self.assertFalse(control.pinned_pill.isHidden())
 
         control.pinned_button.click()
         self._process_events()
@@ -578,18 +578,30 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
             board.visible_cards,
             [original_cards[1], original_cards[5]],
         )
-        self.assertEqual(control.filtered_button.text(), "8 filtered titles")
+        self.assertEqual(control.filtered_label.text(), "8 filtered titles")
         self.assertTrue(control.pinned_button.isChecked())
+        self.assertTrue(control.pinned_pill.property("active"))
 
-        control.clear_all_pins_action.trigger()
+        control.pinned_button.click()
+        self._process_events()
+
+        self.assertFalse(board.pinned_only)
+        self.assertEqual(board.visible_cards, original_cards)
+        self.assertFalse(control.pinned_button.isChecked())
+        self.assertFalse(control.pinned_pill.property("active"))
+
+        control.pinned_button.click()
+        self._process_events()
+        self.assertTrue(board.pinned_only)
+
+        control.clear_pins_button.click()
         self._process_events()
 
         self.assertFalse(board.pinned_only)
         self.assertEqual(board.cards, original_cards)
         self.assertEqual(board.visible_cards, original_cards)
         self.assertEqual(control.pinned_button.text(), "0 pinned")
-        self.assertFalse(control.pinned_button.isEnabled())
-        self.assertTrue(control.filtered_button.isChecked())
+        self.assertTrue(control.pinned_pill.isHidden())
 
     def test_reload_restores_closed_cards_and_forces_filtered_scope(self):
         board = self.window.media_board
@@ -603,7 +615,7 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         control.pinned_button.click()
         self._process_events()
         self.assertTrue(board.pinned_only)
-        self.assertEqual(control.filtered_button.text(), "7 filtered titles")
+        self.assertEqual(control.filtered_label.text(), "7 filtered titles")
 
         control.reload_button.click()
         self._process_events()
@@ -615,8 +627,10 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
             pinned_index_before_reload,
         )
         self.assertTrue(pinned_card.is_pinned)
-        self.assertEqual(control.filtered_button.text(), "8 filtered titles")
+        self.assertEqual(control.filtered_label.text(), "8 filtered titles")
         self.assertEqual(control.pinned_button.text(), "1 pinned")
+        self.assertFalse(control.pinned_pill.isHidden())
+        self.assertFalse(control.pinned_pill.property("active"))
 
     def test_watchlist_viewport_meets_the_status_bar_without_a_gap(self):
         central_widget = self.window.centralWidget()
@@ -632,27 +646,33 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
             status_bar.mapToGlobal(status_bar.rect().topLeft()).y(),
         )
 
-    def test_status_segments_fill_the_status_bar_height(self):
+    def test_pinned_pill_is_inset_within_the_status_bar(self):
         status_bar = self.window.status_bar
         control = self.window.watchlist_status_control
-        segments = control.segment_container
+        self.window.media_board.cards[0].on_pin_clicked()
+        self._process_events()
+        pill = control.pinned_pill
+        expected_margin = (
+            status_bar.height() - pill.height()
+        ) // 2
 
         self.assertEqual(control.geometry().top(), 0)
         self.assertEqual(control.height(), status_bar.height())
         self.assertGreater(control.width(), control.minimumSizeHint().width())
         self.assertEqual(
-            segments.mapTo(
+            pill.mapTo(
                 status_bar,
-                segments.rect().topLeft(),
+                pill.rect().topLeft(),
             ).y(),
-            0,
+            expected_margin,
         )
         self.assertEqual(
-            segments.mapTo(
+            status_bar.rect().bottom()
+            - pill.mapTo(
                 status_bar,
-                segments.rect().bottomLeft(),
+                pill.rect().bottomLeft(),
             ).y(),
-            status_bar.rect().bottom(),
+            expected_margin,
         )
 
     def test_status_content_does_not_collapse_before_grip_layout(self):

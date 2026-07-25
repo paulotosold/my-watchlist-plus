@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
-    QButtonGroup,
+    QFrame,
     QHBoxLayout,
-    QMenu,
+    QLabel,
     QSizeGrip,
     QSizePolicy,
     QStatusBar,
@@ -24,67 +24,57 @@ from app.posters_per_row_control import (
 ASSETS_DIRECTORY = Path(__file__).resolve().parent / "assets"
 STATUS_ICON_SIZE = 20
 STATUS_BUTTON_SIZE = 24
-SEGMENT_BUTTON_HEIGHT = 24
-SEGMENT_HORIZONTAL_PADDING = 12
+STATUS_BAR_HEIGHT = STATUS_BUTTON_SIZE + 5
 STATUS_LEFT_MARGIN = 12
 STATUS_RIGHT_MARGIN = 12
+FILTERED_LABEL_MAX_TEXT = "9999 filtered titles"
+PINNED_BUTTON_MAX_TEXT = "99 pinned"
+PINNED_PILL_HEIGHT = 25
+PINNED_PILL_RADIUS = PINNED_PILL_HEIGHT // 2
+PINNED_CLEAR_BUTTON_SIZE = PINNED_PILL_HEIGHT - 2
+PINNED_CLEAR_ICON_SIZE = 18
+PINNED_CONTROL_RADIUS = PINNED_CLEAR_BUTTON_SIZE // 2
+PINNED_CLEAR_CONTENT_TOP_PADDING = 2
+PINNED_PILL_INACTIVE_BACKGROUND = "#ffffff"
+PINNED_PILL_ACTIVE_BACKGROUND = "#8fc4ff"
+PINNED_PILL_INACTIVE_BORDER = "#929292"
+PINNED_PILL_ACTIVE_BORDER = "#4f93cc"
+PINNED_PILL_TEXT_COLOR = "#202020"
 
-SEGMENT_STYLE = """
-QToolButton {
-    background: #e8e8e8;
-    border: 1px solid #c8c8c8;
-    padding: 2px 8px;
-}
-QToolButton#filteredStatusSegment {
-    border-top-left-radius: 6px;
-    border-bottom-left-radius: 6px;
-}
-QToolButton#pinnedStatusSegment {
-    border-left: 0;
-    border-top-right-radius: 6px;
-    border-bottom-right-radius: 6px;
-}
-QToolButton:checked {
-    background: white;
-}
-QToolButton:hover:!checked {
-    background: #f0f0f0;
-}
-QToolButton:disabled {
-    background: #dedede;
-    border-color: #c8c8c8;
-    color: #8a8a8a;
-}
+PINNED_PILL_STYLE = f"""
+QFrame#pinnedStatusPill {{
+    background: {PINNED_PILL_INACTIVE_BACKGROUND};
+    border: 1px solid {PINNED_PILL_INACTIVE_BORDER};
+    border-radius: {PINNED_PILL_RADIUS}px;
+}}
+QFrame#pinnedStatusPill[active="true"] {{
+    background: {PINNED_PILL_ACTIVE_BACKGROUND};
+    border-color: {PINNED_PILL_ACTIVE_BORDER};
+}}
+QToolButton#pinnedStatusButton,
+QToolButton#clearPinnedButton {{
+    background: transparent;
+    border: 1px solid transparent;
+    color: {PINNED_PILL_TEXT_COLOR};
+    padding: 0;
+}}
+QToolButton#pinnedStatusButton {{
+    padding-left: 8px;
+    padding-right: 4px;
+}}
+QToolButton#clearPinnedButton {{
+    padding-top: {PINNED_CLEAR_CONTENT_TOP_PADDING}px;
+}}
+QToolButton#clearPinnedButton:hover {{
+    background: rgba(0, 0, 0, 18);
+    border-radius: {PINNED_CONTROL_RADIUS}px;
+}}
+QToolButton#pinnedStatusButton:focus,
+QToolButton#clearPinnedButton:focus {{
+    border: 1px dotted #3f3f3f;
+    border-radius: {PINNED_CONTROL_RADIUS}px;
+}}
 """
-
-
-class ContextMenuToolButton(QToolButton):
-    """Tool button that exposes its context menu to mouse and keyboard."""
-
-    context_menu_requested = Signal(QPoint)
-
-    def contextMenuEvent(self, event):
-        self.context_menu_requested.emit(event.pos())
-        event.accept()
-
-    def keyPressEvent(self, event):
-        is_menu_key = event.key() == Qt.Key.Key_Menu
-        is_shift_f10 = (
-            event.key() == Qt.Key.Key_F10
-            and bool(
-                event.modifiers()
-                & Qt.KeyboardModifier.ShiftModifier
-            )
-        )
-
-        if is_menu_key or is_shift_f10:
-            self.context_menu_requested.emit(
-                self.rect().bottomLeft()
-            )
-            event.accept()
-            return
-
-        super().keyPressEvent(event)
 
 
 class WatchlistStatusControl(QWidget):
@@ -114,17 +104,69 @@ class WatchlistStatusControl(QWidget):
             tooltip="Reload the watchlist",
         )
 
-        self.filtered_button = self._make_segment_button(
-            object_name="filteredStatusSegment",
-            accessible_name="Show all filtered media",
-            tooltip="Show all filtered media",
+        self.filtered_label = QLabel(self)
+        self.filtered_label.setObjectName("filteredStatusLabel")
+        self.filtered_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft
+            | Qt.AlignmentFlag.AlignVCenter
         )
-        self.pinned_button = self._make_segment_button(
-            object_name="pinnedStatusSegment",
-            accessible_name="Show pinned media only",
-            tooltip="Show pinned media only",
-            context_menu=True,
+        self.filtered_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
+        self.pinned_pill = QFrame(self)
+        self.pinned_pill.setObjectName("pinnedStatusPill")
+        self.pinned_pill.setProperty("active", False)
+        self.pinned_pill.setFixedHeight(PINNED_PILL_HEIGHT)
+        self.pinned_pill.setSizePolicy(
+            QSizePolicy.Policy.Minimum,
+            QSizePolicy.Policy.Fixed,
         )
+        self.pinned_pill.setStyleSheet(PINNED_PILL_STYLE)
+
+        self.pinned_button = QToolButton(self.pinned_pill)
+        self.pinned_button.setObjectName("pinnedStatusButton")
+        self.pinned_button.setCheckable(True)
+        self.pinned_button.setFixedHeight(
+            PINNED_PILL_HEIGHT - 2
+        )
+        self.pinned_button.setFocusPolicy(
+            Qt.FocusPolicy.TabFocus
+        )
+        self.pinned_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+
+        self.clear_pins_button = QToolButton(self.pinned_pill)
+        self.clear_pins_button.setObjectName("clearPinnedButton")
+        self.clear_pins_button.setIcon(
+            QIcon(str(ASSETS_DIRECTORY / "status_bar_close.png"))
+        )
+        self.clear_pins_button.setIconSize(
+            QSize(
+                PINNED_CLEAR_ICON_SIZE,
+                PINNED_CLEAR_ICON_SIZE,
+            )
+        )
+        self.clear_pins_button.setFixedSize(
+            PINNED_CLEAR_BUTTON_SIZE,
+            PINNED_CLEAR_BUTTON_SIZE,
+        )
+        self.clear_pins_button.setFocusPolicy(
+            Qt.FocusPolicy.StrongFocus
+        )
+        self.clear_pins_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.clear_pins_button.setAccessibleName(
+            "Clear all pinned"
+        )
+        self.clear_pins_button.setToolTip("Clear all pinned")
+
+        self.pinned_layout = QHBoxLayout(self.pinned_pill)
+        self.pinned_layout.setContentsMargins(1, 0, 1, 0)
+        self.pinned_layout.setSpacing(0)
+        self.pinned_layout.addWidget(self.pinned_button)
+        self.pinned_layout.addWidget(self.clear_pins_button)
+
         self.poster_size_control = PostersPerRowControl(self)
 
         # macOS gives tool buttons a smaller class font. Reapplying the
@@ -139,50 +181,25 @@ class WatchlistStatusControl(QWidget):
                 status_text_font.pointSizeF()
             )
 
-        self.filtered_button.setFont(status_text_font)
+        self.filtered_label.setFont(status_text_font)
         self.pinned_button.setFont(status_text_font)
+        self.clear_pins_button.setFont(status_text_font)
 
-        filtered_metrics = self.filtered_button.fontMetrics()
-        pinned_metrics = self.pinned_button.fontMetrics()
-        self.filtered_segment_width = (
+        filtered_metrics = self.filtered_label.fontMetrics()
+        self.filtered_label_width = (
             filtered_metrics.horizontalAdvance(
-                "9999 filtered titles"
+                FILTERED_LABEL_MAX_TEXT
             )
-            + 2 * SEGMENT_HORIZONTAL_PADDING
         )
-        self.pinned_segment_width = (
-            pinned_metrics.horizontalAdvance("9999 pinned")
-            + 2 * SEGMENT_HORIZONTAL_PADDING
+        self.filtered_label.setFixedWidth(
+            self.filtered_label_width
         )
-        self.filtered_button.setFixedSize(
-            self.filtered_segment_width,
-            SEGMENT_BUTTON_HEIGHT,
+        self.pinned_button.setText(PINNED_BUTTON_MAX_TEXT)
+        self.pinned_button_width = (
+            self.pinned_button.sizeHint().width()
         )
-        self.pinned_button.setFixedSize(
-            self.pinned_segment_width,
-            SEGMENT_BUTTON_HEIGHT,
-        )
-
-        self.segment_group = QButtonGroup(self)
-        self.segment_group.setExclusive(True)
-        self.segment_group.addButton(self.filtered_button)
-        self.segment_group.addButton(self.pinned_button)
-
-        self.segment_container = QWidget(self)
-        self.segment_container.setObjectName("watchlistStatusSegments")
-        segment_layout = QHBoxLayout(self.segment_container)
-        segment_layout.setContentsMargins(0, 0, 0, 0)
-        segment_layout.setSpacing(0)
-        segment_layout.addWidget(self.filtered_button)
-        segment_layout.addWidget(self.pinned_button)
-
-        self.pinned_context_menu = QMenu(self)
-        self.clear_all_pins_action = QAction(
-            "Clear all pinned",
-            self.pinned_context_menu,
-        )
-        self.pinned_context_menu.addAction(
-            self.clear_all_pins_action
+        self.pinned_button.setFixedWidth(
+            self.pinned_button_width
         )
 
         layout = QHBoxLayout(self)
@@ -194,24 +211,36 @@ class WatchlistStatusControl(QWidget):
         )
         layout.setSpacing(8)
         layout.addWidget(self.reload_button)
-        layout.addWidget(self.segment_container)
+        layout.addWidget(self.filtered_label)
+        layout.addWidget(
+            self.pinned_pill,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
         layout.addStretch(1)
         layout.addWidget(self.poster_size_control)
 
         self.reload_button.clicked.connect(
             self.reload_requested.emit
         )
-        self.filtered_button.clicked.connect(
-            lambda _checked=False: self._request_pinned_only(False)
-        )
         self.pinned_button.clicked.connect(
-            lambda _checked=False: self._request_pinned_only(True)
+            self._request_pinned_only
         )
-        self.pinned_button.context_menu_requested.connect(
-            self._show_pinned_context_menu
-        )
-        self.clear_all_pins_action.triggered.connect(
+        self.clear_pins_button.clicked.connect(
             self.clear_all_pins_requested.emit
+        )
+
+        self.setTabOrder(
+            self.reload_button,
+            self.pinned_button,
+        )
+        self.setTabOrder(
+            self.pinned_button,
+            self.clear_pins_button,
+        )
+        self.setTabOrder(
+            self.clear_pins_button,
+            self.poster_size_control.minus_button,
         )
 
         self.set_state(
@@ -253,32 +282,46 @@ class WatchlistStatusControl(QWidget):
         )
         pinned_text = f"{self._pinned_count} pinned"
 
-        self.filtered_button.setText(filtered_text)
+        self.filtered_label.setText(filtered_text)
         self.pinned_button.setText(pinned_text)
-        self.filtered_button.setAccessibleName(
-            f"{filtered_text}, show all"
-        )
-        self.pinned_button.setAccessibleName(
-            f"{pinned_text}, show pinned only"
-        )
+        self.filtered_label.setAccessibleName(filtered_text)
 
-        self.filtered_button.setChecked(not self._pinned_only)
         self.pinned_button.setChecked(self._pinned_only)
-        self.pinned_button.setEnabled(self._pinned_count > 0)
-        self.clear_all_pins_action.setEnabled(
-            self._pinned_count > 0
-        )
+        has_pins = self._pinned_count > 0
+        self.pinned_button.setEnabled(has_pins)
+        self.clear_pins_button.setEnabled(has_pins)
+        self.pinned_pill.setVisible(has_pins)
+        self._update_pinned_pill()
 
     def _request_pinned_only(self, pinned_only):
         self._pinned_only = (
             bool(pinned_only) and self._pinned_count > 0
         )
+        self.pinned_button.setChecked(self._pinned_only)
+        self._update_pinned_pill()
         self.pinned_only_requested.emit(self._pinned_only)
 
-    def _show_pinned_context_menu(self, position: QPoint):
-        self.pinned_context_menu.popup(
-            self.pinned_button.mapToGlobal(position)
+    def _update_pinned_pill(self):
+        self.pinned_layout.invalidate()
+        self.pinned_pill.setFixedWidth(
+            self.pinned_layout.sizeHint().width()
         )
+        self.pinned_pill.setProperty(
+            "active",
+            self._pinned_only,
+        )
+        style = self.pinned_pill.style()
+        style.unpolish(self.pinned_pill)
+        style.polish(self.pinned_pill)
+        self.pinned_pill.update()
+
+        action_text = (
+            "Show all filtered media"
+            if self._pinned_only
+            else "Show pinned media only"
+        )
+        self.pinned_button.setAccessibleName(action_text)
+        self.pinned_button.setToolTip(action_text)
 
     def _make_icon_button(
         self,
@@ -298,31 +341,10 @@ class WatchlistStatusControl(QWidget):
         )
         button.setFixedSize(STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
         button.setStyleSheet(ICON_BUTTON_STYLE)
-        button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setAccessibleName(accessible_name)
         button.setToolTip(tooltip)
-        return button
-
-    def _make_segment_button(
-        self,
-        *,
-        object_name,
-        accessible_name,
-        tooltip,
-        context_menu=False,
-    ):
-        button_class = (
-            ContextMenuToolButton if context_menu else QToolButton
-        )
-        button = button_class(self)
-        button.setObjectName(object_name)
-        button.setCheckable(True)
-        button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.setAccessibleName(accessible_name)
-        button.setToolTip(tooltip)
-        button.setStyleSheet(SEGMENT_STYLE)
         return button
 
 
@@ -338,7 +360,7 @@ class WatchlistStatusBar(QStatusBar):
         self._layout_timer.timeout.connect(
             self._layout_watchlist_control
         )
-        self.setFixedHeight(STATUS_BUTTON_SIZE)
+        self.setFixedHeight(STATUS_BAR_HEIGHT)
         self._layout_watchlist_control()
 
     def resizeEvent(self, event):
