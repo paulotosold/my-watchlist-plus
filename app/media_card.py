@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 
 
 MEDIA_CARD_ICON_HEIGHT = 32
-MEDIA_CARD_BUTTON_MARGIN = 8
+MEDIA_CARD_BUTTON_MARGIN = 6
 
 
 @lru_cache(maxsize=None)
