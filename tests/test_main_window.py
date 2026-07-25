@@ -291,7 +291,7 @@ class MainWindowShellTests(unittest.TestCase):
         control = self.window.posters_per_row_control
 
         self.assertFalse(control.isHidden())
-        self.assertEqual(control.posters_per_row, 5)
+        self.assertEqual(control.posters_per_row, 6)
         self.assertEqual(
             self.window.status_bar.currentMessage(),
             "",
@@ -299,10 +299,10 @@ class MainWindowShellTests(unittest.TestCase):
 
         control.plus_button.click()
 
-        self.assertEqual(control.posters_per_row, 4)
+        self.assertEqual(control.posters_per_row, 5)
         self.assertEqual(
             self.window.watchlist_page.posters_per_row_values,
-            [4],
+            [5],
         )
         self.assertEqual(
             self.window.status_bar.currentMessage(),
@@ -314,7 +314,7 @@ class MainWindowShellTests(unittest.TestCase):
 
         self.window.section_tabs.setCurrentIndex(0)
         self.assertFalse(control.isHidden())
-        self.assertEqual(control.posters_per_row, 4)
+        self.assertEqual(control.posters_per_row, 5)
 
     def test_status_messages_from_inactive_pages_are_ignored(self):
         self.window.history_page.status_message_changed.emit("new history")
@@ -523,7 +523,7 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         self.window.posters_per_row_control.plus_button.click()
         self._process_events()
 
-        self.assertEqual(self.window.media_board.posters_per_row, 4)
+        self.assertEqual(self.window.media_board.posters_per_row, 5)
         self.assertGreater(
             self.window.media_board.card_width,
             original_card_width,
@@ -551,8 +551,8 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         self._process_events()
 
         self.assertFalse(self.window.posters_per_row_control.isHidden())
-        self.assertEqual(self.window.posters_per_row_control.value(), 4)
-        self.assertEqual(self.window.media_board.posters_per_row, 4)
+        self.assertEqual(self.window.posters_per_row_control.value(), 5)
+        self.assertEqual(self.window.media_board.posters_per_row, 5)
 
     def test_status_scope_counts_and_clear_all_follow_the_real_board(self):
         board = self.window.media_board

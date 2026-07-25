@@ -65,7 +65,7 @@ class PostersPerRowControlTests(unittest.TestCase):
         )
         self.assertEqual(
             self.control.accessibleName(),
-            "Poster size: 5 posters per row",
+            "Poster size: 6 posters per row",
         )
         self.assertEqual(
             self.control.minus_button.focusPolicy(),
@@ -80,10 +80,10 @@ class PostersPerRowControlTests(unittest.TestCase):
         self.control.minus_button.click()
         self.control.plus_button.click()
 
-        self.assertEqual(self.control.posters_per_row, 5)
+        self.assertEqual(self.control.posters_per_row, 6)
         self.assertEqual(
             [spy.at(index)[0] for index in range(spy.count())],
-            [6, 5],
+            [7, 6],
         )
 
     def test_buttons_clamp_at_limits_without_extra_emissions(self):
@@ -97,7 +97,7 @@ class PostersPerRowControlTests(unittest.TestCase):
             MAX_POSTERS_PER_ROW,
         )
         self.assertFalse(self.control.minus_button.isEnabled())
-        self.assertEqual(spy.count(), 3)
+        self.assertEqual(spy.count(), 2)
 
         for _ in range(10):
             self.control.plus_button.click()
@@ -113,7 +113,7 @@ class PostersPerRowControlTests(unittest.TestCase):
         )
         self.assertEqual(
             [spy.at(index)[0] for index in range(spy.count())],
-            [6, 7, 8, 7, 6, 5, 4, 3, 2],
+            [7, 8, 7, 6, 5, 4, 3, 2],
         )
 
     def test_space_activates_the_focused_tool_button(self):
@@ -126,7 +126,7 @@ class PostersPerRowControlTests(unittest.TestCase):
         )
 
         self.assertEqual(spy.count(), 1)
-        self.assertEqual(spy.at(0), [6])
+        self.assertEqual(spy.at(0), [7])
 
 
 if __name__ == "__main__":

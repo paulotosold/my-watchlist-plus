@@ -9,6 +9,7 @@ from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QWidget
 
 from app.library_filter import DEFAULT_FILTER_TEXT
+from app.media_board import DEFAULT_POSTERS_PER_ROW
 from app.watchlist_page import WatchlistPage
 
 
@@ -30,7 +31,11 @@ class FakeMediaBoard(QWidget):
     details_requested = Signal(object)
     view_state_changed = Signal(int, int, bool)
 
-    def __init__(self, posters_per_row=5, parent=None):
+    def __init__(
+        self,
+        posters_per_row=DEFAULT_POSTERS_PER_ROW,
+        parent=None,
+    ):
         super().__init__(parent)
         self.posters_per_row = posters_per_row
         self.cards = []
@@ -196,7 +201,10 @@ class WatchlistPageTests(unittest.TestCase):
             self.page.top_bar.filter_input.text(),
             DEFAULT_FILTER_TEXT,
         )
-        self.assertEqual(self.page.posters_per_row, 5)
+        self.assertEqual(
+            self.page.posters_per_row,
+            DEFAULT_POSTERS_PER_ROW,
+        )
         self.assertEqual(self.page.filtered_count, 2)
         self.assertEqual(self.page.pinned_count, 0)
         self.assertFalse(self.page.pinned_only)

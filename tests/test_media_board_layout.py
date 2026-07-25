@@ -65,18 +65,18 @@ class MediaBoardLayoutTests(unittest.TestCase):
             [card.get_current_media_key() for card in self.board.cards],
             list(range(12)),
         )
-        self.assertEqual(self.board.posters_per_row, 5)
-        self.assertEqual(self.board.row_count, 3)
+        self.assertEqual(self.board.posters_per_row, 6)
+        self.assertEqual(self.board.row_count, 2)
         self.assertEqual(
             self.board.card_height,
             round(self.board.card_width * 1.5),
         )
         self.assertEqual(
-            self.board.cards[10].geometry().left(),
+            self.board.cards[6].geometry().left(),
             self.board.cards[0].geometry().left(),
         )
         self.assertEqual(
-            self.board.cards[11].geometry().left(),
+            self.board.cards[7].geometry().left(),
             self.board.cards[1].geometry().left(),
         )
 
@@ -150,7 +150,7 @@ class MediaBoardLayoutTests(unittest.TestCase):
                 self.assertEqual(len(self.board.cards), count)
                 self.assertEqual(
                     self.board.row_count,
-                    0 if count == 0 else (count + 4) // 5,
+                    0 if count == 0 else (count + 5) // 6,
                 )
                 self.assertEqual(
                     [
@@ -562,9 +562,11 @@ class WatchlistScrollTests(unittest.TestCase):
         self.assertEqual(self.page.status_message, "19 filtered titles")
 
     def test_reflow_keeps_the_anchor_card_at_the_same_vertical_offset(self):
+        self.page.resize(900, 300)
+        self._process_layout_events()
         board = self.page.media_board
         scroll_bar = self.page.scroll_area.verticalScrollBar()
-        anchor_card = board.cards[10]
+        anchor_card = board.cards[12]
         scroll_bar.setValue(anchor_card.geometry().top() + 17)
         self.application.processEvents()
         offset_before = scroll_bar.value() - anchor_card.geometry().top()
@@ -579,9 +581,11 @@ class WatchlistScrollTests(unittest.TestCase):
         )
 
     def test_stable_refresh_restores_scroll_after_survivors_compact(self):
+        self.page.resize(900, 300)
+        self._process_layout_events()
         board = self.page.media_board
         scroll_bar = self.page.scroll_area.verticalScrollBar()
-        anchor_card = board.cards[10]
+        anchor_card = board.cards[12]
         scroll_bar.setValue(anchor_card.geometry().top() + 17)
         self.application.processEvents()
         offset_before = scroll_bar.value() - anchor_card.geometry().top()
@@ -630,7 +634,7 @@ class WatchlistScrollTests(unittest.TestCase):
         self.page.resize(1200, 500)
         self._process_layout_events()
 
-        self.assertEqual(board.posters_per_row, 5)
+        self.assertEqual(board.posters_per_row, 6)
         self.assertGreater(board.card_width, original_width)
         self.assertEqual(board.card_height, round(board.card_width * 1.5))
         self.assertEqual(
