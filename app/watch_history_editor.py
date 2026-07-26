@@ -46,6 +46,7 @@ def validate_watch_dates(date_earliest, date_latest):
             "date_earliest": None,
             "date_latest": None,
             "error": earliest_error,
+            "error_type": "invalid_format",
         }
 
     latest, latest_error = normalize_watch_date(date_latest)
@@ -56,6 +57,7 @@ def validate_watch_dates(date_earliest, date_latest):
             "date_earliest": None,
             "date_latest": None,
             "error": latest_error,
+            "error_type": "invalid_format",
         }
 
     if earliest is not None and latest is not None and latest < earliest:
@@ -64,6 +66,7 @@ def validate_watch_dates(date_earliest, date_latest):
             "date_earliest": earliest,
             "date_latest": latest,
             "error": "Latest date must be on or after earliest date.",
+            "error_type": "invalid_range",
         }
 
     return {
@@ -71,6 +74,7 @@ def validate_watch_dates(date_earliest, date_latest):
         "date_earliest": earliest,
         "date_latest": latest,
         "error": None,
+        "error_type": None,
     }
 
 

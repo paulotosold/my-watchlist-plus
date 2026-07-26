@@ -275,7 +275,41 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
                         dialog.media_draft["user_data"]["watch_history"],
                         [],
                     )
+                    self.assertFalse(dialog._is_dirty)
+                    self.assertFalse(dialog.save_button.isEnabled())
                     dialog.close()
+
+    def test_cancelling_automatic_entry_preserves_prior_dirty_state(self):
+        for media_type in ("movie", "episode"):
+            with self.subTest(media_type=media_type), patch(
+                "app.media_details_dialog.WatchEntryDetailsDialog",
+            ) as watch_entry_dialog:
+                watch_entry_dialog.return_value.exec.return_value = (
+                    QDialog.Rejected
+                )
+                dialog = self._dialog(
+                    media_type=media_type,
+                    watch_state="to_watch",
+                )
+                good_index = dialog.impression_combo.findData("good")
+                self.assertGreaterEqual(good_index, 0)
+                dialog.impression_combo.setCurrentIndex(good_index)
+                self.assertTrue(dialog._is_dirty)
+                self.assertTrue(dialog.save_button.isEnabled())
+
+                self._activate_status(dialog, "watched")
+
+                self.assertEqual(
+                    dialog.status_combo.currentData(),
+                    "to_watch",
+                )
+                self.assertEqual(
+                    dialog.impression_combo.currentData(),
+                    "good",
+                )
+                self.assertTrue(dialog._is_dirty)
+                self.assertTrue(dialog.save_button.isEnabled())
+                dialog.close()
 
     def test_cancelling_manual_entry_does_not_change_watched_status(self):
         with patch(
@@ -314,6 +348,12 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
                     dialog.status_combo.currentData(),
                     "watched",
                 )
+                self.assertEqual(
+                    dialog.media_draft["user_data"]["watch_history"],
+                    existing_history,
+                )
+                self.assertTrue(dialog._is_dirty)
+                self.assertTrue(dialog.save_button.isEnabled())
                 dialog.close()
 
     def test_cancelling_automatic_entry_keeps_watched_status_for_series(self):

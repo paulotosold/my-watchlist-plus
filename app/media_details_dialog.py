@@ -129,7 +129,6 @@ WATCH_ENTRY_EPISODE_SELECTOR_MAX_HEIGHT = 520
 WATCH_ENTRY_DATE_GROUP_SPACING = 2
 WATCH_ENTRY_INLINE_BUTTON_SIZE = 32
 WATCH_ENTRY_INLINE_ICON_SIZE = 20
-WATCH_ENTRY_SMART_TO_DATES_SPACING = 8
 WATCH_ENTRY_SEASON_LABEL_WIDTH = 60
 WATCH_ENTRY_SEASON_LABEL_BUTTON_SPACING = 20
 
@@ -525,6 +524,8 @@ class WatchEntryDetailsDialog(QDialog):
         self.entry = deepcopy(entry) if entry is not None else None
         self.result_payload = {"action": "cancel"}
         self.episode_buttons = {}
+        self.season_labels = {}
+        self.season_episode_keys = {}
         self.initial_signature = None
         self._date_picker_popup = None
 
@@ -544,10 +545,6 @@ class WatchEntryDetailsDialog(QDialog):
     def _apply_parent_styles(self, parent):
         parent_style = parent.styleSheet() if parent is not None else ""
         self.setStyleSheet(parent_style + f"""
-            QLabel#errorLabel {{
-                color: #b00020;
-            }}
-
             QScrollArea#episodeSelectorScroll,
             QScrollArea#episodeSelectorScroll > QWidget,
             QScrollArea#episodeSelectorScroll > QWidget > QWidget,
@@ -594,22 +591,6 @@ class WatchEntryDetailsDialog(QDialog):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 16, 20, 16)
         main_layout.setSpacing(0)
-
-        smart_layout = QHBoxLayout()
-        smart_layout.setContentsMargins(0, 0, 0, 0)
-        smart_layout.setSpacing(8)
-
-        self.smart_input = QLineEdit(self)
-        self.smart_input.setFixedHeight(32)
-        self.smart_input.setClearButtonEnabled(True)
-        self.smart_input.setStyleSheet(INPUT_BOX_STYLE)
-        self.smart_input.returnPressed.connect(self._smart_fill)
-
-        self.smart_label = QLabel("Smart Fill:", self)
-        smart_layout.addWidget(self.smart_label)
-        smart_layout.addWidget(self.smart_input, stretch=1)
-        main_layout.addLayout(smart_layout)
-        main_layout.addSpacing(WATCH_ENTRY_SMART_TO_DATES_SPACING)
 
         date_layout = QHBoxLayout()
         date_layout.setContentsMargins(0, 0, 0, 0)
@@ -660,11 +641,6 @@ class WatchEntryDetailsDialog(QDialog):
         else:
             main_layout.addSpacing(WATCH_ENTRY_HEADER_TO_BUTTONS_SPACING)
 
-        self.error_label = QLabel(self)
-        self.error_label.setObjectName("errorLabel")
-        self.error_label.setWordWrap(True)
-        main_layout.addWidget(self.error_label)
-
         main_layout.addWidget(self._build_button_bar())
 
     def _make_date_input(self):
@@ -693,9 +669,6 @@ class WatchEntryDetailsDialog(QDialog):
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.clicked.connect(callback)
         return button
-
-    def _smart_fill(self):
-        print(self.smart_input.text())
 
     def _copy_earliest_to_latest(self):
         self.date_latest_input.setText(self.date_earliest_input.text())
@@ -802,8 +775,21 @@ class WatchEntryDetailsDialog(QDialog):
                 row_layout.setContentsMargins(0, 0, 0, 0)
                 row_layout.setSpacing(WATCH_ENTRY_SEASON_LABEL_BUTTON_SPACING)
 
-                season_label = QLabel(f"Season {season_num}:", self)
+                self.season_episode_keys[season_num] = []
+                season_label = ClickableEntryLabel(
+                    f"Season {season_num}:",
+                    self,
+                    lambda season_num=season_num: self._toggle_season(
+                        season_num
+                    ),
+                )
                 season_label.setFixedWidth(WATCH_ENTRY_SEASON_LABEL_WIDTH)
+                season_label.setSizePolicy(
+                    QSizePolicy.Policy.Fixed,
+                    QSizePolicy.Policy.Fixed,
+                )
+                season_label.setAccessibleName(f"Season {season_num}")
+                self.season_labels[season_num] = season_label
                 row_layout.addWidget(season_label)
 
                 episode_buttons_layout = QHBoxLayout()
@@ -832,6 +818,7 @@ class WatchEntryDetailsDialog(QDialog):
                         lambda checked=False, key=key: self._episode_toggled(key)
                     )
                     self.episode_buttons[key] = (button, episode)
+                    self.season_episode_keys[season_num].append(key)
                     episode_buttons_layout.addWidget(button)
 
                 row_layout.addLayout(episode_buttons_layout)
@@ -860,6 +847,7 @@ class WatchEntryDetailsDialog(QDialog):
         self.delete_entry_button.setObjectName("deleteButton")
         self.cancel_entry_button = QPushButton("Cancel", bar)
         self.save_entry_button = QPushButton("Save", bar)
+        self.save_entry_button.setDefault(True)
 
         for button in (
             self.delete_entry_button,
@@ -991,14 +979,35 @@ class WatchEntryDetailsDialog(QDialog):
         self._refresh_episode_button(key)
         self._refresh_state()
 
+    def _toggle_season(self, season_num):
+        enabled_buttons = [
+            self.episode_buttons[key][0]
+            for key in self.season_episode_keys.get(season_num, [])
+            if self.episode_buttons[key][0].isEnabled()
+        ]
+
+        if not enabled_buttons:
+            return
+
+        should_select = not all(
+            button.isChecked()
+            for button in enabled_buttons
+        )
+
+        for button in enabled_buttons:
+            button.setChecked(should_select)
+
+        self._refresh_state()
+
     def _refresh_state(self):
         validation = self._validated_dates()
-        self.error_label.setText(validation["error"] or "")
-        self.error_label.setVisible(bool(validation["error"]))
         self.preview_label.setText(f"Preview: {self._preview_text(validation)}")
 
         for key in self.episode_buttons:
             self._refresh_episode_button(key)
+
+        for season_num in self.season_labels:
+            self._refresh_season_label(season_num)
 
         is_changed = self._current_signature() != self.initial_signature
         can_save = self.entry is None or is_changed
@@ -1018,6 +1027,30 @@ class WatchEntryDetailsDialog(QDialog):
         button.style().polish(button)
         button.update()
 
+    def _refresh_season_label(self, season_num):
+        label = self.season_labels[season_num]
+        enabled_buttons = [
+            self.episode_buttons[key][0]
+            for key in self.season_episode_keys.get(season_num, [])
+            if self.episode_buttons[key][0].isEnabled()
+        ]
+        label.setEnabled(bool(enabled_buttons))
+
+        if not enabled_buttons:
+            label.setToolTip(
+                f"No available episodes can be changed in Season {season_num}."
+            )
+            label.setAccessibleDescription(label.toolTip())
+            return
+
+        if all(button.isChecked() for button in enabled_buttons):
+            tooltip = f"Clear all available episodes in Season {season_num}."
+        else:
+            tooltip = f"Select all available episodes in Season {season_num}."
+
+        label.setToolTip(tooltip)
+        label.setAccessibleDescription(tooltip)
+
     def _validated_dates(self):
         return validate_watch_dates(
             self.date_earliest_input.text(),
@@ -1028,7 +1061,10 @@ class WatchEntryDetailsDialog(QDialog):
         validation = validation or self._validated_dates()
 
         if not validation["is_valid"]:
-            return "Invalid date"
+            if validation["error_type"] == "invalid_range":
+                return "Invalid range — check date order"
+
+            return "Invalid date — use YYYY-MM-DD"
 
         event = {
             "date_earliest": validation["date_earliest"],
@@ -1137,6 +1173,7 @@ class MediaDetailsDialog(QDialog):
         self._watch_entry_dialog_active = False
         self._status_change_generation = 0
         self._scheduled_watch_entry_generation = None
+        self._status_change_previous_dirty = False
         self.metadata_refresh_manager = (
             metadata_refresh_manager or get_metadata_refresh_manager()
         )
@@ -1664,6 +1701,7 @@ class MediaDetailsDialog(QDialog):
         self._update_action_buttons()
 
     def _on_status_index_changed(self, _index):
+        self._status_change_previous_dirty = self._is_dirty
         self._status_change_generation += 1
         self.mark_dirty()
 
@@ -1676,9 +1714,16 @@ class MediaDetailsDialog(QDialog):
         if previous_status == "watched" or current_status != "watched":
             return
 
-        self._schedule_new_watch_entry_dialog(previous_status)
+        self._schedule_new_watch_entry_dialog(
+            previous_status,
+            self._status_change_previous_dirty,
+        )
 
-    def _schedule_new_watch_entry_dialog(self, previous_status):
+    def _schedule_new_watch_entry_dialog(
+        self,
+        previous_status,
+        previous_dirty,
+    ):
         if (
             self._is_populating
             or self._metadata_refresh_in_progress
@@ -1695,10 +1740,11 @@ class MediaDetailsDialog(QDialog):
         self._scheduled_watch_entry_generation = generation
         QTimer.singleShot(
             0,
-            lambda generation=generation, previous_status=previous_status: (
+            lambda: (
                 self._open_scheduled_watch_entry_dialog(
                     generation,
                     previous_status,
+                    previous_dirty,
                 )
             ),
         )
@@ -1707,6 +1753,7 @@ class MediaDetailsDialog(QDialog):
         self,
         generation,
         previous_status,
+        previous_dirty,
     ):
         if self._scheduled_watch_entry_generation == generation:
             self._scheduled_watch_entry_generation = None
@@ -1728,6 +1775,7 @@ class MediaDetailsDialog(QDialog):
 
         self._open_watch_entry_details(
             automatic_previous_status=previous_status,
+            automatic_previous_dirty=previous_dirty,
             is_automatic=True,
         )
 
@@ -1956,6 +2004,7 @@ class MediaDetailsDialog(QDialog):
         entry=None,
         *,
         automatic_previous_status=None,
+        automatic_previous_dirty=None,
         is_automatic=False,
     ):
         if self._watch_entry_dialog_active:
@@ -1973,6 +2022,7 @@ class MediaDetailsDialog(QDialog):
             if is_automatic:
                 self._restore_status_after_automatic_entry_cancel(
                     automatic_previous_status,
+                    automatic_previous_dirty,
                 )
             return
 
@@ -2005,6 +2055,7 @@ class MediaDetailsDialog(QDialog):
     def _restore_status_after_automatic_entry_cancel(
         self,
         previous_status,
+        previous_dirty,
     ):
         metadata = self.media_draft.get("metadata") or {}
 
@@ -2018,6 +2069,8 @@ class MediaDetailsDialog(QDialog):
 
         set_combo_value(self.status_combo, previous_status)
         self.status_combo.reset_user_activation_baseline()
+        self._is_dirty = previous_dirty
+        self._update_action_buttons()
 
     def edit_note(self, entry=None):
         dialog = NoteDetailsDialog(self, entry)

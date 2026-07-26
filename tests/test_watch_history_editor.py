@@ -17,6 +17,77 @@ class WatchHistoryEditorTests(unittest.TestCase):
         self.assertFalse(validate_watch_dates("2026/05/01", "")["is_valid"])
         self.assertFalse(validate_watch_dates("2026-05-31", "2026-05-01")["is_valid"])
 
+    def test_validate_watch_dates_reports_stable_error_types(self):
+        cases = (
+            (
+                "empty dates",
+                "",
+                "",
+                {
+                    "is_valid": True,
+                    "date_earliest": None,
+                    "date_latest": None,
+                    "error": None,
+                    "error_type": None,
+                },
+            ),
+            (
+                "valid range",
+                "2026-05-01",
+                "2026-05-31",
+                {
+                    "is_valid": True,
+                    "date_earliest": "2026-05-01",
+                    "date_latest": "2026-05-31",
+                    "error": None,
+                    "error_type": None,
+                },
+            ),
+            (
+                "invalid earliest format",
+                "2026/05/01",
+                "",
+                {
+                    "is_valid": False,
+                    "date_earliest": None,
+                    "date_latest": None,
+                    "error": "Use YYYY-MM-DD.",
+                    "error_type": "invalid_format",
+                },
+            ),
+            (
+                "invalid latest format",
+                "",
+                "May 31, 2026",
+                {
+                    "is_valid": False,
+                    "date_earliest": None,
+                    "date_latest": None,
+                    "error": "Use YYYY-MM-DD.",
+                    "error_type": "invalid_format",
+                },
+            ),
+            (
+                "latest before earliest",
+                "2026-05-31",
+                "2026-05-01",
+                {
+                    "is_valid": False,
+                    "date_earliest": "2026-05-31",
+                    "date_latest": "2026-05-01",
+                    "error": "Latest date must be on or after earliest date.",
+                    "error_type": "invalid_range",
+                },
+            ),
+        )
+
+        for name, date_earliest, date_latest, expected in cases:
+            with self.subTest(name=name):
+                self.assertEqual(
+                    validate_watch_dates(date_earliest, date_latest),
+                    expected,
+                )
+
     def test_episode_availability_requires_released_iso_date(self):
         today = date(2026, 7, 13)
 
