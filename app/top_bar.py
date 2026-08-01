@@ -26,7 +26,9 @@ QLineEdit {
 }
 """
 
-FIND_MEDIA_INPUT_PLACEHOLDER = "IMDb ID or describe what you’re looking for"
+FIND_MEDIA_INPUT_PLACEHOLDER = (
+    "IMDb ID, title, or describe what you’re looking for"
+)
 
 
 class TopBar(QWidget):

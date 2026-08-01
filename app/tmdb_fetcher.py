@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import requests
 
 from app.config import (
+    TMDB_ADDITIONAL_LANGUAGES,
     TMDB_LANGUAGE,
     TMDB_WATCH_REGION,
     WATCH_PROVIDER_ACCESS_TYPES,
@@ -18,6 +19,9 @@ headers = {
     "accept": "application/json",
     "Authorization": f"Bearer {TMDB_READ_ACCESS_TOKEN}"
 }
+
+TMDB_ALTERNATE_TITLE_CANDIDATE_LIMIT = 3
+
 
 def _get_genre_names(genre_codes):
     genres = {
@@ -108,7 +112,7 @@ def _tmdb_get(endpoint, params=None):
     response = requests.get(
         url,
         headers=headers,
-        params=params or {"language": TMDB_LANGUAGE},
+        params={"language": TMDB_LANGUAGE} if params is None else params,
         timeout=15,
     )
     response.raise_for_status()
@@ -421,6 +425,277 @@ def find_tmdb_match_by_imdb_id(imdb_id):
         "status": "not_found",
         "match": None,
         "reason": "IMDb ID did not match any TMDB movie, series, or episode.",
+    }
+
+
+def search_tmdb_title_candidates(
+    query,
+    *,
+    language=TMDB_LANGUAGE,
+    additional_languages=None,
+):
+    """Return lightweight movie and series candidates for a title query.
+
+    Candidates come exclusively from the default-language searches. Searches
+    in additional languages only add localized titles to matching TMDB
+    identities from that base result set. The first three base candidates per
+    media type also receive country-filtered alternate titles. Exact-title
+    filtering is deliberately left to the caller.
+    """
+    query = query.strip()
+
+    if not query:
+        return []
+
+    base_movies, movie_total = _search_tmdb_title_pages(
+        "search/movie",
+        query,
+        language,
+    )
+    base_series, series_total = _search_tmdb_title_pages(
+        "search/tv",
+        query,
+        language,
+    )
+
+    movie_candidates = [
+        _format_tmdb_title_candidate(result, "movie")
+        for result in base_movies
+        if result.get("id") is not None
+    ]
+    series_candidates = [
+        _format_tmdb_title_candidate(result, "series")
+        for result in base_series
+        if result.get("id") is not None
+    ]
+    candidates = [*movie_candidates, *series_candidates]
+
+    if movie_total + series_total == 0:
+        return candidates
+
+    candidates_by_identity = {
+        (candidate["media_type"], candidate["tmdb_id"]): candidate
+        for candidate in candidates
+    }
+    languages = _normalize_tmdb_search_languages(
+        TMDB_ADDITIONAL_LANGUAGES
+        if additional_languages is None
+        else additional_languages,
+        language,
+    )
+
+    for localized_language in languages:
+        localized_movies, _ = _search_tmdb_title_pages(
+            "search/movie",
+            query,
+            localized_language,
+        )
+        localized_series, _ = _search_tmdb_title_pages(
+            "search/tv",
+            query,
+            localized_language,
+        )
+
+        _enrich_tmdb_localized_titles(
+            candidates_by_identity,
+            localized_movies,
+            "movie",
+        )
+        _enrich_tmdb_localized_titles(
+            candidates_by_identity,
+            localized_series,
+            "series",
+        )
+
+    country_codes = _tmdb_title_country_codes([language, *languages])
+    _enrich_tmdb_alternate_titles(
+        movie_candidates[:TMDB_ALTERNATE_TITLE_CANDIDATE_LIMIT],
+        "movie",
+        country_codes,
+    )
+    _enrich_tmdb_alternate_titles(
+        series_candidates[:TMDB_ALTERNATE_TITLE_CANDIDATE_LIMIT],
+        "series",
+        country_codes,
+    )
+
+    return candidates
+
+
+def _search_tmdb_title_pages(endpoint, query, language):
+    first_page = _tmdb_get(endpoint, params={
+        "query": query,
+        "language": language,
+        "page": 1,
+    })
+    results = list(first_page.get("results") or [])
+    total_results = first_page.get("total_results") or 0
+
+    if (first_page.get("total_pages") or 0) >= 2:
+        second_page = _tmdb_get(endpoint, params={
+            "query": query,
+            "language": language,
+            "page": 2,
+        })
+        results.extend(second_page.get("results") or [])
+
+    return results[:40], total_results
+
+
+def _format_tmdb_title_candidate(result, media_type):
+    if media_type == "movie":
+        title = result.get("title")
+        original_title = result.get("original_title")
+        release_date = result.get("release_date")
+    else:
+        title = result.get("name")
+        original_title = result.get("original_name")
+        release_date = result.get("first_air_date")
+
+    return {
+        "source": "tmdb",
+        "media_id": None,
+        "media_type": media_type,
+        "tmdb_id": result["id"],
+        "imdb_id": None,
+        "title": title,
+        "original_title": original_title,
+        "localized_titles": [],
+        "alternate_titles": [],
+        "release_date": release_date,
+        "poster_path": result.get("poster_path"),
+    }
+
+
+def _normalize_tmdb_search_languages(languages, default_language):
+    if isinstance(languages, str):
+        languages = [languages]
+    elif not isinstance(languages, (list, tuple)):
+        return []
+
+    normalized_languages = []
+    seen = {default_language.strip().casefold()} if default_language else set()
+
+    for language in languages:
+        if not isinstance(language, str):
+            continue
+
+        language = language.strip()
+        key = language.casefold()
+
+        if not language or key in seen:
+            continue
+
+        seen.add(key)
+        normalized_languages.append(language)
+
+    return normalized_languages
+
+
+def _enrich_tmdb_localized_titles(candidates_by_identity, results, media_type):
+    title_key = "title" if media_type == "movie" else "name"
+
+    for result in results:
+        tmdb_id = result.get("id")
+        candidate = candidates_by_identity.get((media_type, tmdb_id))
+        localized_title = result.get(title_key)
+
+        if candidate is None or not localized_title:
+            continue
+
+        known_titles = {
+            candidate.get("title"),
+            candidate.get("original_title"),
+            *candidate["localized_titles"],
+        }
+
+        if localized_title not in known_titles:
+            candidate["localized_titles"].append(localized_title)
+
+
+def _tmdb_title_country_codes(languages):
+    country_codes = []
+    seen = set()
+
+    for language in languages:
+        if not isinstance(language, str):
+            continue
+
+        subtags = language.strip().split("-")
+
+        if len(subtags) < 2:
+            continue
+
+        country_code = subtags[-1]
+
+        if (
+            len(country_code) != 2
+            or not country_code.isascii()
+            or not country_code.isalpha()
+        ):
+            continue
+
+        country_code = country_code.upper()
+
+        if country_code in seen:
+            continue
+
+        seen.add(country_code)
+        country_codes.append(country_code)
+
+    return country_codes
+
+
+def _enrich_tmdb_alternate_titles(candidates, media_type, country_codes):
+    if not candidates or not country_codes:
+        return
+
+    allowed_countries = set(country_codes)
+    collection_key = "titles" if media_type == "movie" else "results"
+    endpoint_prefix = "movie" if media_type == "movie" else "tv"
+
+    for candidate in candidates:
+        response = _tmdb_get(
+            f"{endpoint_prefix}/{candidate['tmdb_id']}/alternative_titles",
+            params={},
+        )
+        known_titles = _literal_candidate_titles(candidate)
+
+        for alternate_title in response.get(collection_key) or []:
+            country_code = alternate_title.get("iso_3166_1")
+
+            if (
+                not isinstance(country_code, str)
+                or country_code.upper() not in allowed_countries
+            ):
+                continue
+
+            title = alternate_title.get("title")
+
+            if not isinstance(title, str):
+                continue
+
+            title = title.strip()
+
+            if not title or title in known_titles:
+                continue
+
+            known_titles.add(title)
+            candidate["alternate_titles"].append(title)
+
+
+def _literal_candidate_titles(candidate):
+    titles = {
+        candidate.get("title"),
+        candidate.get("original_title"),
+        *(candidate.get("localized_titles") or []),
+        *(candidate.get("alternate_titles") or []),
+    }
+
+    return {
+        title.strip()
+        for title in titles
+        if isinstance(title, str) and title.strip()
     }
 
 # -----------------------------------------------------------------------
