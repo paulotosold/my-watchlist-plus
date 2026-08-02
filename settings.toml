@@ -1,6 +1,5 @@
 [tmdb]
 language = "en-US"
-additional_languages = ["pt-BR", "de-DE"]
 watch_region = "AT"
 poster_size = "w500"
 max_posters_per_media = 1

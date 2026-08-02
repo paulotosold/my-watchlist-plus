@@ -11,7 +11,6 @@ SETTINGS_PATH = BASE_DIR / "settings.toml"
 DEFAULT_SETTINGS = {
     "tmdb": {
         "language": "en-US",
-        "additional_languages": [],
         "watch_region": "AT",
         "poster_size": "w500",
         "max_posters_per_media": 1,
@@ -62,37 +61,6 @@ def _merge_settings(defaults: dict, overrides: dict) -> dict:
 SETTINGS = _load_settings()
 
 TMDB_LANGUAGE = SETTINGS["tmdb"].get("language", "en-US")
-
-
-def _normalize_additional_languages(languages, default_language):
-    if isinstance(languages, str):
-        languages = [languages]
-    elif not isinstance(languages, (list, tuple)):
-        return []
-
-    normalized_languages = []
-    seen = {default_language.strip().casefold()} if default_language else set()
-
-    for language in languages:
-        if not isinstance(language, str):
-            continue
-
-        language = language.strip()
-        key = language.casefold()
-
-        if not language or key in seen:
-            continue
-
-        seen.add(key)
-        normalized_languages.append(language)
-
-    return normalized_languages
-
-
-TMDB_ADDITIONAL_LANGUAGES = _normalize_additional_languages(
-    SETTINGS["tmdb"].get("additional_languages", []),
-    TMDB_LANGUAGE,
-)
 TMDB_WATCH_REGION = SETTINGS["tmdb"].get("watch_region", "AT")
 TMDB_POSTER_SIZE = SETTINGS["tmdb"].get("poster_size", "w500")
 TMDB_MAX_POSTERS_PER_MEDIA = SETTINGS["tmdb"].get("max_posters_per_media", 1)

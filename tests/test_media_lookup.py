@@ -26,7 +26,7 @@ class MediaLookupRoutingTests(unittest.TestCase):
             result = media_lookup.resolve_media_draft_from_query(None, "   ")
 
         self.assertIsNone(result)
-        self.assertIn("exact title", warning.call_args.args[2])
+        self.assertIn("title", warning.call_args.args[2])
         deterministic_lookup.assert_not_called()
         llm_lookup.assert_not_called()
 
@@ -39,10 +39,7 @@ class MediaLookupRoutingTests(unittest.TestCase):
             return_value=draft,
         ) as imdb_lookup, patch.object(
             media_lookup,
-            "find_local_title_matches",
-        ) as local_lookup, patch.object(
-            media_lookup,
-            "find_tmdb_title_matches",
+            "search_tmdb_title_candidates",
         ) as tmdb_lookup:
             outcome = media_lookup.resolve_media_query_without_llm(
                 None,
@@ -54,10 +51,46 @@ class MediaLookupRoutingTests(unittest.TestCase):
             {"status": "resolved", "media_draft": draft},
         )
         imdb_lookup.assert_called_once_with("tt1234567")
-        local_lookup.assert_not_called()
         tmdb_lookup.assert_not_called()
 
-    def test_valid_zero_title_matches_falls_back_to_llm(self):
+    def test_non_imdb_input_returns_all_organic_tmdb_results(self):
+        candidates = [
+            self._candidate(30, "movie"),
+            self._candidate(10, "movie"),
+            self._candidate(20, "series"),
+        ]
+
+        with patch.object(
+            media_lookup,
+            "search_tmdb_title_candidates",
+            return_value=candidates,
+        ) as tmdb_lookup:
+            outcome = media_lookup.resolve_media_query_without_llm(
+                None,
+                "Star Wars: Test",
+            )
+
+        self.assertEqual(
+            outcome,
+            {"status": "matches", "matches": candidates},
+        )
+        tmdb_lookup.assert_called_once_with("Star Wars: Test")
+
+    def test_no_tmdb_results_returns_no_match(self):
+        with patch.object(
+            media_lookup,
+            "search_tmdb_title_candidates",
+            return_value=[],
+        ) as tmdb_lookup:
+            outcome = media_lookup.resolve_media_query_without_llm(
+                None,
+                "unknown title",
+            )
+
+        self.assertEqual(outcome, {"status": "no_match"})
+        tmdb_lookup.assert_called_once_with("unknown title")
+
+    def test_zero_tmdb_results_falls_back_to_llm(self):
         draft = {"media_id": None, "metadata": {"title": "Resolved"}}
 
         with patch.object(
@@ -260,51 +293,10 @@ class MediaLookupRoutingTests(unittest.TestCase):
         self.assertIs(result, draft)
         llm_lookup.assert_called_once_with(None, "the one with the fox")
 
-    def test_tmdb_failure_uses_local_matches_without_llm(self):
-        local_matches = [self._candidate(10, "movie", source="db", media_id=4)]
-        connection = object()
-
+    def test_tmdb_failure_stops_before_llm(self):
         with patch.object(
             media_lookup,
-            "get_connection",
-            side_effect=lambda: nullcontext(connection),
-        ), patch.object(
-            media_lookup,
-            "find_local_title_matches",
-            return_value=local_matches,
-        ), patch.object(
-            media_lookup,
-            "find_tmdb_title_matches",
-            side_effect=RuntimeError("offline"),
-        ), patch.object(
-            media_lookup.QMessageBox,
-            "warning",
-        ) as warning:
-            outcome = media_lookup.resolve_media_query_without_llm(
-                None,
-                "Robin Hood",
-            )
-
-        self.assertEqual(
-            outcome,
-            {"status": "matches", "matches": local_matches},
-        )
-        self.assertIn("local matches only", warning.call_args.args[2])
-
-    def test_tmdb_failure_without_local_matches_stops_before_llm(self):
-        connection = object()
-
-        with patch.object(
-            media_lookup,
-            "get_connection",
-            side_effect=lambda: nullcontext(connection),
-        ), patch.object(
-            media_lookup,
-            "find_local_title_matches",
-            return_value=[],
-        ), patch.object(
-            media_lookup,
-            "find_tmdb_title_matches",
+            "search_tmdb_title_candidates",
             side_effect=RuntimeError("offline"),
         ), patch.object(
             media_lookup.QMessageBox,
@@ -472,8 +464,6 @@ class MediaLookupRoutingTests(unittest.TestCase):
             "imdb_id": None,
             "title": "Robin Hood",
             "original_title": "Robin Hood",
-            "localized_titles": [],
-            "alternate_titles": [],
             "release_date": "2025-01-01",
             "poster_path": None,
         }

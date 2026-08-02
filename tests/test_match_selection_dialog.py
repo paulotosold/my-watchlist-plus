@@ -135,6 +135,25 @@ class MatchSelectionDialogTests(unittest.TestCase):
             self.assertFalse(remote_row.poster_label.pixmap().isNull())
             self.assertEqual(remote_row.poster_label.text(), "")
 
+    def test_preserves_tmdb_order_within_each_result_column(self):
+        candidates = [
+            self._candidate(30, "movie", "Movie Three"),
+            self._candidate(20, "series", "Series Two"),
+            self._candidate(10, "movie", "Movie One"),
+            self._candidate(40, "series", "Series Four"),
+        ]
+
+        dialog = self._dialog(candidates=candidates)
+
+        self.assertEqual(
+            [row.candidate["tmdb_id"] for row in dialog.movie_candidate_widgets],
+            [30, 10],
+        )
+        self.assertEqual(
+            [row.candidate["tmdb_id"] for row in dialog.series_candidate_widgets],
+            [20, 40],
+        )
+
     def test_uses_main_window_dimensions_typography_and_control_sizes(self):
         dialog = self._dialog()
         top_bar = TopBar()
@@ -516,8 +535,6 @@ class MatchSelectionDialogTests(unittest.TestCase):
             "imdb_id": None,
             "title": title,
             "original_title": title,
-            "localized_titles": [],
-            "alternate_titles": [],
             "release_date": release_date,
             "poster_path": poster_path,
             "remote_poster_path": remote_poster_path,

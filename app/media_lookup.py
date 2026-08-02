@@ -8,11 +8,7 @@ from app.media_draft_builder import (
     build_media_draft_from_tmdb,
     build_media_draft_from_tmdb_match,
 )
-from app.media_title_lookup import (
-    find_local_title_matches,
-    find_tmdb_title_matches,
-    merge_title_matches,
-)
+from app.tmdb_fetcher import search_tmdb_title_candidates
 from db.connection import get_connection
 
 
@@ -84,7 +80,7 @@ def resolve_media_draft_from_query(parent, media_query):
 
 
 def resolve_media_query_without_llm(parent, media_query):
-    """Resolve an IMDb ID or exact title without invoking the LLM fallback."""
+    """Resolve an IMDb ID or return organic TMDB title-search results."""
     media_query = (media_query or "").strip()
 
     if not media_query:
@@ -97,23 +93,9 @@ def resolve_media_query_without_llm(parent, media_query):
             "media_draft": resolve_media_draft_from_imdb_id(media_query),
         }
 
-    with get_connection() as conn:
-        local_matches = find_local_title_matches(conn, media_query)
-
     try:
-        tmdb_matches = find_tmdb_title_matches(media_query)
+        matches = search_tmdb_title_candidates(media_query)
     except Exception as exc:
-        if local_matches:
-            QMessageBox.warning(
-                parent,
-                "Find Media",
-                (
-                    "TMDB title search failed. Showing local matches only."
-                    f"\n\n{exc}"
-                ),
-            )
-            return {"status": "matches", "matches": local_matches}
-
         message = f"TMDB title search failed.\n\n{exc}"
         QMessageBox.warning(
             parent,
@@ -125,9 +107,6 @@ def resolve_media_query_without_llm(parent, media_query):
             "message": message,
             "message_shown": True,
         }
-
-    with get_connection() as conn:
-        matches = merge_title_matches(conn, local_matches, tmdb_matches)
 
     if not matches:
         return {"status": "no_match"}
@@ -225,5 +204,5 @@ def _warn_empty_query(parent):
     QMessageBox.warning(
         parent,
         "Find Media",
-        "Enter an IMDb ID, exact title, or media description first.",
+        "Enter an IMDb ID, title, or media description first.",
     )

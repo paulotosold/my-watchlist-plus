@@ -1,4 +1,4 @@
-"""Dialog for choosing between exact movie and series title matches."""
+"""Dialog for choosing between TMDB movie and series search results."""
 
 from __future__ import annotations
 
@@ -256,7 +256,7 @@ class MatchCandidateWidget(QWidget):
 
 
 class MatchSelectionDialog(QDialog):
-    """Present exact title candidates and optionally restart Find Media.
+    """Present TMDB search candidates and optionally restart Find Media.
 
     The accepted ``result_payload`` uses ``selected`` or ``restart``.
     Rejection always leaves it as ``cancelled``.
@@ -320,7 +320,7 @@ class MatchSelectionDialog(QDialog):
 
         self.instruction_label = QLabel(
             (
-                "The current query returned multiple matches. "
+                "The current query returned multiple results. "
                 "Choose one below, or refine the search."
             ),
             self,
@@ -425,7 +425,7 @@ class MatchSelectionDialog(QDialog):
 
             if not matching_candidates:
                 empty_label = QLabel(
-                    f"No {media_type} matches.",
+                    f"No {media_type} results.",
                     layout.parentWidget(),
                 )
                 empty_label.setObjectName("matchEmptyColumn")
@@ -440,7 +440,7 @@ class MatchSelectionDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Find Media",
-                "Enter an IMDb ID, exact title, or media description first.",
+                "Enter an IMDb ID, title, or media description first.",
             )
             return
 
