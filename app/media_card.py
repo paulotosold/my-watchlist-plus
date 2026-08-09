@@ -1,7 +1,3 @@
-from app.media_card_info_panel import MediaCardInfoPanel
-from app.config import SUBSCRIBED_FLATRATE_PROVIDER_NAMES
-from app.media_state_controls import NONE_WATCH_STATE_LABEL
-
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
@@ -177,26 +173,17 @@ class MediaCard(QFrame):
             self.overlay_layer,
         )
 
-        # layer 4 – info panel
-        self.info_panel = MediaCardInfoPanel(self)
-        self.info_panel.hide()
-
         # main card clicks
         self.overlay_layer.background_clicked.connect(self.on_overlay_clicked)
         self.btn_info.clicked.connect(self.request_details)
         self.btn_close.clicked.connect(self.on_close_clicked)
         self.btn_pin.clicked.connect(self.on_pin_clicked)
 
-        # info panel clicks
-        self.info_panel.details_clicked.connect(self.request_details)
-        self.info_panel.back_clicked.connect(self.hide_info_panel)
-
         # set layer order
         self.poster_layer.lower()
         #self.poster_correction_layer.raise_()
         self.pin_layer.raise_()
         self.overlay_layer.raise_()
-        self.info_panel.raise_()
 
     def make_button(self, icon_img_path, parent):
         btn = QToolButton(parent)
@@ -231,7 +218,6 @@ class MediaCard(QFrame):
         self.filtered_media = filtered_media
         self.poster_index = 0
         self.poster_filenames = []
-        self.info_panel.hide()
 
         if media_draft is None:
             self.clear_card()
@@ -248,33 +234,8 @@ class MediaCard(QFrame):
         self.poster_index = self._get_initial_poster_index()
         self._save_current_poster_index()
         self.show_card_elements()
-        self.info_panel.hide()
 
-        # set poster image
         self.update_poster_image()
-
-        info_panel_poster = self._get_info_panel_poster_filename()
-
-        if info_panel_poster:
-            self._set_info_panel_poster_image(info_panel_poster)
-        else:
-            self._clear_info_panel_poster_image()
-
-        self.info_panel.title_value.setText(self._get_title())
-        self.info_panel.year_value.setText(self._get_year())
-        self.info_panel.duration_value.setText(self._get_duration())
-        self.info_panel.status_value.setText(self._get_watch_state())
-
-        impression = self._get_impression()
-        if impression:
-            self.info_panel.impression_label.show()
-            self.info_panel.impression_value.setText(impression)
-        else:
-            self.info_panel.impression_label.hide()
-            self.info_panel.impression_value.clear()
-
-        streaming_label, streaming_value, has_streaming = self._get_subscription_streaming_info()
-        self.info_panel.set_streaming_info(streaming_label, streaming_value, has_streaming)
 
     def update_poster_image(self):
         if not self.poster_filenames:
@@ -340,18 +301,10 @@ class MediaCard(QFrame):
     def show_details_window(self):
         self.request_details()
 
-    def hide_info_panel(self):
-        self.info_panel.hide()
-
-        if self.underMouse() and not self.is_disabled:
-            self.overlay_layer.show()
-            self.overlay_layer.raise_()
-
     def hide_card_elements(self):
         self.btn_info.hide()
         self.btn_close.hide()
         self.btn_pin.hide()
-        self.info_panel.hide()
         self.poster_layer.clear()
         self.poster_pixmap = QPixmap()
         self.overlay_layer.hide()
@@ -378,99 +331,6 @@ class MediaCard(QFrame):
 
     def get_current_media_key(self):
         return get_media_key(self.current_media)
-
-    def _get_metadata(self):
-        return self.current_media.get("metadata", {}) if self.current_media else {}
-
-    def _get_series_summary(self):
-        series_view = (
-            self.current_media.get("series_view")
-            if self.current_media
-            else None
-        )
-        return (series_view or {}).get("summary") or {}
-
-    def _get_user_data(self):
-        return self.current_media.get("user_data", {}) if self.current_media else {}
-
-    def _get_title(self):
-        return self._get_metadata().get("title") or "Untitled"
-
-    def _get_year(self):
-        metadata = self._get_metadata()
-        release_date = metadata.get("release_date")
-
-        if not release_date and metadata.get("media_type") == "series":
-            series_summary = self._get_series_summary()
-            release_date = series_summary.get("first_air_date")
-
-        if not release_date:
-            return ""
-
-        return str(release_date)[:4]
-
-    def _get_duration(self):
-        metadata = self._get_metadata()
-
-        if metadata.get("media_type") == "series":
-            series_summary = self._get_series_summary()
-            episode_count = series_summary.get("episode_count")
-
-            if episode_count in (None, "", 0):
-                return ""
-
-            return f"{episode_count} eps"
-
-        runtime_min = metadata.get("runtime_min")
-
-        if runtime_min in (None, "", 0):
-            return ""
-
-        return f"{runtime_min} min"
-
-    def _get_watch_state(self):
-        watch_state = self._get_user_data().get("watch_state")
-
-        if watch_state is None:
-            return NONE_WATCH_STATE_LABEL
-
-        return str(watch_state).replace("_", " ").title()
-
-    def _get_impression(self):
-        impression = self._get_user_data().get("impression")
-
-        if impression is None:
-            return ""
-
-        return str(impression).replace("_", " ")
-
-    def _get_subscription_streaming_info(self):
-        providers = self.current_media.get("watch_providers", []) if self.current_media else []
-        subscribed_provider_names = {
-            provider_name.strip().casefold()
-            for provider_name in SUBSCRIBED_FLATRATE_PROVIDER_NAMES
-        }
-        matched_provider_names = []
-        seen = set()
-
-        for provider in providers:
-            provider_name = provider.get("provider_name")
-
-            if provider.get("access_type") != "flatrate" or not provider_name:
-                continue
-
-            normalized_name = provider_name.strip().casefold()
-
-            if normalized_name not in subscribed_provider_names or normalized_name in seen:
-                continue
-
-            matched_provider_names.append(provider_name)
-            seen.add(normalized_name)
-
-        if matched_provider_names:
-            return "Streaming for you:", ", ".join(matched_provider_names), True
-
-        return "", "Not in your subscriptions", False
 
     def _get_poster_filenames(self):
         posters = self.current_media.get("posters", []) if self.current_media else []
@@ -504,45 +364,6 @@ class MediaCard(QFrame):
             return min(saved_index, len(self.poster_filenames) - 1)
 
         return random.randrange(len(self.poster_filenames))
-
-    def _get_info_panel_poster_filename(self):
-        posters = self.current_media.get("posters", []) if self.current_media else []
-        first_filename = None
-
-        for poster in posters:
-            if poster.get("curation_status") not in {"selected", "pending"}:
-                continue
-
-            filename = poster.get("filename")
-
-            if not filename or not self._poster_path(filename).exists():
-                continue
-
-            if first_filename is None:
-                first_filename = filename
-
-            if poster.get("is_default"):
-                return filename
-
-        return first_filename
-
-    def _set_info_panel_poster_image(self, filename):
-        pixmap = QPixmap(str(self._poster_path(filename)))
-
-        if pixmap.isNull():
-            self._clear_info_panel_poster_image()
-            return
-
-        scaled_pixmap = pixmap.scaledToHeight(
-            140,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self.info_panel.poster_image.setFixedSize(scaled_pixmap.size())
-        self.info_panel.poster_image.setPixmap(scaled_pixmap)
-
-    def _clear_info_panel_poster_image(self):
-        self.info_panel.poster_image.clear()
-        self.info_panel.poster_image.setFixedSize(94, 140)
 
     def _save_current_poster_index(self):
         media_key = self._get_media_key()
@@ -623,20 +444,19 @@ class MediaCard(QFrame):
         self.poster_layer.setGeometry(rect)
         self.pin_layer.setGeometry(rect)
         self.overlay_layer.setGeometry(rect)
-        self.info_panel.setGeometry(rect)
 
         self._render_poster()
         self._render_pin_overlay()
         self._layout_buttons()
 
     def enterEvent(self, event):
-        if not self.info_panel.isVisible() and not self.is_disabled:
+        if not self.is_disabled:
             self.overlay_layer.show()
             self.overlay_layer.raise_()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        if not self.info_panel.isVisible() and not self.is_disabled:
+        if not self.is_disabled:
             self.overlay_layer.hide()
         super().leaveEvent(event)
 

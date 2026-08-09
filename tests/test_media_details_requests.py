@@ -33,7 +33,7 @@ class MediaDetailsRequestTests(unittest.TestCase):
         self.assertIsNot(emitted_draft, media_draft)
         card.close()
 
-    def test_info_button_requests_details_without_opening_info_panel(self):
+    def test_info_button_requests_details(self):
         card = MediaCard()
         media_draft = {
             "media_id": 12,
@@ -46,7 +46,6 @@ class MediaDetailsRequestTests(unittest.TestCase):
 
         self.assertEqual(spy.count(), 1)
         self.assertEqual(spy.at(0), [media_draft])
-        self.assertFalse(card.info_panel.isVisible())
         card.close()
 
     def test_media_board_forwards_card_details_requests(self):
