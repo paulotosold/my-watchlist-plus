@@ -20,8 +20,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 
-import app.match_selection_dialog as match_selection_dialog
-from app.match_selection_dialog import MatchSelectionDialog, TmdbPosterLoader
+import app.find_media.selection_dialog as match_selection_dialog
+from app.find_media.selection_dialog import MatchSelectionDialog, TmdbPosterLoader
 from app.media_state_controls import ClickableEntryLabel
 from app.top_bar import INPUT_BOX_STYLE, TopBar
 
@@ -70,6 +70,13 @@ class MatchSelectionDialogTests(unittest.TestCase):
 
     def tearDown(self):
         self.application.processEvents()
+
+    def test_default_poster_directory_stays_at_project_data_path(self):
+        expected = (
+            Path(__file__).resolve().parents[1] / "data" / "media_posters"
+        )
+
+        self.assertEqual(match_selection_dialog.POSTER_DIR, expected)
 
     def test_builds_modal_two_column_dialog_with_local_and_remote_posters(self):
         with TemporaryDirectory() as directory:

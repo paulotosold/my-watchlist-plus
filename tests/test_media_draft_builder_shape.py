@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-import app.media_draft_builder as media_draft_builder
+import app.media_draft.builder as media_draft_builder
 
 
 CANONICAL_DRAFT_KEYS = {

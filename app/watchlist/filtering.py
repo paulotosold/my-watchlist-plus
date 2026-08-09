@@ -2,7 +2,7 @@ from copy import deepcopy
 from datetime import date
 import re
 
-from app.media_draft_builder import build_media_draft_from_db
+from app.media_draft import build_media_draft_from_db
 from app.watch_states import VALID_WATCH_STATES_BY_MEDIA_TYPE
 from db.connection import get_connection
 

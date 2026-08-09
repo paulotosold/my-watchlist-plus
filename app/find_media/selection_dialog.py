@@ -30,7 +30,7 @@ from app.tmdb import build_tmdb_image_url
 from app.top_bar import INPUT_BOX_STYLE
 
 
-POSTER_DIR = Path(__file__).resolve().parents[1] / "data" / "media_posters"
+POSTER_DIR = Path(__file__).resolve().parents[2] / "data" / "media_posters"
 POSTER_WIDTH = 100
 POSTER_HEIGHT = 150
 MATCH_SELECTION_WIDTH = 900

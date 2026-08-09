@@ -10,11 +10,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.find_media_handler import handle_find_media_input
+from app.find_media.handler import handle_find_media_input
 from app.history import HistoryPage
 from app.history.status_control import HistoryStatusControl
 from app.media_details import open_media_details_dialog
-from app.media_draft_builder import build_media_draft_from_db
+from app.media_draft import build_media_draft_from_db
 from app.media_repository import get_media_by_id
 from app.page_status_bar import PageStatusBar
 from app.watchlist import WatchlistPage

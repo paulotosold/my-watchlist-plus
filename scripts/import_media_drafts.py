@@ -7,7 +7,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.draft_saver import build_and_save_media_drafts_from_imdb_ids
+from app.media_draft import build_and_save_media_drafts_from_imdb_ids
 from db.connection import get_connection, initialize_database
 
 

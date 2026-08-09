@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, call, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-import app.media_lookup as media_lookup
+import app.find_media.lookup as media_lookup
 
 
 class MediaLookupRoutingTests(unittest.TestCase):

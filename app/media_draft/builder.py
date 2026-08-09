@@ -1,3 +1,5 @@
+"""Build canonical media-draft dictionaries from database or TMDB data."""
+
 import app.media_repository as media_repo
 import app.tmdb as tmdb
 from app.media_freshness import current_freshness_timestamp

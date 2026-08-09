@@ -6,7 +6,8 @@ from unittest.mock import patch
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-import app.draft_saver as draft_saver
+import app.media_draft.poster_storage as poster_storage
+import app.media_draft.saver as draft_saver
 import app.media_repository as media_repository
 from db.connection import apply_database_schema
 
@@ -25,7 +26,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         self.conn.row_factory = sqlite3.Row
         apply_database_schema(self.conn)
         season_poster_patcher = patch.object(
-            draft_saver.tmdb,
+            poster_storage.tmdb,
             "get_tmdb_series_primary_season_posters",
             return_value=[],
         )
@@ -89,7 +90,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         ]
 
         with self._mock_downloads(), patch.object(
-            draft_saver.media_draft_builder,
+            draft_saver.builder,
             "build_media_draft_from_tmdb_match",
             return_value=parent_draft,
         ), patch.object(
@@ -139,7 +140,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         target_draft = self._episode_draft(target, "to_watch")
 
         with self._mock_downloads(), patch.object(
-            draft_saver.media_draft_builder,
+            draft_saver.builder,
             "build_media_draft_from_tmdb_match",
         ) as build_parent, patch.object(
             draft_saver.tmdb,
@@ -204,7 +205,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         ]
 
         with patch.object(
-            draft_saver,
+            poster_storage,
             "download_missing_draft_posters",
             side_effect=self._download_every_tmdb_poster,
         ), patch.object(
@@ -304,7 +305,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             }
 
         with patch.object(
-            draft_saver,
+            poster_storage,
             "download_missing_draft_posters",
             side_effect=download_with_failures,
         ), patch.object(
@@ -378,7 +379,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             }
 
         with patch.object(
-            draft_saver,
+            poster_storage,
             "download_missing_draft_posters",
             side_effect=download_with_episode_failure,
         ), patch.object(
@@ -445,7 +446,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         ]
 
         with patch.object(
-            draft_saver,
+            poster_storage,
             "download_missing_draft_posters",
             side_effect=self._download_every_tmdb_poster,
         ), patch.object(
@@ -479,7 +480,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             ],
         }
 
-        draft_saver._remove_failed_tmdb_poster_references(
+        poster_storage._remove_failed_tmdb_poster_references(
             media_draft,
             {
                 "downloaded": [],
@@ -503,7 +504,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
         ) as fetch_episodes, patch.object(
-            draft_saver,
+            poster_storage,
             "download_missing_draft_posters",
         ) as download_posters:
             result = draft_saver.save_existing_media_changes(
@@ -534,7 +535,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
         ) as fetch_episodes, patch.object(
-            draft_saver.media_draft_builder,
+            draft_saver.builder,
             "build_media_draft_from_tmdb_match",
         ) as build_parent:
             result = draft_saver.save_existing_media_changes(
@@ -595,7 +596,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
 
     def _mock_downloads(self):
         return patch.object(
-            draft_saver,
+            poster_storage,
             "download_missing_draft_posters",
             side_effect=lambda *_args, **_kwargs: deepcopy(EMPTY_DOWNLOADS),
         )

@@ -8,7 +8,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-import app.draft_saver as draft_saver
+import app.media_draft.poster_storage as poster_storage
 from app.media_freshness import current_freshness_timestamp
 import app.media_repository as media_repository
 import app.tmdb as tmdb
@@ -19,8 +19,8 @@ def backfill_season_posters(
     conn,
     *,
     apply=False,
-    poster_dir=draft_saver.DEFAULT_POSTER_DIR,
-    poster_size=draft_saver.TMDB_POSTER_SIZE,
+    poster_dir=poster_storage.DEFAULT_POSTER_DIR,
+    poster_size=poster_storage.TMDB_POSTER_SIZE,
 ):
     """Report or fill missing canonical TMDB season posters for every series."""
     results = []
@@ -50,7 +50,7 @@ def backfill_season_posters(
             result["missing_count"] = len(missing_posters)
 
             if apply:
-                downloads = draft_saver.download_missing_draft_posters(
+                downloads = poster_storage.download_missing_draft_posters(
                     {"posters": missing_posters},
                     poster_dir=poster_dir,
                     poster_size=poster_size,

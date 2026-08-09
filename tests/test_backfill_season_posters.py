@@ -38,7 +38,7 @@ class BackfillSeasonPostersTests(unittest.TestCase):
             "get_tmdb_series_primary_season_posters",
             return_value=[self._poster(101, 1, "season-one.jpg")],
         ), patch.object(
-            backfill_script.draft_saver,
+            backfill_script.poster_storage,
             "download_missing_draft_posters",
         ) as download_mock, patch.object(
             backfill_script.media_repository,
@@ -97,7 +97,7 @@ class BackfillSeasonPostersTests(unittest.TestCase):
             "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ), patch.object(
-            backfill_script.draft_saver,
+            backfill_script.poster_storage,
             "download_missing_draft_posters",
             side_effect=fake_download,
         ):
@@ -162,7 +162,7 @@ class BackfillSeasonPostersTests(unittest.TestCase):
             "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ), patch.object(
-            backfill_script.draft_saver,
+            backfill_script.poster_storage,
             "download_missing_draft_posters",
             return_value={
                 "downloaded": ["successful.jpg"],
@@ -219,7 +219,7 @@ class BackfillSeasonPostersTests(unittest.TestCase):
             "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ) as timestamp_mock, patch.object(
-            backfill_script.draft_saver,
+            backfill_script.poster_storage,
             "download_missing_draft_posters",
             side_effect=[failed_download, successful_download],
         ):

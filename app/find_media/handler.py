@@ -1,5 +1,5 @@
 from app.media_details import open_media_details_dialog
-from app.media_lookup import resolve_media_draft_from_query
+from .lookup import resolve_media_draft_from_query
 
 
 def handle_find_media_input(parent, media_query):

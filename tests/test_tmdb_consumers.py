@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-import app.draft_saver as draft_saver
+import app.media_draft.poster_storage as poster_storage
 import app.media_details.dialog as details_dialog
 
 
@@ -14,15 +14,15 @@ class TmdbConsumerBoundaryTests(unittest.TestCase):
         response.iter_content.return_value = [b"poster-bytes"]
 
         with TemporaryDirectory() as temp_dir, patch.object(
-            draft_saver.tmdb,
+            poster_storage.tmdb,
             "build_tmdb_image_url",
             return_value="https://image.test/w185/poster.jpg",
         ) as build_url, patch.object(
-            draft_saver.requests,
+            poster_storage.requests,
             "get",
             return_value=response,
         ) as get_mock:
-            poster_path = draft_saver.download_tmdb_poster(
+            poster_path = poster_storage.download_tmdb_poster(
                 "/poster.jpg",
                 poster_dir=temp_dir,
                 poster_size="w185",

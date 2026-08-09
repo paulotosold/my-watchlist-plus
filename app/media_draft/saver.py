@@ -1,15 +1,14 @@
-from pathlib import Path
+"""Persist media drafts and materialize their related catalog context."""
 
-import requests
-
-import app.media_draft_builder as media_draft_builder
 from app.media_freshness import current_freshness_timestamp
 import app.media_repository as media_repository
 import app.tmdb as tmdb
-from app.config import BASE_DIR, TMDB_MAX_POSTERS_PER_MEDIA, TMDB_POSTER_SIZE
+from app.config import TMDB_MAX_POSTERS_PER_MEDIA, TMDB_POSTER_SIZE
+
+from . import builder, poster_storage
 
 
-DEFAULT_POSTER_DIR = BASE_DIR / "data" / "media_posters"
+DEFAULT_POSTER_DIR = poster_storage.DEFAULT_POSTER_DIR
 
 
 def build_and_save_media_drafts_from_imdb_ids(
@@ -30,7 +29,7 @@ def build_and_save_media_drafts_from_imdb_ids(
             continue
 
         try:
-            media_draft = media_draft_builder.build_media_draft_from_tmdb(imdb_id)
+            media_draft = builder.build_media_draft_from_tmdb(imdb_id)
             with conn:
                 save_result = save_media_draft_with_posters(
                     conn,
@@ -134,7 +133,7 @@ def save_existing_media_changes(conn, baseline_draft, media_draft):
     return {
         **result,
         "media_id": media_id,
-        "poster_downloads": _empty_poster_downloads(),
+        "poster_downloads": poster_storage._empty_poster_downloads(),
         "saved_media_type": metadata.get("media_type"),
         "saved_title": metadata.get("title"),
     }
@@ -155,7 +154,7 @@ def _save_episode_draft_with_series_context(
     if series_tmdb_id is None:
         raise ValueError("Episode draft requires episode_details.series_tmdb_id.")
 
-    poster_downloads = _empty_poster_downloads()
+    poster_downloads = poster_storage._empty_poster_downloads()
     series_created = False
 
     series = media_repository.get_media_by_tmdb_id(
@@ -174,23 +173,26 @@ def _save_episode_draft_with_series_context(
         else None
     )
     season_posters, season_poster_downloads = (
-        _download_series_season_posters(
+        poster_storage._download_series_season_posters(
             series_tmdb_id,
             poster_dir=poster_dir,
             poster_size=poster_size,
             fail_on_poster_error=fail_on_poster_error,
         )
     )
-    _merge_poster_downloads(poster_downloads, season_poster_downloads)
-    parent_poster_downloads = _empty_poster_downloads()
-    _merge_poster_downloads(
+    poster_storage._merge_poster_downloads(
+        poster_downloads,
+        season_poster_downloads,
+    )
+    parent_poster_downloads = poster_storage._empty_poster_downloads()
+    poster_storage._merge_poster_downloads(
         parent_poster_downloads,
         season_poster_downloads,
     )
     series_id = series["id"] if series is not None else None
 
     if series is None:
-        series_draft = media_draft_builder.build_media_draft_from_tmdb_match({
+        series_draft = builder.build_media_draft_from_tmdb_match({
             "media_type": "series",
             "tmdb_id": series_tmdb_id,
         })
@@ -205,11 +207,11 @@ def _save_episode_draft_with_series_context(
             max_posters_per_media=max_posters_per_media,
             fail_on_poster_error=fail_on_poster_error,
         )
-        _merge_poster_downloads(
+        poster_storage._merge_poster_downloads(
             poster_downloads,
             series_save_result["poster_downloads"],
         )
-        _merge_poster_downloads(
+        poster_storage._merge_poster_downloads(
             parent_poster_downloads,
             series_save_result["poster_downloads"],
         )
@@ -230,7 +232,7 @@ def _save_episode_draft_with_series_context(
         fail_on_poster_error=fail_on_poster_error,
         fetch_episode_imdb_ids=fetch_episode_imdb_ids,
     )
-    _merge_poster_downloads(
+    poster_storage._merge_poster_downloads(
         poster_downloads,
         episode_seed_result["poster_downloads"],
     )
@@ -246,7 +248,7 @@ def _save_episode_draft_with_series_context(
         max_posters_per_media=max_posters_per_media,
         fail_on_poster_error=fail_on_poster_error,
     )
-    _merge_poster_downloads(
+    poster_storage._merge_poster_downloads(
         poster_downloads,
         original_save_result["poster_downloads"],
     )
@@ -254,7 +256,7 @@ def _save_episode_draft_with_series_context(
         previous_episode_posters_checked_at
     )
 
-    if _poster_downloads_succeeded(parent_poster_downloads):
+    if poster_storage._poster_downloads_succeeded(parent_poster_downloads):
         media_repository.update_media_tmdb_posters_checked_at(
             conn,
             series_id,
@@ -297,7 +299,7 @@ def _save_series_draft_with_episode_context(
         else None
     )
     season_posters, season_poster_downloads = (
-        _download_series_season_posters(
+        poster_storage._download_series_season_posters(
             series_tmdb_id,
             poster_dir=poster_dir,
             poster_size=poster_size,
@@ -315,18 +317,21 @@ def _save_series_draft_with_episode_context(
         max_posters_per_media=max_posters_per_media,
         fail_on_poster_error=fail_on_poster_error,
     )
-    poster_downloads = _empty_poster_downloads()
-    _merge_poster_downloads(poster_downloads, season_poster_downloads)
-    _merge_poster_downloads(
+    poster_downloads = poster_storage._empty_poster_downloads()
+    poster_storage._merge_poster_downloads(
+        poster_downloads,
+        season_poster_downloads,
+    )
+    poster_storage._merge_poster_downloads(
         poster_downloads,
         series_save_result["poster_downloads"],
     )
-    parent_poster_downloads = _empty_poster_downloads()
-    _merge_poster_downloads(
+    parent_poster_downloads = poster_storage._empty_poster_downloads()
+    poster_storage._merge_poster_downloads(
         parent_poster_downloads,
         season_poster_downloads,
     )
-    _merge_poster_downloads(
+    poster_storage._merge_poster_downloads(
         parent_poster_downloads,
         series_save_result["poster_downloads"],
     )
@@ -362,7 +367,7 @@ def _save_series_draft_with_episode_context(
             fail_on_poster_error=fail_on_poster_error,
             fetch_episode_imdb_ids=fetch_episode_imdb_ids,
         )
-    _merge_poster_downloads(
+    poster_storage._merge_poster_downloads(
         poster_downloads,
         episode_seed_result["poster_downloads"],
     )
@@ -372,7 +377,7 @@ def _save_series_draft_with_episode_context(
         media_draft,
     )
 
-    if _poster_downloads_succeeded(parent_poster_downloads):
+    if poster_storage._poster_downloads_succeeded(parent_poster_downloads):
         checked_at = current_freshness_timestamp()
         media_repository.update_media_tmdb_posters_checked_at(
             conn,
@@ -443,7 +448,7 @@ def _save_series_episode_metadata_list(
     fail_on_poster_error=False,
 ):
     result = {
-        "poster_downloads": _empty_poster_downloads(),
+        "poster_downloads": poster_storage._empty_poster_downloads(),
         "saved_count": 0,
         "skipped_existing_count": 0,
     }
@@ -468,7 +473,7 @@ def _save_series_episode_metadata_list(
             max_posters_per_media=max_posters_per_media,
             fail_on_poster_error=fail_on_poster_error,
         )
-        _merge_poster_downloads(
+        poster_storage._merge_poster_downloads(
             result["poster_downloads"],
             episode_save_result["poster_downloads"],
         )
@@ -485,15 +490,18 @@ def _save_single_media_draft_with_posters(
     max_posters_per_media=TMDB_MAX_POSTERS_PER_MEDIA,
     fail_on_poster_error=False,
 ):
-    limit_draft_posters(media_draft, max_posters_per_media)
+    poster_storage.limit_draft_posters(media_draft, max_posters_per_media)
 
-    poster_downloads = download_missing_draft_posters(
+    poster_downloads = poster_storage.download_missing_draft_posters(
         media_draft,
         poster_dir=poster_dir,
         poster_size=poster_size,
         fail_on_error=fail_on_poster_error,
     )
-    _remove_failed_tmdb_poster_references(media_draft, poster_downloads)
+    poster_storage._remove_failed_tmdb_poster_references(
+        media_draft,
+        poster_downloads,
+    )
     media_id = media_repository.save_media_draft(conn, media_draft)
 
     return {
@@ -512,15 +520,18 @@ def _save_catalog_media_draft_with_posters(
     max_posters_per_media=TMDB_MAX_POSTERS_PER_MEDIA,
     fail_on_poster_error=False,
 ):
-    limit_draft_posters(media_draft, max_posters_per_media)
+    poster_storage.limit_draft_posters(media_draft, max_posters_per_media)
 
-    poster_downloads = download_missing_draft_posters(
+    poster_downloads = poster_storage.download_missing_draft_posters(
         media_draft,
         poster_dir=poster_dir,
         poster_size=poster_size,
         fail_on_error=fail_on_poster_error,
     )
-    _remove_failed_tmdb_poster_references(media_draft, poster_downloads)
+    poster_storage._remove_failed_tmdb_poster_references(
+        media_draft,
+        poster_downloads,
+    )
     media_id = media_repository.save_media_catalog_draft(conn, media_draft)
 
     return {
@@ -531,19 +542,6 @@ def _save_catalog_media_draft_with_posters(
     }
 
 
-def limit_draft_posters(media_draft, max_posters_per_media=TMDB_MAX_POSTERS_PER_MEDIA):
-    if max_posters_per_media is None:
-        return media_draft
-
-    if max_posters_per_media < 1:
-        media_draft["posters"] = []
-        return media_draft
-
-    media_draft["posters"] = media_draft.get("posters", [])[:max_posters_per_media]
-
-    return media_draft
-
-
 def _build_seed_episode_draft(metadata):
     return {
         "media_id": None,
@@ -551,185 +549,3 @@ def _build_seed_episode_draft(metadata):
         "watch_providers": [],
         "posters": [],
     }
-
-
-def _empty_poster_downloads():
-    return {
-        "downloaded": [],
-        "skipped": [],
-        "failed": [],
-    }
-
-
-def _merge_poster_downloads(target, source):
-    for key in ("downloaded", "skipped", "failed"):
-        target[key].extend(source.get(key, []))
-
-
-def _download_series_season_posters(
-    series_tmdb_id,
-    poster_dir=DEFAULT_POSTER_DIR,
-    poster_size=TMDB_POSTER_SIZE,
-    fail_on_poster_error=False,
-):
-    season_posters = (
-        tmdb.get_tmdb_series_primary_season_posters(series_tmdb_id)
-    )
-    poster_downloads = download_missing_draft_posters(
-        {"posters": season_posters},
-        poster_dir=poster_dir,
-        poster_size=poster_size,
-        fail_on_error=fail_on_poster_error,
-    )
-    return (
-        _without_failed_tmdb_poster_references(
-            season_posters,
-            poster_downloads,
-        ),
-        poster_downloads,
-    )
-
-
-def _remove_failed_tmdb_poster_references(media_draft, poster_downloads):
-    media_draft["posters"] = _without_failed_tmdb_poster_references(
-        media_draft.get("posters", []),
-        poster_downloads,
-    )
-
-
-def _without_failed_tmdb_poster_references(posters, poster_downloads):
-    failed_filenames = {
-        _poster_filename_key(failure.get("filename"))
-        for failure in poster_downloads.get("failed", [])
-        if failure.get("filename")
-    }
-
-    if not failed_filenames:
-        return list(posters)
-
-    return [
-        poster
-        for poster in posters
-        if (
-            poster.get("source", "tmdb") != "tmdb"
-            or _poster_filename_key(poster.get("filename"))
-            not in failed_filenames
-        )
-    ]
-
-
-def _poster_filename_key(filename):
-    return str(filename).lstrip("/") if filename else None
-
-
-def _poster_downloads_succeeded(poster_downloads):
-    return not poster_downloads.get("failed")
-
-
-def download_missing_draft_posters(
-    media_draft,
-    poster_dir=DEFAULT_POSTER_DIR,
-    poster_size=TMDB_POSTER_SIZE,
-    fail_on_error=False,
-):
-    poster_dir = Path(poster_dir)
-    poster_dir.mkdir(parents=True, exist_ok=True)
-
-    results = {
-        "downloaded": [],
-        "skipped": [],
-        "failed": [],
-    }
-    seen = set()
-
-    for raw_filename in _iter_tmdb_poster_filenames(media_draft):
-        try:
-            filename = _normalize_tmdb_poster_filename(raw_filename)
-
-            if filename in seen:
-                continue
-
-            seen.add(filename)
-
-            poster_path = poster_dir / filename
-
-            if poster_path.exists() and poster_path.stat().st_size > 0:
-                results["skipped"].append(filename)
-                continue
-
-            download_tmdb_poster(
-                filename,
-                poster_dir=poster_dir,
-                poster_size=poster_size,
-            )
-            results["downloaded"].append(filename)
-        except Exception as exc:
-            failure = {
-                "filename": raw_filename,
-                "error": str(exc),
-            }
-            results["failed"].append(failure)
-
-            if fail_on_error:
-                raise
-
-    return results
-
-
-def download_tmdb_poster(
-    filename,
-    poster_dir=DEFAULT_POSTER_DIR,
-    poster_size=TMDB_POSTER_SIZE,
-    timeout=30,
-):
-    filename = _normalize_tmdb_poster_filename(filename)
-    poster_dir = Path(poster_dir)
-    poster_dir.mkdir(parents=True, exist_ok=True)
-
-    poster_path = poster_dir / filename
-    temp_path = poster_path.with_name(f"{poster_path.name}.tmp")
-    image_url = tmdb.build_tmdb_image_url(filename, size=poster_size)
-
-    if image_url is None:
-        raise ValueError(f"Invalid TMDB poster URL: {filename}")
-
-    try:
-        response = requests.get(image_url, stream=True, timeout=timeout)
-        response.raise_for_status()
-
-        with temp_path.open("wb") as poster_file:
-            for chunk in response.iter_content(chunk_size=128 * 1024):
-                if chunk:
-                    poster_file.write(chunk)
-
-        temp_path.replace(poster_path)
-    except Exception:
-        if temp_path.exists():
-            temp_path.unlink()
-
-        raise
-
-    return poster_path
-
-
-def _iter_tmdb_poster_filenames(media_draft):
-    for poster in media_draft.get("posters", []):
-        if poster.get("source", "tmdb") != "tmdb":
-            continue
-
-        filename = poster.get("filename")
-
-        if filename:
-            yield filename
-
-
-def _normalize_tmdb_poster_filename(filename):
-    filename = str(filename).lstrip("/")
-
-    if not filename:
-        raise ValueError("Poster filename is empty.")
-
-    if "/" in filename or "\\" in filename:
-        raise ValueError(f"Invalid poster filename: {filename}")
-
-    return filename

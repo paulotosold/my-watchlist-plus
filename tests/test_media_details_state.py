@@ -1,6 +1,6 @@
 import unittest
 
-from app.media_details_state import (
+from app.media_draft import (
     apply_inserted_ids_to_draft,
     merge_metadata_refresh,
 )

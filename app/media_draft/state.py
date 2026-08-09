@@ -1,3 +1,5 @@
+"""Apply persistence and metadata-refresh results to live media drafts."""
+
 from __future__ import annotations
 
 from copy import deepcopy

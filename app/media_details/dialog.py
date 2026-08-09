@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-import app.draft_saver as draft_saver
+import app.media_draft.saver as draft_saver
 from app.media_freshness import current_freshness_timestamp
 import app.media_repository as media_repo
 import app.tmdb as tmdb
@@ -42,7 +42,7 @@ from .widgets import (
     clear_layout,
     make_icon_button,
 )
-from app.media_details_state import (
+from app.media_draft import (
     apply_inserted_ids_to_draft,
     merge_metadata_refresh,
 )
@@ -56,7 +56,7 @@ from app.media_details_formatters import (
     get_poster_curation_status,
     group_watch_providers,
 )
-from app.media_lookup import resolve_media_draft_from_query
+from app.find_media import resolve_media_draft_from_query
 from app.media_notes import apply_note_result
 from app.media_state_controls import (
     COLLECTION_PICK_OPTIONS,
