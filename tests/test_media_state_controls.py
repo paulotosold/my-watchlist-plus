@@ -8,7 +8,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app import media_details_dialog
+from app import media_details
 from app.media_state_controls import (
     COLLECTION_PICK_OPTIONS,
     IMPRESSION_OPTIONS,
@@ -46,17 +46,17 @@ class MediaStateControlsTests(unittest.TestCase):
             ),
         )
 
-    def test_media_details_dialog_reexports_shared_controls(self):
+    def test_media_details_package_reexports_shared_controls(self):
         self.assertIs(
-            media_details_dialog.ClickableEntryLabel,
+            media_details.ClickableEntryLabel,
             ClickableEntryLabel,
         )
         self.assertIs(
-            media_details_dialog.IMPRESSION_OPTIONS,
+            media_details.IMPRESSION_OPTIONS,
             IMPRESSION_OPTIONS,
         )
         self.assertIs(
-            media_details_dialog.COLLECTION_PICK_OPTIONS,
+            media_details.COLLECTION_PICK_OPTIONS,
             COLLECTION_PICK_OPTIONS,
         )
 

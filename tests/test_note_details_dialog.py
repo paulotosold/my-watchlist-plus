@@ -8,7 +8,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 from PySide6.QtCore import QSize
 from PySide6.QtWidgets import QApplication, QDialog
 
-from app.media_details_dialog import (
+from app.media_details.note_dialog import (
     NOTE_DETAILS_INPUT_HEIGHT,
     NOTE_DETAILS_INPUT_WIDTH,
     NoteDetailsDialog,

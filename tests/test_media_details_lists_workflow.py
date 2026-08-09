@@ -15,13 +15,13 @@ from PySide6.QtWidgets import (
     QDialog,
 )
 
-from app.media_details_dialog import (
-    ClickableEntryLabel,
+from app.media_details.dialog import (
     ENTRY_ACTION_LINE_HEIGHT,
     LIST_CHECKBOX_SIZE,
     LIST_CHECKBOX_TO_TEXT_SPACING,
     MediaDetailsDialog,
 )
+from app.media_state_controls import ClickableEntryLabel
 from db.connection import apply_database_schema
 
 
@@ -61,7 +61,7 @@ class MediaDetailsListsWorkflowTests(unittest.TestCase):
             )
 
         self.connection_patch = patch(
-            "app.media_details_dialog.get_connection",
+            "app.media_details.dialog.get_connection",
             return_value=self.conn,
         )
         self.connection_patch.start()
@@ -134,7 +134,7 @@ class MediaDetailsListsWorkflowTests(unittest.TestCase):
         was_checked = row["checkbox"].isChecked()
 
         with patch(
-            "app.media_details_dialog.ListDetailsDialog",
+            "app.media_details.dialog.ListDetailsDialog",
         ) as list_dialog:
             list_dialog.return_value.exec.return_value = QDialog.Rejected
             QTest.mouseClick(
@@ -166,7 +166,7 @@ class MediaDetailsListsWorkflowTests(unittest.TestCase):
         self.assertTrue(dialog._is_dirty)
 
         with patch(
-            "app.media_details_dialog.ListDetailsDialog",
+            "app.media_details.dialog.ListDetailsDialog",
         ) as list_dialog:
             list_dialog.return_value.exec.return_value = QDialog.Accepted
             list_dialog.return_value.result_payload = {
@@ -195,7 +195,7 @@ class MediaDetailsListsWorkflowTests(unittest.TestCase):
         alpha = next(item for item in dialog.all_lists if item["id"] == self.alpha_id)
 
         with patch(
-            "app.media_details_dialog.ListDetailsDialog",
+            "app.media_details.dialog.ListDetailsDialog",
         ) as list_dialog:
             list_dialog.return_value.exec.return_value = QDialog.Accepted
             list_dialog.return_value.result_payload = {
@@ -242,7 +242,7 @@ class MediaDetailsListsWorkflowTests(unittest.TestCase):
         alpha = next(item for item in dialog.all_lists if item["id"] == self.alpha_id)
 
         with patch(
-            "app.media_details_dialog.ListDetailsDialog",
+            "app.media_details.dialog.ListDetailsDialog",
         ) as list_dialog:
             list_dialog.return_value.exec.return_value = QDialog.Accepted
             list_dialog.return_value.result_payload = {"action": "delete"}

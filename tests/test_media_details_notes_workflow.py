@@ -10,12 +10,12 @@ from PySide6.QtCore import QObject, QPoint, Signal, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QToolButton
 
-from app.media_details_dialog import (
-    ClickableEntryLabel,
+from app.media_details.dialog import (
     ENTRY_ACTION_LINE_HEIGHT,
     MediaDetailsDialog,
-    NotePreviewLabel,
 )
+from app.media_details.note_dialog import NotePreviewLabel
+from app.media_state_controls import ClickableEntryLabel
 
 
 class FakeRefreshManager(QObject):
@@ -72,10 +72,10 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
     def test_watch_history_and_note_texts_open_the_correct_details_dialogs(self):
         with (
             patch(
-                "app.media_details_dialog.WatchEntryDetailsDialog",
+                "app.media_details.dialog.WatchEntryDetailsDialog",
             ) as watch_dialog,
             patch(
-                "app.media_details_dialog.NoteDetailsDialog",
+                "app.media_details.dialog.NoteDetailsDialog",
             ) as note_dialog,
         ):
             watch_dialog.return_value.exec.return_value = QDialog.Rejected
@@ -142,7 +142,7 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
         dialog = self._dialog(notes=[{"id": 1, "note": "Older"}])
 
         with patch(
-            "app.media_details_dialog.NoteDetailsDialog",
+            "app.media_details.dialog.NoteDetailsDialog",
         ) as note_dialog:
             note_dialog.return_value.exec.return_value = QDialog.Accepted
             note_dialog.return_value.result_payload = {
@@ -169,7 +169,7 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
         }
 
         with patch(
-            "app.media_details_dialog.NoteDetailsDialog",
+            "app.media_details.dialog.NoteDetailsDialog",
         ) as note_dialog:
             note_dialog.return_value.exec.return_value = QDialog.Accepted
             note_dialog.return_value.result_payload = {
@@ -191,7 +191,7 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
         }
 
         with patch(
-            "app.media_details_dialog.NoteDetailsDialog",
+            "app.media_details.dialog.NoteDetailsDialog",
         ) as note_dialog:
             note_dialog.return_value.exec.return_value = QDialog.Accepted
             note_dialog.return_value.result_payload = {"action": "delete"}
@@ -206,7 +206,7 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
         dialog = self._dialog(notes=[{"id": 1, "note": "Original"}])
 
         with patch(
-            "app.media_details_dialog.NoteDetailsDialog",
+            "app.media_details.dialog.NoteDetailsDialog",
         ) as note_dialog:
             note_dialog.return_value.exec.return_value = QDialog.Rejected
             dialog.add_note()

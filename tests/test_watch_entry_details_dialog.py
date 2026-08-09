@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QToolButton,
 )
 
-from app.media_details_dialog import WatchEntryDetailsDialog
+from app.media_details.watch_entry_dialog import WatchEntryDetailsDialog
 from app.watch_history_editor import apply_watch_entry_result
 
 

@@ -14,7 +14,7 @@ from app.filtered_media import FilteredMedia
 from app.find_media_handler import handle_find_media_input
 from app.history_page import HistoryPage
 from app.library_filter import DEFAULT_FILTER_TEXT
-from app.media_details_dialog import open_media_details_dialog
+from app.media_details import open_media_details_dialog
 from app.media_draft_builder import build_media_draft_from_db
 from app.media_repository import get_media_by_id
 from app.watchlist_page import WatchlistPage

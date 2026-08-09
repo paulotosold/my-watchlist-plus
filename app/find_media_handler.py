@@ -1,4 +1,4 @@
-from app.media_details_dialog import open_media_details_dialog
+from app.media_details import open_media_details_dialog
 from app.media_lookup import resolve_media_draft_from_query
 
 

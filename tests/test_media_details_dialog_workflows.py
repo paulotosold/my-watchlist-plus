@@ -11,7 +11,7 @@ from PySide6.QtCore import QObject, Signal, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QToolButton
 
-from app.media_details_dialog import MediaDetailsDialog
+from app.media_details.dialog import MediaDetailsDialog
 from app.top_bar import FIND_MEDIA_INPUT_PLACEHOLDER, INPUT_BOX_STYLE
 from app.watch_history_editor import get_series_episodes
 
@@ -129,13 +129,13 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         }
 
         with patch(
-            "app.media_details_dialog.get_connection",
+            "app.media_details.dialog.get_connection",
             return_value=conn,
         ), patch(
-            "app.media_details_dialog.draft_saver.save_existing_media_changes",
+            "app.media_details.dialog.draft_saver.save_existing_media_changes",
             return_value=save_result,
         ) as local_save, patch(
-            "app.media_details_dialog.draft_saver.save_media_draft_with_posters",
+            "app.media_details.dialog.draft_saver.save_media_draft_with_posters",
         ) as import_save:
             dialog.save_media()
 
@@ -201,7 +201,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         dialog.smart_input.setText("watched yesterday")
 
         with patch(
-            "app.media_details_dialog.resolve_media_draft_from_query",
+            "app.media_details.dialog.resolve_media_draft_from_query",
             return_value=None,
         ) as resolve_media:
             QTest.keyClick(dialog.find_media_input, Qt.Key.Key_Return)
@@ -215,7 +215,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
     def test_initial_watched_status_does_not_open_watch_entry_details(self):
         with patch(
-            "app.media_details_dialog.WatchEntryDetailsDialog",
+            "app.media_details.dialog.WatchEntryDetailsDialog",
         ) as watch_entry_dialog:
             dialog = self._dialog(watch_state="watched")
             self.application.processEvents()
@@ -226,7 +226,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
     def test_user_transition_to_watched_opens_one_new_entry_for_each_media_type(self):
         for media_type in ("movie", "series", "episode"):
             with self.subTest(media_type=media_type), patch(
-                "app.media_details_dialog.WatchEntryDetailsDialog",
+                "app.media_details.dialog.WatchEntryDetailsDialog",
             ) as watch_entry_dialog:
                 watch_entry_dialog.return_value.exec.return_value = QDialog.Rejected
                 dialog = self._dialog(media_type=media_type)
@@ -250,7 +250,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
                     media_type=media_type,
                     previous_status=previous_status,
                 ), patch(
-                    "app.media_details_dialog.WatchEntryDetailsDialog",
+                    "app.media_details.dialog.WatchEntryDetailsDialog",
                 ) as watch_entry_dialog:
                     watch_entry_dialog.return_value.exec.return_value = (
                         QDialog.Rejected
@@ -282,7 +282,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
     def test_cancelling_automatic_entry_preserves_prior_dirty_state(self):
         for media_type in ("movie", "episode"):
             with self.subTest(media_type=media_type), patch(
-                "app.media_details_dialog.WatchEntryDetailsDialog",
+                "app.media_details.dialog.WatchEntryDetailsDialog",
             ) as watch_entry_dialog:
                 watch_entry_dialog.return_value.exec.return_value = (
                     QDialog.Rejected
@@ -313,7 +313,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
     def test_cancelling_manual_entry_does_not_change_watched_status(self):
         with patch(
-            "app.media_details_dialog.WatchEntryDetailsDialog",
+            "app.media_details.dialog.WatchEntryDetailsDialog",
         ) as watch_entry_dialog:
             watch_entry_dialog.return_value.exec.return_value = QDialog.Rejected
             dialog = self._dialog(media_type="movie", watch_state="watched")
@@ -332,7 +332,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
         for media_type in ("movie", "episode"):
             with self.subTest(media_type=media_type), patch(
-                "app.media_details_dialog.WatchEntryDetailsDialog",
+                "app.media_details.dialog.WatchEntryDetailsDialog",
             ) as watch_entry_dialog:
                 watch_entry_dialog.return_value.exec.return_value = (
                     QDialog.Rejected
@@ -358,7 +358,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
     def test_cancelling_automatic_entry_keeps_watched_status_for_series(self):
         with patch(
-            "app.media_details_dialog.WatchEntryDetailsDialog",
+            "app.media_details.dialog.WatchEntryDetailsDialog",
         ) as watch_entry_dialog:
             watch_entry_dialog.return_value.exec.return_value = QDialog.Rejected
             dialog = self._dialog()
@@ -372,7 +372,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
     def test_programmatic_watched_status_does_not_open_or_recurse(self):
         with patch(
-            "app.media_details_dialog.WatchEntryDetailsDialog",
+            "app.media_details.dialog.WatchEntryDetailsDialog",
         ) as watch_entry_dialog:
             dialog = self._dialog()
 
@@ -385,7 +385,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
     def test_user_transition_to_other_status_does_not_open_watch_entry_details(self):
         with patch(
-            "app.media_details_dialog.WatchEntryDetailsDialog",
+            "app.media_details.dialog.WatchEntryDetailsDialog",
         ) as watch_entry_dialog:
             dialog = self._dialog()
 
@@ -396,7 +396,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
     def test_scheduled_entry_is_ignored_after_dialog_accepts(self):
         with patch(
-            "app.media_details_dialog.WatchEntryDetailsDialog",
+            "app.media_details.dialog.WatchEntryDetailsDialog",
         ) as watch_entry_dialog:
             dialog = self._dialog()
             watched_index = dialog.status_combo.findData("watched")

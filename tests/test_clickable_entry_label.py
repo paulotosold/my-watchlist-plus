@@ -9,7 +9,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication
 
-from app.media_details_dialog import ClickableEntryLabel
+from app.media_state_controls import ClickableEntryLabel
 
 
 class ClickableEntryLabelTests(unittest.TestCase):
