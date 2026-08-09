@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 import app.media_repository as media_repository
+from app.media_repository import user_data as media_user_data_repository
 from db.connection import apply_database_schema
 
 
@@ -167,13 +168,13 @@ class MediaRepositoryIncrementalSaveTests(unittest.TestCase):
         current["user_data"]["impression"] = "very_good"
 
         with patch.object(
-            media_repository,
+            media_user_data_repository,
             "_apply_owned_row_delta",
-            wraps=media_repository._apply_owned_row_delta,
+            wraps=media_user_data_repository._apply_owned_row_delta,
         ) as direct_delta, patch.object(
-            media_repository,
+            media_user_data_repository,
             "_apply_series_episode_history_delta",
-            wraps=media_repository._apply_series_episode_history_delta,
+            wraps=media_user_data_repository._apply_series_episode_history_delta,
         ) as episode_delta:
             result = media_repository.apply_media_user_changes(
                 self.conn,

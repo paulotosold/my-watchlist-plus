@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from app import media_repository
+from app.media_repository import catalog as media_catalog_repository
 from db.connection import apply_database_schema
 
 
@@ -304,7 +305,11 @@ class MediaRepositorySeasonPosterTests(unittest.TestCase):
             },
         ]
 
-        with patch.object(media_repository, "TMDB_MAX_POSTERS_PER_MEDIA", None):
+        with patch.object(
+            media_catalog_repository,
+            "TMDB_MAX_POSTERS_PER_MEDIA",
+            None,
+        ):
             episode_id = media_repository.save_media_catalog_draft(
                 self.conn,
                 self._episode_draft(
