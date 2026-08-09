@@ -1,11 +1,7 @@
-import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock
 
-
-os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
-
-import app.tmdb_fetcher as tmdb_fetcher
+from app.tmdb.search import search_tmdb_title_candidates
 
 
 class TmdbTitleSearchTests(unittest.TestCase):
@@ -39,10 +35,12 @@ class TmdbTitleSearchTests(unittest.TestCase):
                 }],
             }
 
-        with patch.object(tmdb_fetcher, "_tmdb_get", side_effect=fake_get):
-            candidates = tmdb_fetcher.search_tmdb_title_candidates(
-                "  Star Wars: Episode I – Test!  ",
-            )
+        client = Mock()
+        client.get_json.side_effect = fake_get
+        candidates = search_tmdb_title_candidates(
+            "  Star Wars: Episode I – Test!  ",
+            client=client,
+        )
 
         self.assertEqual(
             calls,
@@ -103,8 +101,9 @@ class TmdbTitleSearchTests(unittest.TestCase):
             calls.append((endpoint, dict(params)))
             return {"total_pages": 0, "total_results": 0, "results": []}
 
-        with patch.object(tmdb_fetcher, "_tmdb_get", side_effect=fake_get):
-            candidates = tmdb_fetcher.search_tmdb_title_candidates("Unknown")
+        client = Mock()
+        client.get_json.side_effect = fake_get
+        candidates = search_tmdb_title_candidates("Unknown", client=client)
 
         self.assertEqual(candidates, [])
         self.assertEqual(
@@ -125,12 +124,11 @@ class TmdbTitleSearchTests(unittest.TestCase):
             "search/tv": {"total_pages": 1, "results": []},
         }
 
-        with patch.object(
-            tmdb_fetcher,
-            "_tmdb_get",
-            side_effect=lambda endpoint, params: responses[endpoint],
-        ):
-            candidates = tmdb_fetcher.search_tmdb_title_candidates("Title")
+        client = Mock()
+        client.get_json.side_effect = (
+            lambda endpoint, params: responses[endpoint]
+        )
+        candidates = search_tmdb_title_candidates("Title", client=client)
 
         self.assertEqual(
             [candidate["tmdb_id"] for candidate in candidates],
@@ -138,11 +136,11 @@ class TmdbTitleSearchTests(unittest.TestCase):
         )
 
     def test_empty_query_does_not_call_tmdb(self):
-        with patch.object(tmdb_fetcher, "_tmdb_get") as get_mock:
-            candidates = tmdb_fetcher.search_tmdb_title_candidates("   ")
+        client = Mock()
+        candidates = search_tmdb_title_candidates("   ", client=client)
 
         self.assertEqual(candidates, [])
-        get_mock.assert_not_called()
+        client.get_json.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -9,8 +9,9 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 import app.draft_saver as draft_saver
+from app.media_freshness import current_freshness_timestamp
 import app.media_repository as media_repository
-import app.tmdb_fetcher as tmdb_fetcher
+import app.tmdb as tmdb
 from db.connection import get_connection
 
 
@@ -37,7 +38,7 @@ def backfill_season_posters(
 
         try:
             canonical_posters = (
-                tmdb_fetcher.get_tmdb_series_primary_season_posters(
+                tmdb.get_tmdb_series_primary_season_posters(
                     series["tmdb_id"]
                 )
             )
@@ -76,7 +77,7 @@ def backfill_season_posters(
                         media_repository.update_media_tmdb_posters_checked_at(
                             conn,
                             series["id"],
-                            tmdb_fetcher.current_sqlite_timestamp(),
+                            current_freshness_timestamp(),
                         )
 
                 after_count = _count_series_season_posters(

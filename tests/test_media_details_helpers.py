@@ -2,7 +2,6 @@ import os
 import unittest
 from datetime import date, datetime
 
-os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from app.media_details_formatters import (

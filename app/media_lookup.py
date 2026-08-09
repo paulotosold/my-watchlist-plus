@@ -8,7 +8,7 @@ from app.media_draft_builder import (
     build_media_draft_from_tmdb,
     build_media_draft_from_tmdb_match,
 )
-from app.tmdb_fetcher import search_tmdb_title_candidates
+from app.tmdb import search_tmdb_title_candidates
 from db.connection import get_connection
 
 

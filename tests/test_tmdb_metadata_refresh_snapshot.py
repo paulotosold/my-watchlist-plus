@@ -1,13 +1,10 @@
-import os
 import unittest
 from concurrent.futures import CancelledError
 from unittest.mock import Mock, patch
 
 import requests
 
-os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
-
-import app.tmdb_fetcher as tmdb_fetcher
+import app.tmdb.refresh as tmdb_refresh
 
 
 CHECKED_AT = "2026-07-13 12:34:56"
@@ -37,12 +34,12 @@ class TmdbMetadataRefreshSnapshotTests(unittest.TestCase):
         }
         get_mock = Mock(side_effect=lambda endpoint: responses[endpoint])
 
-        with patch.object(tmdb_fetcher, "_tmdb_get", get_mock), patch.object(
-            tmdb_fetcher,
-            "current_sqlite_timestamp",
+        with patch.object(tmdb_refresh, "_tmdb_get", get_mock), patch.object(
+            tmdb_refresh,
+            "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ):
-            result = tmdb_fetcher.get_tmdb_metadata_refresh_snapshot({
+            result = tmdb_refresh.get_tmdb_metadata_refresh_snapshot({
                 "status": "resolved",
                 "match": {"media_type": "movie", "tmdb_id": 7},
             })
@@ -85,12 +82,12 @@ class TmdbMetadataRefreshSnapshotTests(unittest.TestCase):
             calls.append(endpoint)
             return responses[endpoint]
 
-        with patch.object(tmdb_fetcher, "_tmdb_get", side_effect=fake_get), patch.object(
-            tmdb_fetcher,
-            "current_sqlite_timestamp",
+        with patch.object(tmdb_refresh, "_tmdb_get", side_effect=fake_get), patch.object(
+            tmdb_refresh,
+            "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ) as timestamp:
-            result = tmdb_fetcher.get_tmdb_metadata_refresh_snapshot({
+            result = tmdb_refresh.get_tmdb_metadata_refresh_snapshot({
                 "media_type": "series",
                 "tmdb_id": 42,
             })
@@ -152,12 +149,12 @@ class TmdbMetadataRefreshSnapshotTests(unittest.TestCase):
             calls.append(endpoint)
             return responses[endpoint]
 
-        with patch.object(tmdb_fetcher, "_tmdb_get", side_effect=fake_get), patch.object(
-            tmdb_fetcher,
-            "current_sqlite_timestamp",
+        with patch.object(tmdb_refresh, "_tmdb_get", side_effect=fake_get), patch.object(
+            tmdb_refresh,
+            "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ):
-            result = tmdb_fetcher.get_tmdb_metadata_refresh_snapshot({
+            result = tmdb_refresh.get_tmdb_metadata_refresh_snapshot({
                 "media_type": "episode",
                 "tmdb_id": 101,
                 "series_tmdb_id": 42,
@@ -212,12 +209,12 @@ class TmdbMetadataRefreshSnapshotTests(unittest.TestCase):
             {"season_number": 1, "episode_count": 2},
         ]
 
-        with patch.object(tmdb_fetcher, "_tmdb_get", side_effect=fake_get), patch.object(
-            tmdb_fetcher,
-            "current_sqlite_timestamp",
+        with patch.object(tmdb_refresh, "_tmdb_get", side_effect=fake_get), patch.object(
+            tmdb_refresh,
+            "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ):
-            result = tmdb_fetcher.get_tmdb_metadata_refresh_snapshot({
+            result = tmdb_refresh.get_tmdb_metadata_refresh_snapshot({
                 "media_type": "episode",
                 "tmdb_id": 101,
                 "series_tmdb_id": 42,
@@ -244,16 +241,16 @@ class TmdbMetadataRefreshSnapshotTests(unittest.TestCase):
         }
 
         with patch.object(
-            tmdb_fetcher,
+            tmdb_refresh,
             "_tmdb_get",
             side_effect=lambda endpoint: responses[endpoint],
         ), patch.object(
-            tmdb_fetcher,
-            "current_sqlite_timestamp",
+            tmdb_refresh,
+            "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ):
             with self.assertRaisesRegex(ValueError, "was not found"):
-                tmdb_fetcher.get_tmdb_metadata_refresh_snapshot({
+                tmdb_refresh.get_tmdb_metadata_refresh_snapshot({
                     "media_type": "episode",
                     "tmdb_id": 101,
                     "series_tmdb_id": 42,
@@ -268,9 +265,9 @@ class TmdbMetadataRefreshSnapshotTests(unittest.TestCase):
             calls.append(endpoint)
             return self._series_details()
 
-        with patch.object(tmdb_fetcher, "_tmdb_get", side_effect=fake_get):
+        with patch.object(tmdb_refresh, "_tmdb_get", side_effect=fake_get):
             with self.assertRaises(CancelledError):
-                tmdb_fetcher.get_tmdb_metadata_refresh_snapshot(
+                tmdb_refresh.get_tmdb_metadata_refresh_snapshot(
                     {"media_type": "series", "tmdb_id": 42},
                     should_cancel=lambda: bool(calls),
                 )
@@ -280,9 +277,9 @@ class TmdbMetadataRefreshSnapshotTests(unittest.TestCase):
     def test_root_identity_mismatch_fails_before_followup_calls(self):
         get_mock = Mock(return_value={"id": 99})
 
-        with patch.object(tmdb_fetcher, "_tmdb_get", get_mock):
+        with patch.object(tmdb_refresh, "_tmdb_get", get_mock):
             with self.assertRaisesRegex(ValueError, "different movie identity"):
-                tmdb_fetcher.get_tmdb_metadata_refresh_snapshot({
+                tmdb_refresh.get_tmdb_metadata_refresh_snapshot({
                     "media_type": "movie",
                     "tmdb_id": 42,
                 })

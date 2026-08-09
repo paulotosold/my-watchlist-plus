@@ -3,12 +3,12 @@ from pathlib import Path
 import requests
 
 import app.media_draft_builder as media_draft_builder
+from app.media_freshness import current_freshness_timestamp
 import app.media_repository as media_repository
-import app.tmdb_fetcher as tmdb_fetcher
+import app.tmdb as tmdb
 from app.config import BASE_DIR, TMDB_MAX_POSTERS_PER_MEDIA, TMDB_POSTER_SIZE
 
 
-TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 DEFAULT_POSTER_DIR = BASE_DIR / "data" / "media_posters"
 
 
@@ -258,7 +258,7 @@ def _save_episode_draft_with_series_context(
         media_repository.update_media_tmdb_posters_checked_at(
             conn,
             series_id,
-            tmdb_fetcher.current_sqlite_timestamp(),
+            current_freshness_timestamp(),
         )
 
     return {
@@ -373,7 +373,7 @@ def _save_series_draft_with_episode_context(
     )
 
     if _poster_downloads_succeeded(parent_poster_downloads):
-        checked_at = tmdb_fetcher.current_sqlite_timestamp()
+        checked_at = current_freshness_timestamp()
         media_repository.update_media_tmdb_posters_checked_at(
             conn,
             series_save_result["media_id"],
@@ -419,9 +419,10 @@ def _save_series_episode_seeds(
     fail_on_poster_error=False,
     fetch_episode_imdb_ids=True,
 ):
-    episode_metadata_list = tmdb_fetcher.get_tmdb_series_episode_metadata_list(
+    episode_metadata_list = tmdb.get_tmdb_series_episode_metadata_list(
         series_tmdb_id,
         include_episode_imdb_ids=fetch_episode_imdb_ids,
+        checked_at=current_freshness_timestamp(),
     )
     return _save_series_episode_metadata_list(
         conn,
@@ -572,7 +573,7 @@ def _download_series_season_posters(
     fail_on_poster_error=False,
 ):
     season_posters = (
-        tmdb_fetcher.get_tmdb_series_primary_season_posters(series_tmdb_id)
+        tmdb.get_tmdb_series_primary_season_posters(series_tmdb_id)
     )
     poster_downloads = download_missing_draft_posters(
         {"posters": season_posters},
@@ -687,7 +688,10 @@ def download_tmdb_poster(
 
     poster_path = poster_dir / filename
     temp_path = poster_path.with_name(f"{poster_path.name}.tmp")
-    image_url = f"{TMDB_IMAGE_BASE_URL}/{poster_size}/{filename}"
+    image_url = tmdb.build_tmdb_image_url(filename, size=poster_size)
+
+    if image_url is None:
+        raise ValueError(f"Invalid TMDB poster URL: {filename}")
 
     try:
         response = requests.get(image_url, stream=True, timeout=timeout)

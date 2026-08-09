@@ -1,11 +1,7 @@
-import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock
 
-
-os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
-
-import app.tmdb_fetcher as tmdb_fetcher
+from app.tmdb.posters import get_tmdb_series_primary_season_posters
 
 
 class TmdbSeriesPrimarySeasonPostersTests(unittest.TestCase):
@@ -25,14 +21,11 @@ class TmdbSeriesPrimarySeasonPostersTests(unittest.TestCase):
             ],
         }
 
-        with patch.object(
-            tmdb_fetcher,
-            "_tmdb_get",
-            return_value=series_details,
-        ) as get_mock:
-            result = tmdb_fetcher.get_tmdb_series_primary_season_posters(42)
+        client = Mock()
+        client.get_json.return_value = series_details
+        result = get_tmdb_series_primary_season_posters(42, client=client)
 
-        get_mock.assert_called_once_with("tv/42")
+        client.get_json.assert_called_once_with("tv/42")
         self.assertEqual(
             result,
             [
@@ -70,12 +63,9 @@ class TmdbSeriesPrimarySeasonPostersTests(unittest.TestCase):
             ],
         }
 
-        with patch.object(
-            tmdb_fetcher,
-            "_tmdb_get",
-            return_value=series_details,
-        ):
-            result = tmdb_fetcher.get_tmdb_series_primary_season_posters(42)
+        client = Mock()
+        client.get_json.return_value = series_details
+        result = get_tmdb_series_primary_season_posters(42, client=client)
 
         self.assertEqual(
             result,

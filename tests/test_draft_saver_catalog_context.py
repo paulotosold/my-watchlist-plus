@@ -4,7 +4,6 @@ import unittest
 from copy import deepcopy
 from unittest.mock import patch
 
-os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 import app.draft_saver as draft_saver
@@ -26,7 +25,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         self.conn.row_factory = sqlite3.Row
         apply_database_schema(self.conn)
         season_poster_patcher = patch.object(
-            draft_saver.tmdb_fetcher,
+            draft_saver.tmdb,
             "get_tmdb_series_primary_season_posters",
             return_value=[],
         )
@@ -50,7 +49,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
                 ]
 
                 with self._mock_downloads(), patch.object(
-                    draft_saver.tmdb_fetcher,
+                    draft_saver.tmdb,
                     "get_tmdb_series_episode_metadata_list",
                     return_value=episodes,
                 ):
@@ -94,7 +93,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             "build_media_draft_from_tmdb_match",
             return_value=parent_draft,
         ), patch.object(
-            draft_saver.tmdb_fetcher,
+            draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
             return_value=[target, sibling],
         ):
@@ -143,7 +142,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             draft_saver.media_draft_builder,
             "build_media_draft_from_tmdb_match",
         ) as build_parent, patch.object(
-            draft_saver.tmdb_fetcher,
+            draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
             return_value=[target, sibling],
         ):
@@ -178,7 +177,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         }
 
         with self._mock_downloads(), patch.object(
-            draft_saver.tmdb_fetcher,
+            draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
         ) as fetch_episodes:
             result = draft_saver.save_media_draft_with_posters(
@@ -209,12 +208,12 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             "download_missing_draft_posters",
             side_effect=self._download_every_tmdb_poster,
         ), patch.object(
-            draft_saver.tmdb_fetcher,
+            draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
             return_value=[],
         ), patch.object(
-            draft_saver.tmdb_fetcher,
-            "current_sqlite_timestamp",
+            draft_saver,
+            "current_freshness_timestamp",
             return_value="joint-check",
         ):
             result = draft_saver.save_media_draft_with_posters(
@@ -309,7 +308,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             "download_missing_draft_posters",
             side_effect=download_with_failures,
         ), patch.object(
-            draft_saver.tmdb_fetcher,
+            draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
             return_value=[],
         ):
@@ -383,12 +382,12 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             "download_missing_draft_posters",
             side_effect=download_with_episode_failure,
         ), patch.object(
-            draft_saver.tmdb_fetcher,
+            draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
             return_value=[target],
         ), patch.object(
-            draft_saver.tmdb_fetcher,
-            "current_sqlite_timestamp",
+            draft_saver,
+            "current_freshness_timestamp",
             return_value="new-parent-check",
         ):
             result = draft_saver.save_media_draft_with_posters(
@@ -450,7 +449,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
             "download_missing_draft_posters",
             side_effect=self._download_every_tmdb_poster,
         ), patch.object(
-            draft_saver.tmdb_fetcher,
+            draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
             return_value=[target],
         ):
@@ -501,7 +500,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         current["user_data"]["impression"] = "very_good"
 
         with patch.object(
-            draft_saver.tmdb_fetcher,
+            draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
         ) as fetch_episodes, patch.object(
             draft_saver,
@@ -532,7 +531,7 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         current["user_data"]["impression"] = "good"
 
         with patch.object(
-            draft_saver.tmdb_fetcher,
+            draft_saver.tmdb,
             "get_tmdb_series_episode_metadata_list",
         ) as fetch_episodes, patch.object(
             draft_saver.media_draft_builder,

@@ -1,9 +1,5 @@
-import os
 import unittest
 from unittest.mock import patch
-
-
-os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 
 import app.media_draft_builder as media_draft_builder
 
@@ -22,28 +18,24 @@ class MediaDraftBuilderShapeTests(unittest.TestCase):
     def test_tmdb_builders_keep_the_six_canonical_top_level_keys(self):
         for media_type in ("movie", "series", "episode"):
             with self.subTest(media_type=media_type), patch.object(
-                media_draft_builder.app.tmdb_fetcher,
+                media_draft_builder.tmdb,
                 "get_tmdb_media_metadata",
                 return_value={"tmdb_id": 42, "media_type": media_type},
             ), patch.object(
-                media_draft_builder.app.tmdb_fetcher,
+                media_draft_builder.tmdb,
                 "get_tmdb_media_series_view",
                 return_value={} if media_type == "series" else None,
             ), patch.object(
-                media_draft_builder.app.tmdb_fetcher,
+                media_draft_builder.tmdb,
                 "get_tmdb_media_watch_providers",
                 return_value=[],
             ), patch.object(
-                media_draft_builder.app.tmdb_fetcher,
+                media_draft_builder.tmdb,
                 "get_tmdb_media_posters",
                 return_value=[],
             ), patch.object(
-                media_draft_builder.app.tmdb_fetcher,
-                "get_tmdb_media_user_data",
-                return_value={},
-            ), patch.object(
-                media_draft_builder.app.tmdb_fetcher,
-                "current_sqlite_timestamp",
+                media_draft_builder,
+                "current_freshness_timestamp",
                 return_value="2026-07-17 12:00:00",
             ):
                 draft = media_draft_builder.build_media_draft_from_tmdb_match({
@@ -52,6 +44,25 @@ class MediaDraftBuilderShapeTests(unittest.TestCase):
                 })
 
             self.assertEqual(set(draft), CANONICAL_DRAFT_KEYS)
+            self.assertEqual(
+                draft["user_data"],
+                {
+                    "watch_state": "to_watch",
+                    "impression": None,
+                    "is_collection_pick": None,
+                    "watch_history": [],
+                    "notes": [],
+                    "lists": [],
+                },
+            )
+            self.assertEqual(
+                draft["metadata"]["last_tmdb_metadata_checked_at"],
+                "2026-07-17 12:00:00",
+            )
+            self.assertEqual(
+                draft["metadata"]["last_tmdb_watch_providers_checked_at"],
+                "2026-07-17 12:00:00",
+            )
 
             if media_type == "movie":
                 self.assertEqual(
@@ -61,6 +72,12 @@ class MediaDraftBuilderShapeTests(unittest.TestCase):
             else:
                 self.assertIsNone(
                     draft["metadata"]["last_tmdb_posters_checked_at"]
+                )
+
+            if media_type == "series":
+                self.assertEqual(
+                    draft["series_view"]["episode_watch_history"],
+                    [],
                 )
 
     def test_db_builder_keeps_the_six_canonical_top_level_keys(self):

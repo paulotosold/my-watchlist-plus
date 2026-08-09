@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, call, patch
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 import app.media_lookup as media_lookup

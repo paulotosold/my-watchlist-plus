@@ -18,7 +18,7 @@ from uuid import uuid4
 
 from PySide6.QtCore import QCoreApplication, QObject, QRunnable, QThreadPool, Signal
 
-from app import media_repository, tmdb_fetcher
+from app import media_repository, tmdb
 from db.connection import get_connection
 
 
@@ -63,7 +63,7 @@ class _MetadataRefreshWorker(QRunnable):
         conn = None
 
         try:
-            snapshot = tmdb_fetcher.get_tmdb_metadata_refresh_snapshot(
+            snapshot = tmdb.get_tmdb_metadata_refresh_snapshot(
                 deepcopy(self._match),
                 should_cancel=self._token.is_cancelled,
                 report_progress=self._report_progress,

@@ -23,8 +23,9 @@ from PySide6.QtWidgets import (
 )
 
 import app.draft_saver as draft_saver
+from app.media_freshness import current_freshness_timestamp
 import app.media_repository as media_repo
-import app.tmdb_fetcher as tmdb_fetcher
+import app.tmdb as tmdb
 from .constants import (
     DETAIL_BUTTON_WIDTH,
     DETAIL_ICON_BUTTON_SIZE,
@@ -80,7 +81,6 @@ from app.watch_history_editor import (
 from db.connection import get_connection
 
 
-TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 TMDB_POSTER_PREVIEW_SIZE = "w185"
 POSTER_PREVIEW_HEIGHT = 232
 ENTRY_ACTION_LINE_HEIGHT = DETAIL_ICON_BUTTON_SIZE
@@ -900,14 +900,14 @@ class MediaDetailsDialog(QDialog):
             return
 
         try:
-            providers = tmdb_fetcher.get_tmdb_media_watch_providers(
+            providers = tmdb.get_tmdb_media_watch_providers(
                 build_tmdb_match_from_metadata(self.media_draft.get("metadata") or {})
             )
         except Exception as exc:
             QMessageBox.warning(self, "Watch Providers", str(exc))
             return
 
-        checked_at = tmdb_fetcher.current_sqlite_timestamp()
+        checked_at = current_freshness_timestamp()
         metadata = self.media_draft.setdefault("metadata", {})
         metadata["last_tmdb_watch_providers_checked_at"] = checked_at
         self.media_draft["watch_providers"] = providers
@@ -1343,11 +1343,16 @@ def load_poster_pixmap(poster):
     if poster.get("source", "tmdb") != "tmdb":
         return None
 
+    image_url = tmdb.build_tmdb_image_url(
+        normalized_filename,
+        size=TMDB_POSTER_PREVIEW_SIZE,
+    )
+
+    if image_url is None:
+        return None
+
     try:
-        response = requests.get(
-            f"{TMDB_IMAGE_BASE_URL}/{TMDB_POSTER_PREVIEW_SIZE}/{normalized_filename}",
-            timeout=8,
-        )
+        response = requests.get(image_url, timeout=8)
         response.raise_for_status()
     except requests.RequestException:
         return None

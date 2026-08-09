@@ -7,7 +7,6 @@ import unittest
 from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from PySide6.QtCore import QThreadPool
@@ -88,7 +87,7 @@ class MetadataRefreshManagerTests(unittest.TestCase):
             return {"created": 2, "row": None}
 
         with patch.object(
-            metadata_refresh.tmdb_fetcher,
+            metadata_refresh.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             side_effect=fetch,
         ), patch.object(
@@ -130,7 +129,7 @@ class MetadataRefreshManagerTests(unittest.TestCase):
         apply_refresh = Mock()
 
         with patch.object(
-            metadata_refresh.tmdb_fetcher,
+            metadata_refresh.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             return_value=deepcopy(SNAPSHOT),
         ), patch.object(
@@ -167,7 +166,7 @@ class MetadataRefreshManagerTests(unittest.TestCase):
             return deepcopy(SNAPSHOT)
 
         with patch.object(
-            metadata_refresh.tmdb_fetcher,
+            metadata_refresh.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             side_effect=fetch,
         ):
@@ -205,7 +204,7 @@ class MetadataRefreshManagerTests(unittest.TestCase):
             raise CancelledError()
 
         with patch.object(
-            metadata_refresh.tmdb_fetcher,
+            metadata_refresh.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             side_effect=fetch,
         ), patch.object(
@@ -241,7 +240,7 @@ class MetadataRefreshManagerTests(unittest.TestCase):
             return {"updated": 1}
 
         with patch.object(
-            metadata_refresh.tmdb_fetcher,
+            metadata_refresh.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             return_value=deepcopy(SNAPSHOT),
         ), patch.object(
@@ -272,7 +271,7 @@ class MetadataRefreshManagerTests(unittest.TestCase):
         failed_spy = QSignalSpy(self.manager.failed)
 
         with patch.object(
-            metadata_refresh.tmdb_fetcher,
+            metadata_refresh.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             return_value=deepcopy(SNAPSHOT),
         ), patch.object(

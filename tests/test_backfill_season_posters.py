@@ -5,7 +5,6 @@ import unittest
 from unittest.mock import MagicMock, call, patch
 
 
-os.environ.setdefault("TMDB_READ_ACCESS_TOKEN", "test-token")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 import scripts.backfill_season_posters as backfill_script
@@ -35,7 +34,7 @@ class BackfillSeasonPostersTests(unittest.TestCase):
         self.conn.commit()
 
         with patch.object(
-            backfill_script.tmdb_fetcher,
+            backfill_script.tmdb,
             "get_tmdb_series_primary_season_posters",
             return_value=[self._poster(101, 1, "season-one.jpg")],
         ), patch.object(
@@ -90,12 +89,12 @@ class BackfillSeasonPostersTests(unittest.TestCase):
             return {"downloaded": filenames, "skipped": [], "failed": []}
 
         with patch.object(
-            backfill_script.tmdb_fetcher,
+            backfill_script.tmdb,
             "get_tmdb_series_primary_season_posters",
             return_value=canonical_posters,
         ), patch.object(
-            backfill_script.tmdb_fetcher,
-            "current_sqlite_timestamp",
+            backfill_script,
+            "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ), patch.object(
             backfill_script.draft_saver,
@@ -155,12 +154,12 @@ class BackfillSeasonPostersTests(unittest.TestCase):
             return [self._poster(302, 1, "successful.jpg")]
 
         with patch.object(
-            backfill_script.tmdb_fetcher,
+            backfill_script.tmdb,
             "get_tmdb_series_primary_season_posters",
             side_effect=fake_fetch,
         ), patch.object(
-            backfill_script.tmdb_fetcher,
-            "current_sqlite_timestamp",
+            backfill_script,
+            "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ), patch.object(
             backfill_script.draft_saver,
@@ -212,12 +211,12 @@ class BackfillSeasonPostersTests(unittest.TestCase):
         }
 
         with patch.object(
-            backfill_script.tmdb_fetcher,
+            backfill_script.tmdb,
             "get_tmdb_series_primary_season_posters",
             return_value=[poster],
         ), patch.object(
-            backfill_script.tmdb_fetcher,
-            "current_sqlite_timestamp",
+            backfill_script,
+            "current_freshness_timestamp",
             return_value=CHECKED_AT,
         ) as timestamp_mock, patch.object(
             backfill_script.draft_saver,

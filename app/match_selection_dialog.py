@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.media_state_controls import ClickableEntryLabel
+from app.tmdb import build_tmdb_image_url
 from app.top_bar import INPUT_BOX_STYLE
 
 
@@ -38,7 +39,6 @@ MATCH_SELECTION_MINIMUM_HEIGHT = 600
 MATCH_SELECTION_INPUT_HEIGHT = 32
 MATCH_SELECTION_BUTTON_WIDTH = 100
 MATCH_SELECTION_BUTTON_MINIMUM_HEIGHT = 32
-TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 TMDB_MATCH_POSTER_SIZE = "w92"
 TMDB_POSTER_TIMEOUT_MS = 8_000
 
@@ -501,14 +501,9 @@ def _remote_poster_path(candidate):
 
 
 def _tmdb_poster_url(poster_path):
-    normalized_path = str(poster_path or "").strip().lstrip("/")
-
-    if not normalized_path or "://" in normalized_path:
-        return None
-
-    return (
-        f"{TMDB_IMAGE_BASE_URL}/{TMDB_MATCH_POSTER_SIZE}/"
-        f"{normalized_path}"
+    return build_tmdb_image_url(
+        poster_path,
+        size=TMDB_MATCH_POSTER_SIZE,
     )
 
 
