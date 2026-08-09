@@ -5,7 +5,7 @@ from math import ceil
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import QGridLayout, QSizePolicy, QWidget
 
-from app.media_card import MediaCard, get_media_key
+from .card import MediaCard, get_media_key
 
 
 MIN_POSTERS_PER_ROW = 2

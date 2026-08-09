@@ -12,16 +12,18 @@ from PySide6.QtGui import QImage
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication
 
-from app.history_grid import (
-    DEFAULT_POSTERS_PER_ROW,
+from app.history.constants import (
+    DEFAULT_HISTORY_POSTERS_PER_ROW,
+    MAX_HISTORY_POSTERS_PER_ROW,
+    MIN_HISTORY_POSTERS_PER_ROW,
+)
+from app.history.grid import (
     GRID_BOTTOM_MARGIN,
     GRID_SPACING,
     GRID_TOP_MARGIN,
-    MAX_POSTERS_PER_ROW,
-    MIN_POSTERS_PER_ROW,
     HistoryGridBoard,
 )
-from app.history_repository import HistoryEntry
+from app.history.repository import HistoryEntry
 
 
 def make_entry(
@@ -75,10 +77,13 @@ class HistoryGridBoardTests(unittest.TestCase):
             self.application.processEvents()
 
     def test_defaults_limits_spacing_and_fixed_poster_ratio(self):
-        self.assertEqual(self.board.posters_per_row, DEFAULT_POSTERS_PER_ROW)
-        self.assertEqual(DEFAULT_POSTERS_PER_ROW, 18)
-        self.assertEqual(MIN_POSTERS_PER_ROW, 6)
-        self.assertEqual(MAX_POSTERS_PER_ROW, 24)
+        self.assertEqual(
+            self.board.posters_per_row,
+            DEFAULT_HISTORY_POSTERS_PER_ROW,
+        )
+        self.assertEqual(DEFAULT_HISTORY_POSTERS_PER_ROW, 18)
+        self.assertEqual(MIN_HISTORY_POSTERS_PER_ROW, 6)
+        self.assertEqual(MAX_HISTORY_POSTERS_PER_ROW, 24)
         self.assertEqual(
             self.board.grid_layout.horizontalSpacing(),
             GRID_SPACING,
@@ -169,16 +174,24 @@ class HistoryGridBoardTests(unittest.TestCase):
         original_tiles = list(self.board.tiles)
 
         self.assertTrue(self.board.set_posters_per_row(2))
-        self.assertEqual(self.board.posters_per_row, MIN_POSTERS_PER_ROW)
+        self.assertEqual(
+            self.board.posters_per_row,
+            MIN_HISTORY_POSTERS_PER_ROW,
+        )
         self.assertEqual(self.board.tiles, original_tiles)
         self.assertEqual(self.board.row_count, 5)
 
         self.assertTrue(self.board.set_posters_per_row(99))
-        self.assertEqual(self.board.posters_per_row, MAX_POSTERS_PER_ROW)
+        self.assertEqual(
+            self.board.posters_per_row,
+            MAX_HISTORY_POSTERS_PER_ROW,
+        )
         self.assertEqual(self.board.tiles, original_tiles)
         self.assertEqual(self.board.row_count, 2)
         self.assertFalse(
-            self.board.set_posters_per_row(MAX_POSTERS_PER_ROW)
+            self.board.set_posters_per_row(
+                MAX_HISTORY_POSTERS_PER_ROW
+            )
         )
 
     def test_refresh_reuses_surviving_entry_tiles_in_new_order(self):
@@ -264,7 +277,7 @@ class HistoryGridBoardTests(unittest.TestCase):
         self.assertEqual(spy.count(), 1)
         self.assertEqual(spy.at(0), [77])
 
-        self.board.set_posters_per_row(MAX_POSTERS_PER_ROW)
+        self.board.set_posters_per_row(MAX_HISTORY_POSTERS_PER_ROW)
         self._process_layout_events()
         widest_line = max(
             tile.fontMetrics().horizontalAdvance(line)
@@ -283,7 +296,7 @@ class HistoryGridBoardTests(unittest.TestCase):
                 poster={"filename": "/poster.png"},
             )
 
-            with patch("app.history_grid.POSTER_DIR", Path(directory)):
+            with patch("app.history.grid.POSTER_DIR", Path(directory)):
                 self.board.set_entries([entry])
                 self._process_layout_events()
 
@@ -292,7 +305,7 @@ class HistoryGridBoardTests(unittest.TestCase):
             self.assertFalse(tile.pixmap().isNull())
             self.assertEqual(tile.pixmap().size(), tile.size())
 
-            with patch("app.history_grid._read_scaled_poster") as read:
+            with patch("app.history.grid._read_scaled_poster") as read:
                 self.board.set_entries([entry])
 
             read.assert_not_called()
@@ -304,7 +317,7 @@ class HistoryGridBoardTests(unittest.TestCase):
                 poster={"filename": "later.png"},
             )
 
-            with patch("app.history_grid.POSTER_DIR", Path(directory)):
+            with patch("app.history.grid.POSTER_DIR", Path(directory)):
                 self.board.set_entries([entry])
                 self._process_layout_events()
                 tile = self.board.tiles[0]

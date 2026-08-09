@@ -10,15 +10,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.filtered_media import FilteredMedia
 from app.find_media_handler import handle_find_media_input
-from app.history_page import HistoryPage
-from app.library_filter import DEFAULT_FILTER_TEXT
+from app.history import HistoryPage
+from app.history.status_control import HistoryStatusControl
 from app.media_details import open_media_details_dialog
 from app.media_draft_builder import build_media_draft_from_db
 from app.media_repository import get_media_by_id
-from app.watchlist_page import WatchlistPage
-from app.watchlist_status_control import WatchlistStatusBar
+from app.page_status_bar import PageStatusBar
+from app.watchlist import WatchlistPage
+from app.watchlist.status_control import WatchlistStatusControl
 from db.connection import get_connection
 
 
@@ -79,13 +79,21 @@ class MainWindow(QMainWindow):
         self.page_stack = QStackedWidget(self)
         main_layout.addWidget(self.page_stack, 1)
 
-        self.status_bar = WatchlistStatusBar(self)
+        self.status_bar = PageStatusBar(self)
         self.setStatusBar(self.status_bar)
-        self.watchlist_status_control = (
-            self.status_bar.watchlist_control
+        self.watchlist_status_control = WatchlistStatusControl(
+            self.status_bar
         )
-        self.history_status_control = (
-            self.status_bar.history_control
+        self.history_status_control = HistoryStatusControl(
+            self.status_bar
+        )
+        self.status_bar.register_control(
+            "watchlist",
+            self.watchlist_status_control,
+        )
+        self.status_bar.register_control(
+            "history",
+            self.history_status_control,
         )
         self.posters_per_row_control = (
             self.watchlist_status_control.poster_size_control
@@ -96,10 +104,6 @@ class MainWindow(QMainWindow):
         self.history_page = HistoryPage(self)
         self._register_page("Watchlist", self.watchlist_page)
         self._register_page("History", self.history_page)
-
-        # Compatibility aliases for callers that still inspect the old shell.
-        self.top_bar = self.watchlist_page.top_bar
-        self.media_board = self.watchlist_page.media_board
 
         self.section_tabs.currentChanged.connect(self._activate_page)
         self.posters_per_row_control.value_changed.connect(
@@ -140,14 +144,6 @@ class MainWindow(QMainWindow):
         self._show_active_status()
 
     @property
-    def filtered_media(self):
-        return self.watchlist_page.filtered_media
-
-    @filtered_media.setter
-    def filtered_media(self, value):
-        self.watchlist_page.filtered_media = value
-
-    @property
     def active_page(self):
         index = self.page_stack.currentIndex()
 
@@ -157,26 +153,43 @@ class MainWindow(QMainWindow):
         return None
 
     def _register_page(self, label, page):
+        """Register a lifecycle page; media-related signals are optional."""
         index = self.section_tabs.addTab(label)
         self.page_stack.insertWidget(index, page)
         self._pages.insert(index, page)
 
-        page.status_message_changed.connect(
+        self._connect_optional_page_signal(
+            page,
+            "status_message_changed",
             lambda message, source=page: self._on_page_status_message(
-                source,
-                message,
-            )
+                source, message
+            ),
         )
-        page.find_media_requested.connect(
+        self._connect_optional_page_signal(
+            page,
+            "find_media_requested",
             lambda media_query, source_page=page: self.on_find_media_input(
                 media_query,
                 source_page=source_page,
-            )
+            ),
         )
-        page.details_requested.connect(self.on_details_requested)
-        page.library_changed.connect(
-            lambda source=page: self._on_page_library_changed(source)
+        self._connect_optional_page_signal(
+            page,
+            "details_requested",
+            self.on_details_requested,
         )
+        self._connect_optional_page_signal(
+            page,
+            "library_changed",
+            lambda source=page: self._on_page_library_changed(source),
+        )
+
+    @staticmethod
+    def _connect_optional_page_signal(page, signal_name, handler):
+        signal = getattr(page, signal_name, None)
+
+        if signal is not None:
+            signal.connect(handler)
 
     def _activate_page(self, index):
         if not 0 <= index < len(self._pages):
@@ -197,7 +210,7 @@ class MainWindow(QMainWindow):
         if callable(setter):
             setter(posters_per_row)
 
-    def _update_watchlist_status_visibility(self):
+    def _update_active_status_control(self):
         is_watchlist = self.active_page is self.watchlist_page
         is_history = self.active_page is self.history_page
         active_control = (
@@ -209,9 +222,6 @@ class MainWindow(QMainWindow):
         )
         self.status_bar.set_active_control(active_control)
         self.posters_per_row_control.setVisible(is_watchlist)
-
-    def _update_posters_per_row_control_visibility(self):
-        self._update_watchlist_status_visibility()
 
     def _on_page_status_message(self, page, _message):
         if page is self.active_page and page is self.history_page:
@@ -272,9 +282,7 @@ class MainWindow(QMainWindow):
         view_mode=None,
         posters_per_row=None,
     ):
-        watched_count = _status_message_count(
-            getattr(self.history_page, "status_message", "")
-        )
+        watched_count = len(getattr(self.history_page, "entries", ()))
 
         view_mode = view_mode or getattr(
             self.history_page,
@@ -319,29 +327,20 @@ class MainWindow(QMainWindow):
 
         self._show_active_status()
 
-    def on_filter_input(self, filter_text):
-        """Compatibility entry point for the former monolithic Watchlist."""
-        if hasattr(self, "watchlist_page"):
-            return self.watchlist_page.on_filter_input(filter_text)
-
-        if filter_text != DEFAULT_FILTER_TEXT:
-            print("Filter Library:", filter_text)
-            return
-
-        self.filtered_media = FilteredMedia()
-        self.refresh_media_view()
-
     def on_find_media_input(self, media_query, *, source_page=None):
         print("Find Media:", media_query)
         result = handle_find_media_input(self, media_query)
 
         if result and result.get("status") in {"saved", "deleted"}:
             source_page = source_page or getattr(self, "active_page", None)
-            top_bar = getattr(source_page, "top_bar", None)
-            find_media_input = getattr(top_bar, "find_media_input", None)
+            clear_find_media_query = getattr(
+                source_page,
+                "clear_find_media_query",
+                None,
+            )
 
-            if find_media_input is not None:
-                find_media_input.clear()
+            if callable(clear_find_media_query):
+                clear_find_media_query()
 
             self._refresh_after_media_change()
 
@@ -383,18 +382,6 @@ class MainWindow(QMainWindow):
 
             return build_media_draft_from_db(conn, media_row)
 
-    def refresh_media_view(self):
-        """Refresh the active page now and defer other pages until activation."""
-        active_page = self.active_page
-
-        for page in self._pages:
-            page.invalidate()
-
-        if active_page is not None:
-            active_page.ensure_loaded()
-
-        self._show_active_status()
-
     def _refresh_after_media_change(self):
         """Synchronize edits without rebuilding the watchlist grid."""
         active_page = self.active_page
@@ -411,7 +398,7 @@ class MainWindow(QMainWindow):
 
     def _show_active_status(self):
         page = self.active_page
-        self._update_watchlist_status_visibility()
+        self._update_active_status_control()
 
         if page is self.watchlist_page:
             self.status_bar.clearMessage()
@@ -422,18 +409,3 @@ class MainWindow(QMainWindow):
 
         if page is self.history_page:
             self._sync_history_status()
-
-    def _update_status_bar(self):
-        self._show_active_status()
-
-
-def _status_message_count(message):
-    first_token = str(message).strip().split(maxsplit=1)
-
-    if not first_token:
-        return 0
-
-    try:
-        return max(0, int(first_token[0]))
-    except ValueError:
-        return 0

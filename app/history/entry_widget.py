@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
@@ -27,13 +25,12 @@ from app.media_state_controls import (
     populate_status_combo,
     set_combo_value,
 )
+from .constants import POSTER_DIR
 
 
 POSTER_WIDTH = 180
 PLACEHOLDER_POSTER_HEIGHT = 270
 DATE_COLUMN_WIDTH = 250
-POSTER_DIR = Path(__file__).resolve().parents[1] / "data" / "media_posters"
-
 HISTORY_STATE_FIELDS_STYLE = MEDIA_STATE_COMBO_STYLE + """
 QLabel#historyStateFieldLabel {
     color: black;

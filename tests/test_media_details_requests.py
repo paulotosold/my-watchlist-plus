@@ -7,8 +7,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app.media_board import MediaBoard
-from app.media_card import MediaCard
+from app.watchlist.board import MediaBoard
+from app.watchlist.card import MediaCard
 
 
 class MediaDetailsRequestTests(unittest.TestCase):

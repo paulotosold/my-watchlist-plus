@@ -7,14 +7,16 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication
 
-from app.history_status_control import (
-    ACTIVE_VIEW_BACKGROUND,
-    ACTIVE_VIEW_BORDER,
+from app.history.constants import (
     DEFAULT_HISTORY_POSTERS_PER_ROW,
-    GRID_VIEW,
-    LIST_VIEW,
+    HISTORY_VIEW_GRID as GRID_VIEW,
+    HISTORY_VIEW_LIST as LIST_VIEW,
     MAX_HISTORY_POSTERS_PER_ROW,
     MIN_HISTORY_POSTERS_PER_ROW,
+)
+from app.history.status_control import (
+    ACTIVE_VIEW_BACKGROUND,
+    ACTIVE_VIEW_BORDER,
     STATUS_LEFT_MARGIN,
     STATUS_RIGHT_MARGIN,
     HistoryStatusControl,

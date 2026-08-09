@@ -8,17 +8,15 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QWidget
 
-from app.history_grid import (
-    HISTORY_GRID_DEFAULT_POSTERS_PER_ROW,
-    HISTORY_GRID_MAX_POSTERS_PER_ROW,
-    HISTORY_GRID_MIN_POSTERS_PER_ROW,
-)
-from app.history_page import (
+from app.history.constants import (
+    DEFAULT_HISTORY_POSTERS_PER_ROW,
     HISTORY_VIEW_GRID,
     HISTORY_VIEW_LIST,
-    HistoryPage,
+    MAX_HISTORY_POSTERS_PER_ROW,
+    MIN_HISTORY_POSTERS_PER_ROW,
 )
-from app.history_repository import (
+from app.history.page import HistoryPage
+from app.history.repository import (
     HISTORY_DEFAULT_FILTER_TEXT,
     HistoryEntry,
 )
@@ -97,15 +95,15 @@ class HistoryPageViewTests(unittest.TestCase):
             for index in range(180)
         ]
         self.connection_patch = patch(
-            "app.history_page.get_connection",
+            "app.history.page.get_connection",
             side_effect=lambda: FakeConnection(),
         )
         self.load_patch = patch(
-            "app.history_page.load_default_history_entries",
+            "app.history.page.load_default_history_entries",
             side_effect=lambda _conn: list(self.source_entries),
         )
         self.entry_widget_patch = patch(
-            "app.history_page.HistoryEntryWidget",
+            "app.history.page.HistoryEntryWidget",
             FakeHistoryEntryWidget,
         )
         self.connection_patch.start()
@@ -189,7 +187,7 @@ class HistoryPageViewTests(unittest.TestCase):
         self.assertEqual(self.page.view_mode, HISTORY_VIEW_LIST)
         self.assertEqual(
             self.page.posters_per_row,
-            HISTORY_GRID_DEFAULT_POSTERS_PER_ROW,
+            DEFAULT_HISTORY_POSTERS_PER_ROW,
         )
         self.assertEqual(self.page.posters_per_row, 18)
         self.assertIs(
@@ -207,14 +205,14 @@ class HistoryPageViewTests(unittest.TestCase):
         self.assertTrue(self.page.set_posters_per_row(2))
         self.assertEqual(
             self.page.posters_per_row,
-            HISTORY_GRID_MIN_POSTERS_PER_ROW,
+            MIN_HISTORY_POSTERS_PER_ROW,
         )
         self.assertEqual(state_spy.at(1), [HISTORY_VIEW_GRID, 6])
 
         self.assertTrue(self.page.set_posters_per_row(99))
         self.assertEqual(
             self.page.posters_per_row,
-            HISTORY_GRID_MAX_POSTERS_PER_ROW,
+            MAX_HISTORY_POSTERS_PER_ROW,
         )
         self.assertEqual(state_spy.at(2), [HISTORY_VIEW_GRID, 24])
         self.assertFalse(self.page.set_posters_per_row(24))

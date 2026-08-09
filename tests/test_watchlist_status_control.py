@@ -12,7 +12,8 @@ from PySide6.QtWidgets import (
     QStyleOptionToolButton,
 )
 
-from app.watchlist_status_control import (
+from app.page_status_bar import PageStatusBar, STATUS_BAR_HEIGHT
+from app.watchlist.status_control import (
     FILTERED_LABEL_MAX_TEXT,
     PINNED_BUTTON_MAX_TEXT,
     PINNED_CLEAR_BUTTON_SIZE,
@@ -23,11 +24,9 @@ from app.watchlist_status_control import (
     PINNED_PILL_INACTIVE_BACKGROUND,
     PINNED_PILL_RADIUS,
     PINNED_PILL_TEXT_COLOR,
-    STATUS_BAR_HEIGHT,
     STATUS_LEFT_MARGIN,
     STATUS_RIGHT_MARGIN,
     WatchlistStatusControl,
-    WatchlistStatusBar,
 )
 
 
@@ -154,8 +153,10 @@ class WatchlistStatusControlTests(unittest.TestCase):
                 )
 
     def test_status_bar_is_taller_than_its_reload_button(self):
-        status_bar = WatchlistStatusBar()
-        control = status_bar.watchlist_control
+        status_bar = PageStatusBar()
+        control = WatchlistStatusControl(status_bar)
+        status_bar.register_control("watchlist", control)
+        status_bar.set_active_control("watchlist")
         control.set_state(10, 2, False)
         status_bar.show()
         self.application.processEvents()

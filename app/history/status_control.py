@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import QSize, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -14,23 +12,20 @@ from PySide6.QtWidgets import (
 )
 
 from app.posters_per_row_control import PostersPerRowControl
+from .constants import (
+    ASSETS_DIRECTORY,
+    DEFAULT_HISTORY_POSTERS_PER_ROW,
+    HISTORY_VIEW_GRID,
+    HISTORY_VIEW_LIST,
+    MAX_HISTORY_POSTERS_PER_ROW,
+    MIN_HISTORY_POSTERS_PER_ROW,
+)
 
 
-ASSETS_DIRECTORY = Path(__file__).resolve().parent / "assets"
 STATUS_ICON_SIZE = 20
 STATUS_BUTTON_SIZE = 24
 STATUS_LEFT_MARGIN = 12
 STATUS_RIGHT_MARGIN = 12
-
-HISTORY_VIEW_LIST = "list"
-HISTORY_VIEW_GRID = "grid"
-LIST_VIEW = HISTORY_VIEW_LIST
-GRID_VIEW = HISTORY_VIEW_GRID
-DEFAULT_VIEW_MODE = HISTORY_VIEW_LIST
-
-MIN_HISTORY_POSTERS_PER_ROW = 6
-MAX_HISTORY_POSTERS_PER_ROW = 24
-DEFAULT_HISTORY_POSTERS_PER_ROW = 18
 
 ACTIVE_VIEW_BACKGROUND = "#8fc4ff"
 ACTIVE_VIEW_BORDER = "#4f93cc"
@@ -69,7 +64,7 @@ class HistoryStatusControl(QWidget):
         )
 
         self._watched_count = 0
-        self._view_mode = DEFAULT_VIEW_MODE
+        self._view_mode = HISTORY_VIEW_LIST
         self._posters_per_row = DEFAULT_HISTORY_POSTERS_PER_ROW
 
         self.count_label = QLabel(self)
@@ -135,10 +130,14 @@ class HistoryStatusControl(QWidget):
         layout.addWidget(self.grid_view_button)
 
         self.list_view_button.clicked.connect(
-            lambda _checked=False: self._request_view_mode(LIST_VIEW)
+            lambda _checked=False: self._request_view_mode(
+                HISTORY_VIEW_LIST
+            )
         )
         self.grid_view_button.clicked.connect(
-            lambda _checked=False: self._request_view_mode(GRID_VIEW)
+            lambda _checked=False: self._request_view_mode(
+                HISTORY_VIEW_GRID
+            )
         )
         self.poster_size_control.value_changed.connect(
             self._request_posters_per_row
@@ -159,7 +158,7 @@ class HistoryStatusControl(QWidget):
 
         self.set_state(
             watched_count=0,
-            view_mode=DEFAULT_VIEW_MODE,
+            view_mode=HISTORY_VIEW_LIST,
             posters_per_row=DEFAULT_HISTORY_POSTERS_PER_ROW,
         )
 
@@ -244,15 +243,15 @@ class HistoryStatusControl(QWidget):
 
     def _sync_view_buttons(self):
         self.list_view_button.setChecked(
-            self._view_mode == LIST_VIEW
+            self._view_mode == HISTORY_VIEW_LIST
         )
         self.grid_view_button.setChecked(
-            self._view_mode == GRID_VIEW
+            self._view_mode == HISTORY_VIEW_GRID
         )
 
     def _update_density_visibility(self):
         self.poster_size_control.setVisible(
-            self._view_mode == GRID_VIEW
+            self._view_mode == HISTORY_VIEW_GRID
         )
 
     def _make_view_button(
@@ -284,7 +283,10 @@ class HistoryStatusControl(QWidget):
     def _normalize_view_mode(view_mode):
         normalized_mode = str(view_mode).strip().lower()
 
-        if normalized_mode not in (LIST_VIEW, GRID_VIEW):
+        if normalized_mode not in (
+            HISTORY_VIEW_LIST,
+            HISTORY_VIEW_GRID,
+        ):
             raise ValueError(
                 f"Unsupported history view mode: {view_mode!r}"
             )

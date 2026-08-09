@@ -1,8 +1,8 @@
 import sqlite3
 import unittest
 
-from app import history_repository
 from app import media_repository
+from app.history import repository as history_repository
 from db.connection import apply_database_schema
 
 

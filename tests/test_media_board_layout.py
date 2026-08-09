@@ -11,8 +11,8 @@ from PySide6.QtGui import QImage, QWheelEvent
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app.media_board import BOARD_BOTTOM_MARGIN, MediaBoard
-from app.watchlist_page import WatchlistPage
+from app.watchlist.board import BOARD_BOTTOM_MARGIN, MediaBoard
+from app.watchlist.page import WatchlistPage
 
 
 def make_media(media_id):
@@ -495,7 +495,7 @@ class WatchlistScrollTests(unittest.TestCase):
     def setUp(self):
         self.filtered_media = FakeFilteredMedia(20)
         self.filtered_media_patch = patch(
-            "app.watchlist_page.FilteredMedia",
+            "app.watchlist.page.FilteredMedia",
             return_value=self.filtered_media,
         )
         self.filtered_media_patch.start()

@@ -1,0 +1,16 @@
+from pathlib import Path
+
+
+APP_DIR = Path(__file__).resolve().parents[1]
+PROJECT_DIR = APP_DIR.parent
+
+ASSETS_DIRECTORY = APP_DIR / "assets"
+POSTER_DIR = PROJECT_DIR / "data" / "media_posters"
+
+HISTORY_VIEW_LIST = "list"
+HISTORY_VIEW_GRID = "grid"
+HISTORY_VIEW_MODES = frozenset((HISTORY_VIEW_LIST, HISTORY_VIEW_GRID))
+
+MIN_HISTORY_POSTERS_PER_ROW = 6
+DEFAULT_HISTORY_POSTERS_PER_ROW = 18
+MAX_HISTORY_POSTERS_PER_ROW = 24

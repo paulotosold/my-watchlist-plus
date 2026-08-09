@@ -27,6 +27,12 @@ from PySide6.QtWidgets import (
 MEDIA_CARD_ICON_HEIGHT = 32
 MEDIA_CARD_BUTTON_MARGIN = 6
 
+APP_DIR = Path(__file__).resolve().parents[1]
+PROJECT_DIR = APP_DIR.parent
+ASSET_DIR = APP_DIR / "assets"
+MEDIA_CARD_ICON_DIR = ASSET_DIR / "media_card_icons"
+POSTER_DIR = PROJECT_DIR / "data" / "media_posters"
+
 
 @lru_cache(maxsize=None)
 def _icon_dimensions_for_height(icon_img_path, icon_height):
@@ -151,7 +157,7 @@ class MediaCard(QFrame):
         #)
 
         # layer 2 – decorative overlay displayed when pinned
-        self.pin_pixmap = QPixmap("app/assets/pinned_overlay.png")
+        self.pin_pixmap = QPixmap(str(ASSET_DIR / "pinned_overlay.png"))
         self.pin_layer = QLabel(self)
         self.pin_layer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.pin_layer.setScaledContents(False)
@@ -161,15 +167,15 @@ class MediaCard(QFrame):
         self.overlay_layer.hide()
 
         self.btn_info = self.make_button(
-            "app/assets/media_card_icons/info.png",
+            MEDIA_CARD_ICON_DIR / "info.png",
             self.overlay_layer,
         )
         self.btn_close = self.make_button(
-            "app/assets/media_card_icons/close.png",
+            MEDIA_CARD_ICON_DIR / "close.png",
             self.overlay_layer,
         )
         self.btn_pin = self.make_button(
-            "app/assets/media_card_icons/pin.png",
+            MEDIA_CARD_ICON_DIR / "pin.png",
             self.overlay_layer,
         )
 
@@ -194,7 +200,7 @@ class MediaCard(QFrame):
             )
         )
         btn.setFixedSize(icon_size)
-        btn.setIcon(QIcon(icon_img_path))
+        btn.setIcon(QIcon(str(icon_img_path)))
         btn.setIconSize(icon_size)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setStyleSheet("""
@@ -282,14 +288,18 @@ class MediaCard(QFrame):
 
     def update_pin_status(self):
         if self.is_pinned:
-            self.btn_pin.setIcon(QIcon("app/assets/media_card_icons/unpin.png"))
+            self.btn_pin.setIcon(
+                QIcon(str(MEDIA_CARD_ICON_DIR / "unpin.png"))
+            )
             if self.pin_pixmap.isNull():
                 self.pin_layer.clear()
                 return
             self._render_pin_overlay()
 
         else:
-            self.btn_pin.setIcon(QIcon("app/assets/media_card_icons/pin.png"))
+            self.btn_pin.setIcon(
+                QIcon(str(MEDIA_CARD_ICON_DIR / "pin.png"))
+            )
             self.pin_layer.clear()
 
     def request_details(self):
@@ -377,7 +387,7 @@ class MediaCard(QFrame):
         return get_media_key(self.current_media)
 
     def _poster_path(self, filename):
-        return Path("data/media_posters") / filename.lstrip("/")
+        return POSTER_DIR / filename.lstrip("/")
 
     def _render_poster(self):
         if self.poster_pixmap.isNull() or self.poster_layer.size().isEmpty():

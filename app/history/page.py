@@ -14,12 +14,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.history_entry_widget import HistoryEntryWidget
-from app.history_grid import (
-    HISTORY_GRID_DEFAULT_POSTERS_PER_ROW,
-    HistoryGridBoard,
+from .constants import (
+    DEFAULT_HISTORY_POSTERS_PER_ROW,
+    HISTORY_VIEW_GRID,
+    HISTORY_VIEW_LIST,
+    HISTORY_VIEW_MODES,
 )
-from app.history_repository import (
+from .entry_widget import HistoryEntryWidget
+from .grid import HistoryGridBoard
+from .repository import (
     HISTORY_DEFAULT_FILTER_TEXT,
     load_default_history_entries,
 )
@@ -33,9 +36,6 @@ from db.connection import get_connection
 
 
 HISTORY_BACKGROUND_COLOR = "#F1F1F1"
-HISTORY_VIEW_LIST = "list"
-HISTORY_VIEW_GRID = "grid"
-HISTORY_VIEW_MODES = frozenset((HISTORY_VIEW_LIST, HISTORY_VIEW_GRID))
 
 
 class HistoryPage(QWidget):
@@ -49,7 +49,7 @@ class HistoryPage(QWidget):
         self,
         parent=None,
         *,
-        posters_per_row=HISTORY_GRID_DEFAULT_POSTERS_PER_ROW,
+        posters_per_row=DEFAULT_HISTORY_POSTERS_PER_ROW,
     ):
         super().__init__(parent)
 
@@ -106,6 +106,9 @@ class HistoryPage(QWidget):
             return self.grid_scroll_area
 
         return self.scroll_area
+
+    def clear_find_media_query(self):
+        self.top_bar.find_media_input.clear()
 
     def _build_ui(self, posters_per_row):
         layout = QVBoxLayout(self)
@@ -299,8 +302,11 @@ class HistoryPage(QWidget):
         return True
 
     def eventFilter(self, watched, event):
+        grid_scroll_area = getattr(self, "grid_scroll_area", None)
+
         if (
-            watched is self.grid_scroll_area.viewport()
+            grid_scroll_area is not None
+            and watched is grid_scroll_area.viewport()
             and event.type() == QEvent.Type.Resize
         ):
             viewport_width = event.size().width()
@@ -321,7 +327,14 @@ class HistoryPage(QWidget):
                     else None
                 )
                 self._last_grid_viewport_width = viewport_width
-                self._grid_resize_timer.start(0)
+                grid_resize_timer = getattr(
+                    self,
+                    "_grid_resize_timer",
+                    None,
+                )
+
+                if grid_resize_timer is not None:
+                    grid_resize_timer.start(0)
 
         return super().eventFilter(watched, event)
 

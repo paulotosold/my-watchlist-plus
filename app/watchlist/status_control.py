@@ -2,30 +2,31 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QSizeGrip,
     QSizePolicy,
-    QStatusBar,
     QToolButton,
     QWidget,
 )
 
-from app.history_status_control import HistoryStatusControl
 from app.posters_per_row_control import (
     ICON_BUTTON_STYLE,
     PostersPerRowControl,
 )
+from .board import (
+    DEFAULT_POSTERS_PER_ROW,
+    MAX_POSTERS_PER_ROW,
+    MIN_POSTERS_PER_ROW,
+)
 
 
-ASSETS_DIRECTORY = Path(__file__).resolve().parent / "assets"
+ASSETS_DIRECTORY = Path(__file__).resolve().parents[1] / "assets"
 STATUS_ICON_SIZE = 20
 STATUS_BUTTON_SIZE = 24
-STATUS_BAR_HEIGHT = STATUS_BUTTON_SIZE + 5
 STATUS_LEFT_MARGIN = 12
 STATUS_RIGHT_MARGIN = 12
 FILTERED_LABEL_MAX_TEXT = "9999 filtered titles"
@@ -168,7 +169,12 @@ class WatchlistStatusControl(QWidget):
         self.pinned_layout.addWidget(self.pinned_button)
         self.pinned_layout.addWidget(self.clear_pins_button)
 
-        self.poster_size_control = PostersPerRowControl(self)
+        self.poster_size_control = PostersPerRowControl(
+            self,
+            value=DEFAULT_POSTERS_PER_ROW,
+            minimum=MIN_POSTERS_PER_ROW,
+            maximum=MAX_POSTERS_PER_ROW,
+        )
 
         # macOS gives tool buttons a smaller class font. Reapplying the
         # label's size marks it as explicit while retaining system styling.
@@ -347,74 +353,3 @@ class WatchlistStatusControl(QWidget):
         button.setAccessibleName(accessible_name)
         button.setToolTip(tooltip)
         return button
-
-
-class WatchlistStatusBar(QStatusBar):
-    """Full-width status host for the Watchlist and History pages."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.watchlist_control = WatchlistStatusControl(self)
-        self.history_control = HistoryStatusControl(self)
-        self.history_control.hide()
-        self._layout_timer = QTimer(self)
-        self._layout_timer.setSingleShot(True)
-        self._layout_timer.timeout.connect(
-            self._layout_page_controls
-        )
-        self.setFixedHeight(STATUS_BAR_HEIGHT)
-        self._layout_page_controls()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._layout_page_controls()
-        self._layout_timer.start(0)
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        self._layout_page_controls()
-        self._layout_timer.start(0)
-
-    def set_active_control(self, page_name):
-        is_watchlist = page_name == "watchlist"
-        is_history = page_name == "history"
-        self.watchlist_control.setVisible(is_watchlist)
-        self.history_control.setVisible(is_history)
-        self._layout_page_controls()
-
-    def _layout_watchlist_control(self):
-        """Compatibility alias for the former single-control host."""
-        self._layout_page_controls()
-
-    def _layout_page_controls(self):
-        available_width = self.width()
-        size_grip = self.findChild(QSizeGrip)
-
-        if size_grip is not None and size_grip.isVisible():
-            grip_width = size_grip.width()
-
-            if not 0 < grip_width < self.width():
-                grip_width = max(0, size_grip.sizeHint().width())
-
-            available_width = self.width() - grip_width
-
-        if available_width <= 0 and self.width() > 0:
-            available_width = self.width()
-
-        for control in (
-            self.watchlist_control,
-            self.history_control,
-        ):
-            control.setGeometry(
-                0,
-                0,
-                max(0, available_width),
-                self.height(),
-            )
-
-            if control.isVisible():
-                control.raise_()
-
-        if size_grip is not None:
-            size_grip.raise_()

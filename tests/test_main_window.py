@@ -10,58 +10,10 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QApplication, QLineEdit, QSizeGrip, QWidget
 
-from app.library_filter import DEFAULT_FILTER_TEXT
 from app.main_window import MainWindow
 
 
 class MainWindowInputTests(unittest.TestCase):
-    def test_exact_default_filter_replaces_and_refreshes_filtered_media(self):
-        replacement = object()
-        harness = SimpleNamespace(
-            filtered_media=object(),
-            refresh_media_view=Mock(),
-        )
-
-        with patch(
-            "app.main_window.FilteredMedia",
-            return_value=replacement,
-        ) as filtered_media_factory, patch("builtins.print") as print_mock:
-            MainWindow.on_filter_input(harness, DEFAULT_FILTER_TEXT)
-
-        filtered_media_factory.assert_called_once_with()
-        print_mock.assert_not_called()
-        self.assertIs(harness.filtered_media, replacement)
-        harness.refresh_media_view.assert_called_once_with()
-
-    def test_any_other_filter_text_is_only_printed(self):
-        for filter_text in (
-            "",
-            DEFAULT_FILTER_TEXT.lower(),
-            f" {DEFAULT_FILTER_TEXT}",
-            f"{DEFAULT_FILTER_TEXT} ",
-            "movies directed by Jane Campion",
-        ):
-            with self.subTest(filter_text=filter_text):
-                current_filtered_media = object()
-                harness = SimpleNamespace(
-                    filtered_media=current_filtered_media,
-                    refresh_media_view=Mock(),
-                )
-
-                with (
-                    patch("app.main_window.FilteredMedia") as factory,
-                    patch("builtins.print") as print_mock,
-                ):
-                    MainWindow.on_filter_input(harness, filter_text)
-
-                print_mock.assert_called_once_with(
-                    "Filter Library:",
-                    filter_text,
-                )
-                factory.assert_not_called()
-                self.assertIs(harness.filtered_media, current_filtered_media)
-                harness.refresh_media_view.assert_not_called()
-
     def test_find_media_refreshes_only_after_saved_or_deleted(self):
         for status, should_refresh in (
             ("saved", True),
@@ -69,11 +21,9 @@ class MainWindowInputTests(unittest.TestCase):
             ("cancelled", False),
         ):
             with self.subTest(status=status):
-                find_media_input = Mock()
+                clear_find_media_query = Mock()
                 source_page = SimpleNamespace(
-                    top_bar=SimpleNamespace(
-                        find_media_input=find_media_input,
-                    )
+                    clear_find_media_query=clear_find_media_query,
                 )
                 harness = SimpleNamespace(
                     _refresh_after_media_change=Mock(),
@@ -92,10 +42,10 @@ class MainWindowInputTests(unittest.TestCase):
                 handler.assert_called_once_with(harness, "tt1234567")
 
                 if should_refresh:
-                    find_media_input.clear.assert_called_once_with()
+                    clear_find_media_query.assert_called_once_with()
                     harness._refresh_after_media_change.assert_called_once_with()
                 else:
-                    find_media_input.clear.assert_not_called()
+                    clear_find_media_query.assert_not_called()
                     harness._refresh_after_media_change.assert_not_called()
 
 
@@ -128,6 +78,9 @@ class FakePage(QWidget):
     def invalidate(self):
         self.invalidate_count += 1
         self.is_invalidated = True
+
+    def clear_find_media_query(self):
+        self.top_bar.find_media_input.clear()
 
 
 class FakeWatchlistPage(FakePage):
@@ -217,6 +170,19 @@ class FakeHistoryPage(FakePage):
             self.posters_per_row,
         )
         return True
+
+
+class MinimalPage(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.ensure_count = 0
+        self.invalidate_count = 0
+
+    def ensure_loaded(self):
+        self.ensure_count += 1
+
+    def invalidate(self):
+        self.invalidate_count += 1
 
 
 class FakeConnection:
@@ -312,6 +278,17 @@ class MainWindowShellTests(unittest.TestCase):
         self.window.section_tabs.setCurrentIndex(0)
         self.window.section_tabs.setCurrentIndex(1)
         self.assertEqual(history_page.load_count, 1)
+
+    def test_page_without_media_capabilities_or_top_bar_can_be_registered(self):
+        page = MinimalPage(self.window)
+
+        self.window._register_page("Stats", page)
+        self.window.section_tabs.setCurrentIndex(2)
+
+        self.assertIs(self.window.active_page, page)
+        self.assertEqual(page.ensure_count, 1)
+        self.assertTrue(self.window.watchlist_status_control.isHidden())
+        self.assertTrue(self.window.history_status_control.isHidden())
 
     def test_window_starts_large_and_can_resize_down_to_its_minimum(self):
         self.assertEqual(self.window.size().toTuple(), (1440, 900))
@@ -555,15 +532,15 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.filtered_media = FakeWatchlistFilteredMedia()
         self.filtered_media_patch = patch(
-            "app.watchlist_page.FilteredMedia",
+            "app.watchlist.page.FilteredMedia",
             return_value=self.filtered_media,
         )
         self.history_connection_patch = patch(
-            "app.history_page.get_connection",
+            "app.history.page.get_connection",
             return_value=FakeConnection(),
         )
         self.history_entries_patch = patch(
-            "app.history_page.load_default_history_entries",
+            "app.history.page.load_default_history_entries",
             return_value=[],
         )
         self.filtered_media_patch.start()
@@ -585,19 +562,20 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
             self.application.processEvents()
 
     def test_status_control_reflows_the_real_board_and_survives_tabs(self):
-        original_cards = list(self.window.media_board.cards)
-        original_card_width = self.window.media_board.card_width
+        board = self.window.watchlist_page.media_board
+        original_cards = list(board.cards)
+        original_card_width = board.card_width
 
         self.window.posters_per_row_control.plus_button.click()
         self._process_events()
 
-        self.assertEqual(self.window.media_board.posters_per_row, 5)
+        self.assertEqual(board.posters_per_row, 5)
         self.assertGreater(
-            self.window.media_board.card_width,
+            board.card_width,
             original_card_width,
         )
-        self.assertEqual(self.window.media_board.cards, original_cards)
-        self.assertEqual(self.window.media_board.row_count, 2)
+        self.assertEqual(board.cards, original_cards)
+        self.assertEqual(board.row_count, 2)
         self.assertEqual(
             self.window.status_bar.currentMessage(),
             "",
@@ -620,10 +598,10 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
 
         self.assertFalse(self.window.posters_per_row_control.isHidden())
         self.assertEqual(self.window.posters_per_row_control.value(), 5)
-        self.assertEqual(self.window.media_board.posters_per_row, 5)
+        self.assertEqual(board.posters_per_row, 5)
 
     def test_status_scope_counts_and_clear_all_follow_the_real_board(self):
-        board = self.window.media_board
+        board = self.window.watchlist_page.media_board
         control = self.window.watchlist_status_control
         original_cards = list(board.cards)
 
@@ -672,7 +650,7 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         self.assertTrue(control.pinned_pill.isHidden())
 
     def test_reload_restores_closed_cards_and_forces_filtered_scope(self):
-        board = self.window.media_board
+        board = self.window.watchlist_page.media_board
         control = self.window.watchlist_status_control
         pinned_card = board.cards[3]
         pinned_card.on_pin_clicked()
@@ -717,7 +695,7 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
     def test_pinned_pill_is_inset_within_the_status_bar(self):
         status_bar = self.window.status_bar
         control = self.window.watchlist_status_control
-        self.window.media_board.cards[0].on_pin_clicked()
+        self.window.watchlist_page.media_board.cards[0].on_pin_clicked()
         self._process_events()
         pill = control.pinned_pill
         expected_margin = (
@@ -754,7 +732,7 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
                 size_grip.setGeometry(transient_x, 0, 17, 17)
                 size_grip.show()
 
-                status_bar._layout_watchlist_control()
+                status_bar._layout_controls()
 
                 self.assertEqual(
                     control.width(),

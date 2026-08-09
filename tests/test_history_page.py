@@ -11,9 +11,9 @@ from PySide6.QtGui import QImage
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app.history_entry_widget import HistoryEntryWidget, POSTER_WIDTH
-from app.history_page import HistoryPage
-from app.history_repository import (
+from app.history.entry_widget import HistoryEntryWidget, POSTER_WIDTH
+from app.history.page import HistoryPage
+from app.history.repository import (
     HISTORY_DEFAULT_FILTER_TEXT,
     HistoryEntry,
 )
@@ -88,11 +88,11 @@ class HistoryPageTests(unittest.TestCase):
             return connection
 
         self.connection_patch = patch(
-            "app.history_page.get_connection",
+            "app.history.page.get_connection",
             side_effect=get_connection,
         )
         self.load_patch = patch(
-            "app.history_page.load_default_history_entries",
+            "app.history.page.load_default_history_entries",
             side_effect=lambda _conn: list(self.entries),
         )
         self.connection_patch.start()
@@ -141,6 +141,15 @@ class HistoryPageTests(unittest.TestCase):
 
         self.page.ensure_loaded()
         self.assertEqual(self.load_mock.call_count, 2)
+
+    def test_clear_find_media_query_clears_only_its_input(self):
+        self.page.top_bar.filter_input.setText("keep filter")
+        self.page.top_bar.find_media_input.setText("tt1234567")
+
+        self.page.clear_find_media_query()
+
+        self.assertEqual(self.page.top_bar.find_media_input.text(), "")
+        self.assertEqual(self.page.top_bar.filter_input.text(), "keep filter")
 
     def test_default_filter_reloads_and_resets_scroll_but_other_text_only_prints(self):
         self.entries = [
@@ -219,7 +228,7 @@ class HistoryPageTests(unittest.TestCase):
         self.page.ensure_loaded()
 
         with patch(
-            "app.history_page.apply_media_state_patch"
+            "app.history.page.apply_media_state_patch"
         ) as apply_patch_mock:
             combo = self.page.entry_widgets[0].impression_combo
             combo.activated.emit(combo.currentIndex())
@@ -245,7 +254,7 @@ class HistoryPageTests(unittest.TestCase):
             }
 
         with patch(
-            "app.history_page.apply_media_state_patch",
+            "app.history.page.apply_media_state_patch",
             side_effect=persist,
         ) as apply_patch_mock:
             combo = first_widget.impression_combo
@@ -283,7 +292,7 @@ class HistoryPageTests(unittest.TestCase):
             }
 
         with patch(
-            "app.history_page.apply_media_state_patch",
+            "app.history.page.apply_media_state_patch",
             side_effect=persist,
         ) as apply_patch_mock:
             combo = first_widget.status_combo
@@ -307,10 +316,10 @@ class HistoryPageTests(unittest.TestCase):
 
         with (
             patch(
-                "app.history_page.apply_media_state_patch",
+                "app.history.page.apply_media_state_patch",
                 side_effect=RuntimeError("database is busy"),
             ),
-            patch("app.history_page.QMessageBox.warning") as warning,
+            patch("app.history.page.QMessageBox.warning") as warning,
         ):
             combo = first_widget.collection_combo
             combo.setCurrentIndex(combo.findData(True))
@@ -328,11 +337,11 @@ class HistoryPageTests(unittest.TestCase):
 
         with (
             patch(
-                "app.history_page.apply_media_state_patch",
+                "app.history.page.apply_media_state_patch",
                 side_effect=ConcurrentEditError("changed"),
             ),
             patch(
-                "app.history_page.get_media_state",
+                "app.history.page.get_media_state",
                 return_value={
                     "media_id": 10,
                     "watch_state": "watched",
@@ -340,7 +349,7 @@ class HistoryPageTests(unittest.TestCase):
                     "is_collection_pick": True,
                 },
             ) as reload_state,
-            patch("app.history_page.QMessageBox.warning") as warning,
+            patch("app.history.page.QMessageBox.warning") as warning,
         ):
             combo = first_widget.impression_combo
             combo.setCurrentIndex(combo.findData("very_good"))
@@ -390,7 +399,7 @@ class HistoryEntryWidgetTests(unittest.TestCase):
             )
 
             with patch(
-                "app.history_entry_widget.POSTER_DIR",
+                "app.history.entry_widget.POSTER_DIR",
                 Path(directory),
             ):
                 widget = HistoryEntryWidget(entry)

@@ -1,8 +1,8 @@
+from pathlib import Path
+
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QToolButton, QWidget
-
-from app.library_filter import DEFAULT_FILTER_TEXT
 
 BUTTON_STYLE = """
 QToolButton {
@@ -29,6 +29,7 @@ QLineEdit {
 FIND_MEDIA_INPUT_PLACEHOLDER = (
     "IMDb ID, title, or describe what you’re looking for"
 )
+ASSETS_DIRECTORY = Path(__file__).resolve().parent / "assets"
 
 
 class TopBar(QWidget):
@@ -40,7 +41,7 @@ class TopBar(QWidget):
         parent=None,
         *,
         filter_label_text="Filter Library:",
-        default_filter_text=DEFAULT_FILTER_TEXT,
+        default_filter_text="",
         find_media_label_text="Find Media:",
         find_media_placeholder=FIND_MEDIA_INPUT_PLACEHOLDER,
     ):
@@ -70,7 +71,9 @@ class TopBar(QWidget):
         self.filter_input.setStyleSheet(INPUT_BOX_STYLE)
 
         self.filter_button = QToolButton()
-        self.filter_button.setIcon(QIcon("app/assets/top_bar_filter.png"))
+        self.filter_button.setIcon(
+            QIcon(str(ASSETS_DIRECTORY / "top_bar_filter.png"))
+        )
         self.filter_button.setIconSize(QSize(icon_size, icon_size))
         self.filter_button.setCursor(Qt.PointingHandCursor)
         self.filter_button.setStyleSheet(BUTTON_STYLE)

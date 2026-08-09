@@ -11,7 +11,7 @@ from PySide6.QtGui import QImage, QImageReader
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app.media_card import (
+from app.watchlist.card import (
     MEDIA_CARD_BUTTON_MARGIN,
     MEDIA_CARD_ICON_HEIGHT,
     MediaCard,
@@ -193,7 +193,7 @@ class MediaCardResizingTests(unittest.TestCase):
                     "_poster_path",
                     return_value=poster_path,
                 ),
-                patch("app.media_card.random.randrange", return_value=0),
+                patch("app.watchlist.card.random.randrange", return_value=0),
             ):
                 self.card.init_card_session(
                     SimpleNamespace(media_list=[media_draft]),

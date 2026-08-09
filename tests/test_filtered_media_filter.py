@@ -2,11 +2,11 @@ import sqlite3
 import unittest
 from datetime import date
 
-from app.filtered_media import (
+from app.watchlist.filtering import (
+    DEFAULT_FILTER_INTENT,
     build_media_filter_query,
     get_media_rows_for_filter,
 )
-from app.library_filter import DEFAULT_FILTER_INTENT
 from db.connection import apply_database_schema
 
 

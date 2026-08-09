@@ -9,10 +9,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.filtered_media import FilteredMedia
-from app.library_filter import DEFAULT_FILTER_TEXT
-from app.media_board import DEFAULT_POSTERS_PER_ROW, MediaBoard
 from app.top_bar import TopBar
+
+from .board import DEFAULT_POSTERS_PER_ROW, MediaBoard
+from .filtering import DEFAULT_FILTER_TEXT, FilteredMedia
 
 
 WATCHLIST_BACKGROUND_COLOR = "#F1F1F1"
@@ -142,6 +142,9 @@ class WatchlistPage(QWidget):
 
     def invalidate(self):
         self._is_invalidated = True
+
+    def clear_find_media_query(self):
+        self.top_bar.find_media_input.clear()
 
     def set_posters_per_row(self, posters_per_row):
         anchor = self._capture_scroll_anchor()

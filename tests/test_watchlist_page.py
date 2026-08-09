@@ -8,9 +8,9 @@ from PySide6.QtCore import Signal
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QWidget
 
-from app.library_filter import DEFAULT_FILTER_TEXT
-from app.media_board import DEFAULT_POSTERS_PER_ROW
-from app.watchlist_page import WatchlistPage
+from app.watchlist.board import DEFAULT_POSTERS_PER_ROW
+from app.watchlist.filtering import DEFAULT_FILTER_TEXT
+from app.watchlist.page import WatchlistPage
 
 
 class FakeFilteredMedia:
@@ -151,11 +151,11 @@ class WatchlistPageTests(unittest.TestCase):
     def setUp(self):
         FakeFilteredMedia.instances = []
         self.filtered_media_patch = patch(
-            "app.watchlist_page.FilteredMedia",
+            "app.watchlist.page.FilteredMedia",
             FakeFilteredMedia,
         )
         self.media_board_patch = patch(
-            "app.watchlist_page.MediaBoard",
+            "app.watchlist.page.MediaBoard",
             FakeMediaBoard,
         )
         self.filtered_media_patch.start()
@@ -396,6 +396,13 @@ class WatchlistPageTests(unittest.TestCase):
 
         self.assertEqual(find_spy.at(0), ["tt1234567"])
         self.assertEqual(details_spy.at(0), [media_draft])
+
+    def test_find_media_query_can_be_cleared_through_the_page(self):
+        self.page.top_bar.find_media_input.setText("Arrival")
+
+        self.page.clear_find_media_query()
+
+        self.assertEqual(self.page.top_bar.find_media_input.text(), "")
 
 
 if __name__ == "__main__":

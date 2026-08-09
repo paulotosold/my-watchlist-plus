@@ -2,11 +2,25 @@ from copy import deepcopy
 from datetime import date
 import re
 
-from app.library_filter import DEFAULT_FILTER_INTENT
 from app.media_draft_builder import build_media_draft_from_db
 from app.watch_states import VALID_WATCH_STATES_BY_MEDIA_TYPE
 from db.connection import get_connection
 
+
+DEFAULT_FILTER_TEXT = "All released titles marked To Watch, in random order"
+
+DEFAULT_FILTER_INTENT = {
+    "watch_state": {
+        "include": ["to_watch"],
+    },
+    "release_date": {
+        "on_or_before": "today",
+        "exclude_null": True,
+    },
+    "order_by": [
+        {"field": "random"},
+    ],
+}
 
 ALLOWED_WATCH_STATES = frozenset().union(
     *VALID_WATCH_STATES_BY_MEDIA_TYPE.values()

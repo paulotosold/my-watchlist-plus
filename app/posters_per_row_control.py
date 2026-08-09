@@ -6,12 +6,6 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
 
-from app.media_board import (
-    DEFAULT_POSTERS_PER_ROW,
-    MAX_POSTERS_PER_ROW,
-    MIN_POSTERS_PER_ROW,
-)
-
 
 ASSETS_DIRECTORY = Path(__file__).resolve().parent / "assets"
 STATUS_ICON_SIZE = 20
@@ -39,9 +33,9 @@ class PostersPerRowControl(QWidget):
         self,
         parent=None,
         *,
-        value=DEFAULT_POSTERS_PER_ROW,
-        minimum=MIN_POSTERS_PER_ROW,
-        maximum=MAX_POSTERS_PER_ROW,
+        value,
+        minimum,
+        maximum,
     ):
         super().__init__(parent)
 

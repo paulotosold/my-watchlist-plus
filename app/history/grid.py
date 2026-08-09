@@ -13,26 +13,19 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.history_entry_widget import POSTER_DIR
+from .constants import (
+    DEFAULT_HISTORY_POSTERS_PER_ROW,
+    MAX_HISTORY_POSTERS_PER_ROW,
+    MIN_HISTORY_POSTERS_PER_ROW,
+    POSTER_DIR,
+)
 
-
-MIN_POSTERS_PER_ROW = 6
-DEFAULT_POSTERS_PER_ROW = 18
-MAX_POSTERS_PER_ROW = 24
 
 GRID_SPACING = 6
 GRID_TOP_MARGIN = 12
 GRID_BOTTOM_MARGIN = 12
 POSTER_ASPECT_WIDTH = 2
 POSTER_ASPECT_HEIGHT = 3
-
-# Explicit aliases keep imports unambiguous beside the Watchlist constants.
-HISTORY_GRID_MIN_POSTERS_PER_ROW = MIN_POSTERS_PER_ROW
-HISTORY_GRID_DEFAULT_POSTERS_PER_ROW = DEFAULT_POSTERS_PER_ROW
-HISTORY_GRID_MAX_POSTERS_PER_ROW = MAX_POSTERS_PER_ROW
-HISTORY_GRID_SPACING = GRID_SPACING
-HISTORY_GRID_TOP_MARGIN = GRID_TOP_MARGIN
-HISTORY_GRID_BOTTOM_MARGIN = GRID_BOTTOM_MARGIN
 
 
 class HistoryPosterTile(QLabel):
@@ -208,7 +201,7 @@ class HistoryGridBoard(QWidget):
 
     def __init__(
         self,
-        posters_per_row=DEFAULT_POSTERS_PER_ROW,
+        posters_per_row=DEFAULT_HISTORY_POSTERS_PER_ROW,
         parent=None,
     ):
         super().__init__(parent)
@@ -433,8 +426,8 @@ class HistoryGridBoard(QWidget):
     @staticmethod
     def _clamp_posters_per_row(posters_per_row):
         return max(
-            MIN_POSTERS_PER_ROW,
-            min(MAX_POSTERS_PER_ROW, int(posters_per_row)),
+            MIN_HISTORY_POSTERS_PER_ROW,
+            min(MAX_HISTORY_POSTERS_PER_ROW, int(posters_per_row)),
         )
 
 

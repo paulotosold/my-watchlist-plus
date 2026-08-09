@@ -7,7 +7,7 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication
 
-from app.media_board import (
+from app.watchlist.board import (
     DEFAULT_POSTERS_PER_ROW,
     MAX_POSTERS_PER_ROW,
     MIN_POSTERS_PER_ROW,
@@ -21,7 +21,11 @@ class PostersPerRowControlTests(unittest.TestCase):
         cls.application = QApplication.instance() or QApplication([])
 
     def setUp(self):
-        self.control = PostersPerRowControl()
+        self.control = PostersPerRowControl(
+            value=DEFAULT_POSTERS_PER_ROW,
+            minimum=MIN_POSTERS_PER_ROW,
+            maximum=MAX_POSTERS_PER_ROW,
+        )
         self.control.show()
         self.application.processEvents()
 

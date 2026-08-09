@@ -7,8 +7,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QToolButton
 
-from app.library_filter import DEFAULT_FILTER_TEXT
 from app.top_bar import TopBar
+from app.watchlist.filtering import DEFAULT_FILTER_TEXT
 
 
 class TopBarTests(unittest.TestCase):
@@ -17,7 +17,7 @@ class TopBarTests(unittest.TestCase):
         cls.application = QApplication.instance() or QApplication([])
 
     def setUp(self):
-        self.top_bar = TopBar()
+        self.top_bar = TopBar(default_filter_text=DEFAULT_FILTER_TEXT)
         self.top_bar.show()
         self.application.processEvents()
 
