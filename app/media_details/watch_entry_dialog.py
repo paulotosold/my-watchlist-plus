@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.calendar_picker import CleanCalendarPopup
+from .calendar_picker import CleanCalendarPopup
 from .constants import (
     DETAIL_BUTTON_WIDTH,
     DETAILS_BACKGROUND_COLOR,

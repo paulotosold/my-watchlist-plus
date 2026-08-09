@@ -7,7 +7,7 @@ from PySide6.QtCore import QDate
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QDialog, QToolButton
 
-from app.calendar_picker import CleanCalendarPopup
+from app.media_details.calendar_picker import CleanCalendarPopup
 
 
 class CleanCalendarPopupTests(unittest.TestCase):
