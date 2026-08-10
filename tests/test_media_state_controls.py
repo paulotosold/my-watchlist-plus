@@ -7,12 +7,13 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app import media_details
-from app.media_state_controls import (
+from app.paths import ASSETS_DIR
+from app.ui.clickable_entry_label import ClickableEntryLabel
+from app.ui.media_state_controls import (
     COLLECTION_PICK_OPTIONS,
     IMPRESSION_OPTIONS,
+    MEDIA_STATE_COMBO_STYLE,
     STATUS_OPTIONS_BY_MEDIA_TYPE,
-    ClickableEntryLabel,
     DownwardComboBox,
     populate_combo,
     populate_status_combo,
@@ -45,19 +46,16 @@ class MediaStateControlsTests(unittest.TestCase):
             ),
         )
 
-    def test_media_details_package_reexports_shared_controls(self):
-        self.assertIs(
-            media_details.ClickableEntryLabel,
-            ClickableEntryLabel,
+    def test_combo_style_uses_cwd_independent_dropdown_path(self):
+        dropdown_path = ASSETS_DIR / "dropdown_arrow.svg"
+
+        self.assertTrue(dropdown_path.is_absolute())
+        self.assertTrue(dropdown_path.is_file())
+        self.assertIn(
+            f'image: url("{dropdown_path.as_posix()}")',
+            MEDIA_STATE_COMBO_STYLE,
         )
-        self.assertIs(
-            media_details.IMPRESSION_OPTIONS,
-            IMPRESSION_OPTIONS,
-        )
-        self.assertIs(
-            media_details.COLLECTION_PICK_OPTIONS,
-            COLLECTION_PICK_OPTIONS,
-        )
+        self.assertNotIn("url(app/assets/", MEDIA_STATE_COMBO_STYLE)
 
     def test_populate_combo_selects_value_without_emitting_change(self):
         combo = DownwardComboBox()

@@ -3,7 +3,7 @@ import sqlite3
 import unittest
 
 import app.media_repository as media_repository
-from app.media_notes import (
+from app.media_user_data.notes import (
     EMPTY_NOTE_ERROR,
     apply_note_result,
     normalize_note_text,

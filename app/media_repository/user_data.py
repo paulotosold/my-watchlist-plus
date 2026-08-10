@@ -2,13 +2,13 @@
 
 import sqlite3
 
-from app.media_lists import (
+from app.media_user_data.lists import (
     DUPLICATE_LIST_NAME_ERROR,
     normalize_list_description,
     validate_list_name,
 )
-from app.media_notes import validate_note_text
-from app.watch_states import validate_watch_state
+from app.media_user_data.notes import validate_note_text
+from app.media_user_data.watch_states import validate_watch_state
 
 from .errors import ConcurrentEditError
 from .queries import _get_db_media_id

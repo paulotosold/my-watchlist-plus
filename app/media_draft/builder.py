@@ -2,7 +2,7 @@
 
 import app.media_repository as media_repo
 import app.tmdb as tmdb
-from app.media_freshness import current_freshness_timestamp
+from app.tmdb import current_freshness_timestamp
 
 
 def build_media_draft_from_db(conn, media_from_db):

@@ -10,14 +10,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.media_state_controls import (
+from app.ui.clickable_entry_label import ClickableEntryLabel
+from app.ui.media_state_controls import (
     COLLECTION_PICK_OPTIONS,
     IMPRESSION_OPTIONS,
     MEDIA_STATE_COMBO_MIN_HEIGHT,
     MEDIA_STATE_COMBO_STYLE,
     MEDIA_STATE_FIELD_SPACING,
     MEDIA_STATE_FIELD_WIDTH,
-    ClickableEntryLabel,
     ComboPopupItemDelegate,
     ComboPopupView,
     DownwardComboBox,

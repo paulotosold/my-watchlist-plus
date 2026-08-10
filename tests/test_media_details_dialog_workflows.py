@@ -11,8 +11,8 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QToolButton
 
 from app.media_details.dialog import MediaDetailsDialog
-from app.top_bar import FIND_MEDIA_INPUT_PLACEHOLDER, INPUT_BOX_STYLE
-from app.watch_history_editor import get_series_episodes
+from app.media_user_data.watch_history import get_series_episodes
+from app.ui.top_bar import FIND_MEDIA_INPUT_PLACEHOLDER, INPUT_BOX_STYLE
 
 
 class FakeRefreshManager(QObject):

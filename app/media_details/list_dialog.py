@@ -18,7 +18,7 @@ from .constants import (
     DETAIL_BUTTON_WIDTH,
     DETAILS_BACKGROUND_COLOR,
 )
-from app.media_lists import (
+from app.media_user_data.lists import (
     DUPLICATE_LIST_NAME_ERROR,
     EMPTY_LIST_NAME_ERROR,
     is_duplicate_list_name,

@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.top_bar import TopBar
+from app.ui.top_bar import TopBar
 
 from .board import DEFAULT_POSTERS_PER_ROW, MediaBoard
 from .filtering import DEFAULT_FILTER_TEXT, FilteredMedia

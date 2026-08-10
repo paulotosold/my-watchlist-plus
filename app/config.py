@@ -1,10 +1,11 @@
 import os
-from pathlib import Path
 import tomllib
 
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parents[1]
+from app.paths import PROJECT_ROOT
+
+BASE_DIR = PROJECT_ROOT
 ENV_PATH = BASE_DIR / ".env"
 SETTINGS_PATH = BASE_DIR / "settings.toml"
 

@@ -1,3 +1,5 @@
+"""Status-bar host for controls owned by individual pages."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QTimer

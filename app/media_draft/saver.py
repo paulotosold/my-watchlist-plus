@@ -1,9 +1,9 @@
 """Persist media drafts and materialize their related catalog context."""
 
-from app.media_freshness import current_freshness_timestamp
 import app.media_repository as media_repository
 import app.tmdb as tmdb
 from app.config import TMDB_MAX_POSTERS_PER_MEDIA, TMDB_POSTER_SIZE
+from app.tmdb import current_freshness_timestamp
 
 from . import builder, poster_storage
 

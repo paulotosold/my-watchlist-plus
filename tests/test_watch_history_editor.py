@@ -1,12 +1,14 @@
 import unittest
 from datetime import date
 
-from app.media_details_formatters import build_watch_history_display_entries
-from app.watch_history_editor import (
+from app.media_user_data.watch_history import (
     apply_watch_entry_result,
     is_episode_available,
     validate_watch_dates,
     watched_episode_keys,
+)
+from app.media_user_data.watch_history_formatters import (
+    build_watch_history_display_entries,
 )
 
 

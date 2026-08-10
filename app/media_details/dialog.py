@@ -23,9 +23,9 @@ from PySide6.QtWidgets import (
 )
 
 import app.media_draft.saver as draft_saver
-from app.media_freshness import current_freshness_timestamp
 import app.media_repository as media_repo
 import app.tmdb as tmdb
+from app.tmdb import current_freshness_timestamp
 from .constants import (
     DETAIL_BUTTON_WIDTH,
     DETAIL_ICON_BUTTON_SIZE,
@@ -47,25 +47,31 @@ from app.media_draft import (
     merge_metadata_refresh,
 )
 from app.metadata_refresh import get_metadata_refresh_manager
-from app.media_details_formatters import (
+from .formatters import (
     WATCH_PROVIDER_GROUPS,
     build_metadata_display_rows,
     build_tmdb_match_from_metadata,
-    build_watch_history_display_entries,
     format_watch_provider_checked_at,
     get_poster_curation_status,
     group_watch_providers,
 )
 from app.find_media import resolve_media_draft_from_query
-from app.media_notes import apply_note_result
-from app.media_state_controls import (
+from app.media_user_data.notes import apply_note_result
+from app.media_user_data.watch_history import (
+    apply_watch_entry_result,
+    make_draft_id,
+)
+from app.media_user_data.watch_history_formatters import (
+    build_watch_history_display_entries,
+)
+from app.ui.clickable_entry_label import ClickableEntryLabel
+from app.ui.media_state_controls import (
     COLLECTION_PICK_OPTIONS,
     IMPRESSION_OPTIONS,
     MEDIA_STATE_COMBO_MIN_HEIGHT,
     MEDIA_STATE_COMBO_STYLE,
     MEDIA_STATE_FIELD_SPACING,
     MEDIA_STATE_FIELD_WIDTH,
-    ClickableEntryLabel,
     ComboPopupItemDelegate,
     ComboPopupView,
     DownwardComboBox,
@@ -73,11 +79,7 @@ from app.media_state_controls import (
     populate_status_combo,
     set_combo_value,
 )
-from app.top_bar import FIND_MEDIA_INPUT_PLACEHOLDER, INPUT_BOX_STYLE
-from app.watch_history_editor import (
-    apply_watch_entry_result,
-    make_draft_id,
-)
+from app.ui.top_bar import FIND_MEDIA_INPUT_PLACEHOLDER, INPUT_BOX_STYLE
 from db.connection import get_connection
 
 

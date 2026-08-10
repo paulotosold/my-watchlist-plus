@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.media_details.watch_entry_dialog import WatchEntryDetailsDialog
-from app.watch_history_editor import apply_watch_entry_result
+from app.media_user_data.watch_history import apply_watch_entry_result
 
 
 class WatchEntryDetailsDialogTests(unittest.TestCase):

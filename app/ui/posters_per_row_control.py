@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
 
+from app.paths import ASSETS_DIR
 
-ASSETS_DIRECTORY = Path(__file__).resolve().parent / "assets"
 STATUS_ICON_SIZE = 20
 STATUS_BUTTON_SIZE = 24
 ICON_BUTTON_STYLE = """
@@ -129,7 +127,7 @@ class PostersPerRowControl(QWidget):
         button = QToolButton(self)
         button.setObjectName(object_name)
         button.setIcon(
-            QIcon(str(ASSETS_DIRECTORY / icon_filename))
+            QIcon(str(ASSETS_DIR / icon_filename))
         )
         button.setIconSize(
             QSize(STATUS_ICON_SIZE, STATUS_ICON_SIZE)

@@ -12,7 +12,7 @@ from app.watchlist.board import (
     MAX_POSTERS_PER_ROW,
     MIN_POSTERS_PER_ROW,
 )
-from app.posters_per_row_control import PostersPerRowControl
+from app.ui.posters_per_row_control import PostersPerRowControl
 
 
 class PostersPerRowControlTests(unittest.TestCase):

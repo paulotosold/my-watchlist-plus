@@ -14,7 +14,7 @@ from app.media_details.dialog import (
     MediaDetailsDialog,
 )
 from app.media_details.note_dialog import NotePreviewLabel
-from app.media_state_controls import ClickableEntryLabel
+from app.ui.clickable_entry_label import ClickableEntryLabel
 
 
 class FakeRefreshManager(QObject):

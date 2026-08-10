@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -13,7 +11,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.posters_per_row_control import (
+from app.paths import ASSETS_DIR
+from app.ui.posters_per_row_control import (
     ICON_BUTTON_STYLE,
     PostersPerRowControl,
 )
@@ -24,7 +23,6 @@ from .board import (
 )
 
 
-ASSETS_DIRECTORY = Path(__file__).resolve().parents[1] / "assets"
 STATUS_ICON_SIZE = 20
 STATUS_BUTTON_SIZE = 24
 STATUS_LEFT_MARGIN = 12
@@ -140,7 +138,7 @@ class WatchlistStatusControl(QWidget):
         self.clear_pins_button = QToolButton(self.pinned_pill)
         self.clear_pins_button.setObjectName("clearPinnedButton")
         self.clear_pins_button.setIcon(
-            QIcon(str(ASSETS_DIRECTORY / "status_bar_close.png"))
+            QIcon(str(ASSETS_DIR / "status_bar_close.png"))
         )
         self.clear_pins_button.setIconSize(
             QSize(
@@ -341,7 +339,7 @@ class WatchlistStatusControl(QWidget):
         button = QToolButton(self)
         button.setObjectName(object_name)
         button.setIcon(
-            QIcon(str(ASSETS_DIRECTORY / icon_filename))
+            QIcon(str(ASSETS_DIR / icon_filename))
         )
         button.setIconSize(
             QSize(STATUS_ICON_SIZE, STATUS_ICON_SIZE)

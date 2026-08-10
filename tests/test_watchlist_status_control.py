@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QStyleOptionToolButton,
 )
 
-from app.page_status_bar import PageStatusBar, STATUS_BAR_HEIGHT
+from app.ui.page_status_bar import PageStatusBar, STATUS_BAR_HEIGHT
 from app.watchlist.status_control import (
     FILTERED_LABEL_MAX_TEXT,
     PINNED_BUTTON_MAX_TEXT,

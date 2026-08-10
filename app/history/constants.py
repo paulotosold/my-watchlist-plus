@@ -1,11 +1,8 @@
-from pathlib import Path
+from app.paths import ASSETS_DIR, MEDIA_POSTERS_DIR
 
 
-APP_DIR = Path(__file__).resolve().parents[1]
-PROJECT_DIR = APP_DIR.parent
-
-ASSETS_DIRECTORY = APP_DIR / "assets"
-POSTER_DIR = PROJECT_DIR / "data" / "media_posters"
+ASSETS_DIRECTORY = ASSETS_DIR
+POSTER_DIR = MEDIA_POSTERS_DIR
 
 HISTORY_VIEW_LIST = "list"
 HISTORY_VIEW_GRID = "grid"

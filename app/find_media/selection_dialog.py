@@ -25,12 +25,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.media_state_controls import ClickableEntryLabel
+from app.paths import MEDIA_POSTERS_DIR
 from app.tmdb import build_tmdb_image_url
-from app.top_bar import INPUT_BOX_STYLE
+from app.ui.clickable_entry_label import ClickableEntryLabel
+from app.ui.top_bar import INPUT_BOX_STYLE
 
 
-POSTER_DIR = Path(__file__).resolve().parents[2] / "data" / "media_posters"
+POSTER_DIR = MEDIA_POSTERS_DIR
 POSTER_WIDTH = 100
 POSTER_HEIGHT = 150
 MATCH_SELECTION_WIDTH = 900

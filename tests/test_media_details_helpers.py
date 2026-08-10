@@ -4,18 +4,20 @@ from datetime import date, datetime
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
-from app.media_details_formatters import (
+from app.media_details.formatters import (
     build_metadata_display_rows,
-    build_series_watch_history_lines,
-    build_watch_history_display_entries,
     format_code_or_name_list,
-    format_date_range,
     format_metadata_date,
     format_people_with_jobs,
     format_runtime_minutes,
     format_watch_provider_checked_at,
-    format_watch_history_entry,
     group_watch_providers,
+)
+from app.media_user_data.watch_history_formatters import (
+    build_series_watch_history_lines,
+    build_watch_history_display_entries,
+    format_date_range,
+    format_watch_history_entry,
 )
 
 

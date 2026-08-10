@@ -1,7 +1,7 @@
 import sqlite3
 import unittest
 
-from app.watch_states import (
+from app.media_user_data.watch_states import (
     VALID_WATCH_STATES_BY_MEDIA_TYPE,
     validate_watch_state,
 )

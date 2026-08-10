@@ -20,7 +20,7 @@ from app.media_details.dialog import (
     LIST_CHECKBOX_TO_TEXT_SPACING,
     MediaDetailsDialog,
 )
-from app.media_state_controls import ClickableEntryLabel
+from app.ui.clickable_entry_label import ClickableEntryLabel
 from db.connection import apply_database_schema
 
 

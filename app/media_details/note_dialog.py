@@ -15,12 +15,12 @@ from .constants import (
     DETAIL_BUTTON_WIDTH,
     DETAILS_BACKGROUND_COLOR,
 )
-from app.media_notes import (
+from app.media_user_data.notes import (
     EMPTY_NOTE_ERROR,
     normalize_note_text,
     validate_note_text,
 )
-from app.media_state_controls import ClickableEntryLabel
+from app.ui.clickable_entry_label import ClickableEntryLabel
 
 
 NOTE_DETAILS_INPUT_WIDTH = 500

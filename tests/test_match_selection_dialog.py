@@ -22,8 +22,8 @@ from PySide6.QtWidgets import (
 
 import app.find_media.selection_dialog as match_selection_dialog
 from app.find_media.selection_dialog import MatchSelectionDialog, TmdbPosterLoader
-from app.media_state_controls import ClickableEntryLabel
-from app.top_bar import INPUT_BOX_STYLE, TopBar
+from app.ui.clickable_entry_label import ClickableEntryLabel
+from app.ui.top_bar import INPUT_BOX_STYLE, TopBar
 
 
 class FakePosterLoader(QObject):

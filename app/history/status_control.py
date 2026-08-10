@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.posters_per_row_control import PostersPerRowControl
+from app.ui.posters_per_row_control import PostersPerRowControl
 from .constants import (
     ASSETS_DIRECTORY,
     DEFAULT_HISTORY_POSTERS_PER_ROW,

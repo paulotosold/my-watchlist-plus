@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication, QToolButton
 
-from app.top_bar import TopBar
+from app.ui.top_bar import TopBar
 from app.watchlist.filtering import DEFAULT_FILTER_TEXT
 
 

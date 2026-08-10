@@ -4,8 +4,8 @@ from concurrent.futures import CancelledError
 
 import requests
 
-from app.media_freshness import current_freshness_timestamp
 from .client import get_default_client
+from .freshness import current_freshness_timestamp
 from .metadata import (
     _format_series_episode_seed_metadata,
     _format_tmdb_episode_metadata,

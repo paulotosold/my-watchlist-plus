@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.media_details_formatters import (
+from app.media_user_data.watch_history_formatters import (
     earliest_created_at,
     format_episode_ranges,
     format_watch_history_entry,

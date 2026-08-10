@@ -4,11 +4,12 @@ from pathlib import Path
 
 import requests
 
-from app.config import BASE_DIR, TMDB_MAX_POSTERS_PER_MEDIA, TMDB_POSTER_SIZE
+from app.config import TMDB_MAX_POSTERS_PER_MEDIA, TMDB_POSTER_SIZE
+from app.paths import MEDIA_POSTERS_DIR
 import app.tmdb as tmdb
 
 
-DEFAULT_POSTER_DIR = BASE_DIR / "data" / "media_posters"
+DEFAULT_POSTER_DIR = MEDIA_POSTERS_DIR
 
 
 def limit_draft_posters(

@@ -1,6 +1,5 @@
 from copy import deepcopy
 from functools import lru_cache
-from pathlib import Path
 import random
 
 from PIL import Image
@@ -23,15 +22,14 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
 )
 
+from app.paths import ASSETS_DIR, MEDIA_POSTERS_DIR
+
 
 MEDIA_CARD_ICON_HEIGHT = 32
 MEDIA_CARD_BUTTON_MARGIN = 6
 
-APP_DIR = Path(__file__).resolve().parents[1]
-PROJECT_DIR = APP_DIR.parent
-ASSET_DIR = APP_DIR / "assets"
-MEDIA_CARD_ICON_DIR = ASSET_DIR / "media_card_icons"
-POSTER_DIR = PROJECT_DIR / "data" / "media_posters"
+MEDIA_CARD_ICON_DIR = ASSETS_DIR / "media_card_icons"
+POSTER_DIR = MEDIA_POSTERS_DIR
 
 
 @lru_cache(maxsize=None)
@@ -157,7 +155,7 @@ class MediaCard(QFrame):
         #)
 
         # layer 2 – decorative overlay displayed when pinned
-        self.pin_pixmap = QPixmap(str(ASSET_DIR / "pinned_overlay.png"))
+        self.pin_pixmap = QPixmap(str(ASSETS_DIR / "pinned_overlay.png"))
         self.pin_layer = QLabel(self)
         self.pin_layer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.pin_layer.setScaledContents(False)

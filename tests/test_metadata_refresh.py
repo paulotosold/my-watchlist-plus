@@ -14,6 +14,7 @@ from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
 import app.metadata_refresh as metadata_refresh
+import app.metadata_refresh.worker as metadata_refresh_worker
 
 
 SNAPSHOT = {
@@ -87,15 +88,15 @@ class MetadataRefreshManagerTests(unittest.TestCase):
             return {"created": 2, "row": None}
 
         with patch.object(
-            metadata_refresh.tmdb,
+            metadata_refresh_worker.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             side_effect=fetch,
         ), patch.object(
-            metadata_refresh,
+            metadata_refresh_worker,
             "get_connection",
             side_effect=lambda: events.append("connect") or conn,
         ), patch.object(
-            metadata_refresh.media_repository,
+            metadata_refresh_worker.media_repository,
             "apply_metadata_refresh",
             side_effect=apply_refresh,
         ):
@@ -129,15 +130,15 @@ class MetadataRefreshManagerTests(unittest.TestCase):
         apply_refresh = Mock()
 
         with patch.object(
-            metadata_refresh.tmdb,
+            metadata_refresh_worker.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             return_value=deepcopy(SNAPSHOT),
         ), patch.object(
-            metadata_refresh,
+            metadata_refresh_worker,
             "get_connection",
             connection,
         ), patch.object(
-            metadata_refresh.media_repository,
+            metadata_refresh_worker.media_repository,
             "apply_metadata_refresh",
             apply_refresh,
         ):
@@ -166,7 +167,7 @@ class MetadataRefreshManagerTests(unittest.TestCase):
             return deepcopy(SNAPSHOT)
 
         with patch.object(
-            metadata_refresh.tmdb,
+            metadata_refresh_worker.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             side_effect=fetch,
         ):
@@ -204,11 +205,11 @@ class MetadataRefreshManagerTests(unittest.TestCase):
             raise CancelledError()
 
         with patch.object(
-            metadata_refresh.tmdb,
+            metadata_refresh_worker.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             side_effect=fetch,
         ), patch.object(
-            metadata_refresh,
+            metadata_refresh_worker,
             "get_connection",
             connection,
         ):
@@ -240,15 +241,15 @@ class MetadataRefreshManagerTests(unittest.TestCase):
             return {"updated": 1}
 
         with patch.object(
-            metadata_refresh.tmdb,
+            metadata_refresh_worker.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             return_value=deepcopy(SNAPSHOT),
         ), patch.object(
-            metadata_refresh,
+            metadata_refresh_worker,
             "get_connection",
             return_value=conn,
         ), patch.object(
-            metadata_refresh.media_repository,
+            metadata_refresh_worker.media_repository,
             "apply_metadata_refresh",
             side_effect=apply_refresh,
         ):
@@ -271,15 +272,15 @@ class MetadataRefreshManagerTests(unittest.TestCase):
         failed_spy = QSignalSpy(self.manager.failed)
 
         with patch.object(
-            metadata_refresh.tmdb,
+            metadata_refresh_worker.tmdb,
             "get_tmdb_metadata_refresh_snapshot",
             return_value=deepcopy(SNAPSHOT),
         ), patch.object(
-            metadata_refresh,
+            metadata_refresh_worker,
             "get_connection",
             return_value=conn,
         ), patch.object(
-            metadata_refresh.media_repository,
+            metadata_refresh_worker.media_repository,
             "apply_metadata_refresh",
             side_effect=ValueError("identity conflict"),
         ):

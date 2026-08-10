@@ -31,7 +31,7 @@ from app.media_repository import (
     apply_media_state_patch,
     get_media_state,
 )
-from app.top_bar import TopBar
+from app.ui.top_bar import TopBar
 from db.connection import get_connection
 
 

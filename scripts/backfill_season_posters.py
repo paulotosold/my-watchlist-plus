@@ -9,9 +9,9 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 import app.media_draft.poster_storage as poster_storage
-from app.media_freshness import current_freshness_timestamp
 import app.media_repository as media_repository
 import app.tmdb as tmdb
+from app.tmdb import current_freshness_timestamp
 from db.connection import get_connection
 
 

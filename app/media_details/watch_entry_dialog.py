@@ -21,13 +21,6 @@ from .constants import (
     DETAIL_BUTTON_WIDTH,
     DETAILS_BACKGROUND_COLOR,
     DETAIL_ICON_DIR,
-)
-from app.media_details_formatters import (
-    format_episode_ranges,
-    format_watch_history_entry,
-)
-from app.media_state_controls import ClickableEntryLabel
-from app.watch_history_editor import (
     WATCH_ENTRY_DATE_INPUT_WIDTH,
     WATCH_ENTRY_EPISODE_BUTTON_BORDER_RADIUS,
     WATCH_ENTRY_EPISODE_BUTTON_FONT_SIZE,
@@ -40,12 +33,19 @@ from app.watch_history_editor import (
     WATCH_ENTRY_HEADER_TO_BUTTONS_SPACING,
     WATCH_ENTRY_HEADER_TO_EPISODES_SPACING,
     WATCH_ENTRY_SEASON_ROW_SPACING,
+)
+from app.media_user_data.watch_history import (
     episode_key,
     get_series_episodes,
     is_episode_available,
     validate_watch_dates,
     watched_episode_keys,
 )
+from app.media_user_data.watch_history_formatters import (
+    format_episode_ranges,
+    format_watch_history_entry,
+)
+from app.ui.clickable_entry_label import ClickableEntryLabel
 
 
 WATCH_ENTRY_DIALOG_DEFAULT_WIDTH = 960

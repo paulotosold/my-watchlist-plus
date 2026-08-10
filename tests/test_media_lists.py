@@ -2,7 +2,7 @@ import sqlite3
 import unittest
 
 import app.media_repository as media_repository
-from app.media_lists import (
+from app.media_user_data.lists import (
     DUPLICATE_LIST_NAME_ERROR,
     EMPTY_LIST_NAME_ERROR,
     is_duplicate_list_name,
