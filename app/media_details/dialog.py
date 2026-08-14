@@ -47,6 +47,7 @@ from app.media_draft import (
     merge_metadata_refresh,
 )
 from app.metadata_refresh import get_metadata_refresh_manager
+from app.watch_provider_refresh import get_watch_provider_refresh_manager
 from .formatters import (
     WATCH_PROVIDER_GROUPS,
     build_metadata_display_rows,
@@ -97,10 +98,8 @@ def open_media_details_dialog(parent, media_draft, media_query=None):
         media_query=media_query,
     )
 
-    if dialog.exec() == QDialog.Accepted:
-        return dialog.result_payload
-
-    return {"status": "cancelled"}
+    dialog.exec()
+    return dialog.result_payload
 
 
 class MediaDetailsDialog(QDialog):
@@ -110,6 +109,8 @@ class MediaDetailsDialog(QDialog):
         media_draft,
         media_query=None,
         metadata_refresh_manager=None,
+        watch_provider_refresh_manager=None,
+        auto_refresh_watch_providers=True,
     ):
         super().__init__(parent)
 
@@ -122,6 +123,11 @@ class MediaDetailsDialog(QDialog):
         self._baseline_media_draft = deepcopy(media_draft)
         self._metadata_refresh_job_id = None
         self._metadata_refresh_in_progress = False
+        self._watch_provider_refresh_job_id = None
+        self._watch_provider_refresh_target_media_id = None
+        self._watch_provider_refresh_in_progress = False
+        self._auto_refresh_watch_providers = auto_refresh_watch_providers
+        self._auto_refreshed_watch_provider_media_ids = set()
         self._is_closing = False
         self._watch_entry_dialog_active = False
         self._status_change_generation = 0
@@ -144,6 +150,22 @@ class MediaDetailsDialog(QDialog):
         )
         self.metadata_refresh_manager.finished.connect(
             self._on_metadata_refresh_finished
+        )
+        self.watch_provider_refresh_manager = (
+            watch_provider_refresh_manager
+            or get_watch_provider_refresh_manager()
+        )
+        self.watch_provider_refresh_manager.succeeded.connect(
+            self._on_watch_provider_refresh_succeeded
+        )
+        self.watch_provider_refresh_manager.failed.connect(
+            self._on_watch_provider_refresh_failed
+        )
+        self.watch_provider_refresh_manager.cancelled.connect(
+            self._on_watch_provider_refresh_cancelled
+        )
+        self.watch_provider_refresh_manager.finished.connect(
+            self._on_watch_provider_refresh_finished
         )
 
         self.setWindowTitle("Media Details")
@@ -398,11 +420,19 @@ class MediaDetailsDialog(QDialog):
             self.all_lists = media_repo.get_all_lists(conn)
 
     def set_media_draft(self, media_draft):
+        self._cancel_active_watch_provider_refresh(reset_state=True)
         self.media_draft = deepcopy(media_draft)
         self._baseline_media_draft = deepcopy(self.media_draft)
         self._is_dirty = self.media_draft.get("media_id") is None
         self._render_all()
         self._update_action_buttons()
+
+        if self.isVisible():
+            QTimer.singleShot(0, self._maybe_auto_refresh_watch_providers)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self._maybe_auto_refresh_watch_providers)
 
     def _render_all(self):
         self._is_populating = True
@@ -782,6 +812,8 @@ class MediaDetailsDialog(QDialog):
         if self._metadata_refresh_job_id is not None:
             self.metadata_refresh_manager.cancel(self._metadata_refresh_job_id)
 
+        self._cancel_active_watch_provider_refresh()
+
     def reload_metadata(self):
         if self._metadata_refresh_in_progress:
             return
@@ -873,14 +905,14 @@ class MediaDetailsDialog(QDialog):
 
         self._metadata_refresh_job_id = None
         self._set_metadata_refresh_busy(False)
+        QTimer.singleShot(0, self._maybe_auto_refresh_watch_providers)
 
     def _is_current_metadata_refresh(self, job_id):
         return job_id == self._metadata_refresh_job_id
 
     def _set_metadata_refresh_busy(self, is_busy, message=None):
         self._metadata_refresh_in_progress = is_busy
-        self.metadata_block.action_button.setEnabled(not is_busy)
-        self.providers_block.action_button.setEnabled(not is_busy)
+        self._update_refresh_action_buttons()
         self.posters_block.action_button.setEnabled(not is_busy)
         self.find_media_input.setEnabled(not is_busy)
         self.lower_block.setEnabled(not is_busy)
@@ -897,8 +929,162 @@ class MediaDetailsDialog(QDialog):
         self.metadata_refresh_status_label.hide()
         self._update_action_buttons()
 
+    def _update_refresh_action_buttons(self):
+        self.metadata_block.action_button.setEnabled(
+            not self._metadata_refresh_in_progress
+        )
+        self.providers_block.action_button.setEnabled(
+            not (
+                self._metadata_refresh_in_progress
+                or self._watch_provider_refresh_in_progress
+            )
+        )
+
+    def _maybe_auto_refresh_watch_providers(self):
+        if (
+            not self._auto_refresh_watch_providers
+            or self._is_closing
+            or self._metadata_refresh_in_progress
+            or self._watch_provider_refresh_in_progress
+        ):
+            return
+
+        media_id = self.media_draft.get("media_id")
+
+        if (
+            media_id is None
+            or media_id in self._auto_refreshed_watch_provider_media_ids
+        ):
+            return
+
+        match = build_tmdb_match_from_metadata(
+            self.media_draft.get("metadata") or {}
+        )
+
+        try:
+            job_id = self.watch_provider_refresh_manager.start_refresh(
+                media_id,
+                match,
+            )
+        except Exception:
+            return
+
+        self._watch_provider_refresh_job_id = job_id
+        self._watch_provider_refresh_target_media_id = media_id
+        self._auto_refreshed_watch_provider_media_ids.add(media_id)
+        self._set_watch_provider_refresh_busy(True)
+
+    def _on_watch_provider_refresh_succeeded(self, job_id, payload):
+        if (
+            not self._is_current_watch_provider_refresh(job_id)
+            or self._is_closing
+        ):
+            return
+
+        payload = payload or {}
+        media_id = payload.get("media_id")
+
+        if (
+            media_id != self._watch_provider_refresh_target_media_id
+            or media_id != self.media_draft.get("media_id")
+            or "watch_providers" not in payload
+            or not payload.get("checked_at")
+        ):
+            self._discard_current_auto_provider_refresh()
+            return
+
+        providers = deepcopy(payload["watch_providers"] or [])
+        checked_at = payload["checked_at"]
+
+        try:
+            with get_connection() as conn:
+                media_repo.replace_media_watch_providers(
+                    conn,
+                    media_id,
+                    providers,
+                    checked_at=checked_at,
+                )
+        except Exception:
+            self._discard_current_auto_provider_refresh()
+            return
+
+        self._apply_watch_provider_refresh(providers, checked_at)
+        self.result_payload["database_changed"] = True
+
+    def _on_watch_provider_refresh_failed(self, job_id, payload):
+        del payload
+
+        if not self._is_current_watch_provider_refresh(job_id):
+            return
+
+        self._discard_current_auto_provider_refresh()
+
+    def _on_watch_provider_refresh_cancelled(self, job_id, payload):
+        del payload
+
+        if not self._is_current_watch_provider_refresh(job_id):
+            return
+
+        self._discard_current_auto_provider_refresh()
+
+    def _on_watch_provider_refresh_finished(self, job_id, payload):
+        del payload
+
+        if not self._is_current_watch_provider_refresh(job_id):
+            return
+
+        self._watch_provider_refresh_job_id = None
+        self._watch_provider_refresh_target_media_id = None
+        self._set_watch_provider_refresh_busy(False)
+
+    def _is_current_watch_provider_refresh(self, job_id):
+        return job_id == self._watch_provider_refresh_job_id
+
+    def _set_watch_provider_refresh_busy(self, is_busy):
+        self._watch_provider_refresh_in_progress = is_busy
+        self._update_refresh_action_buttons()
+
+    def _cancel_active_watch_provider_refresh(self, reset_state=False):
+        if self._watch_provider_refresh_job_id is not None:
+            self.watch_provider_refresh_manager.cancel(
+                self._watch_provider_refresh_job_id
+            )
+
+        if not reset_state:
+            return
+
+        self._discard_current_auto_provider_refresh()
+        self._watch_provider_refresh_job_id = None
+        self._watch_provider_refresh_target_media_id = None
+        self._set_watch_provider_refresh_busy(False)
+
+    def _discard_current_auto_provider_refresh(self):
+        if self._watch_provider_refresh_target_media_id is not None:
+            self._auto_refreshed_watch_provider_media_ids.discard(
+                self._watch_provider_refresh_target_media_id
+            )
+
+    def _apply_watch_provider_refresh(self, providers, checked_at):
+        was_dirty = self._is_dirty
+        metadata = self.media_draft.setdefault("metadata", {})
+        metadata["last_tmdb_watch_providers_checked_at"] = checked_at
+        self.media_draft["watch_providers"] = deepcopy(providers)
+
+        baseline_metadata = self._baseline_media_draft.setdefault(
+            "metadata",
+            {},
+        )
+        baseline_metadata["last_tmdb_watch_providers_checked_at"] = checked_at
+        self._baseline_media_draft["watch_providers"] = deepcopy(providers)
+        self._is_dirty = was_dirty
+        self.render_watch_providers()
+        self._update_action_buttons()
+
     def reload_watch_providers(self):
-        if self._metadata_refresh_in_progress:
+        if (
+            self._metadata_refresh_in_progress
+            or self._watch_provider_refresh_in_progress
+        ):
             return
 
         try:
@@ -910,9 +1096,6 @@ class MediaDetailsDialog(QDialog):
             return
 
         checked_at = current_freshness_timestamp()
-        metadata = self.media_draft.setdefault("metadata", {})
-        metadata["last_tmdb_watch_providers_checked_at"] = checked_at
-        self.media_draft["watch_providers"] = providers
         media_id = self.media_draft.get("media_id")
 
         if media_id is not None:
@@ -927,18 +1110,15 @@ class MediaDetailsDialog(QDialog):
             except Exception as exc:
                 QMessageBox.warning(self, "Watch Providers", str(exc))
                 return
-
-            baseline_metadata = self._baseline_media_draft.setdefault(
-                "metadata",
-                {},
-            )
-            baseline_metadata["last_tmdb_watch_providers_checked_at"] = checked_at
-            self._baseline_media_draft["watch_providers"] = deepcopy(providers)
+            self._apply_watch_provider_refresh(providers, checked_at)
+            self.result_payload["database_changed"] = True
         else:
+            metadata = self.media_draft.setdefault("metadata", {})
+            metadata["last_tmdb_watch_providers_checked_at"] = checked_at
+            self.media_draft["watch_providers"] = deepcopy(providers)
             self._is_dirty = True
-
-        self.render_watch_providers()
-        self._update_action_buttons()
+            self.render_watch_providers()
+            self._update_action_buttons()
 
     def edit_posters(self):
         print("Poster edit clicked")

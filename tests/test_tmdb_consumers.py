@@ -77,6 +77,7 @@ class TmdbConsumerBoundaryTests(unittest.TestCase):
     def test_media_details_provider_reload_uses_tmdb_facade(self):
         dialog = SimpleNamespace(
             _metadata_refresh_in_progress=False,
+            _watch_provider_refresh_in_progress=False,
             _is_dirty=False,
             media_draft={
                 "media_id": None,

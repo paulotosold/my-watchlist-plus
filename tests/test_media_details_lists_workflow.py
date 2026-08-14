@@ -275,6 +275,7 @@ class MediaDetailsListsWorkflowTests(unittest.TestCase):
             None,
             self._draft(),
             metadata_refresh_manager=FakeRefreshManager(),
+            auto_refresh_watch_providers=False,
         )
         self.dialogs.append(dialog)
         return dialog

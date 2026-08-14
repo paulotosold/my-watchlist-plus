@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import unittest
+from copy import deepcopy
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -10,7 +11,10 @@ from PySide6.QtCore import QObject, Signal, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QToolButton
 
-from app.media_details.dialog import MediaDetailsDialog
+from app.media_details.dialog import (
+    MediaDetailsDialog,
+    open_media_details_dialog,
+)
 from app.media_user_data.watch_history import get_series_episodes
 from app.ui.top_bar import FIND_MEDIA_INPUT_PLACEHOLDER, INPUT_BOX_STYLE
 
@@ -36,6 +40,29 @@ class FakeRefreshManager(QObject):
         return True
 
 
+class FakeWatchProviderRefreshManager(QObject):
+    succeeded = Signal(str, object)
+    failed = Signal(str, object)
+    cancelled = Signal(str, object)
+    finished = Signal(str, object)
+
+    def __init__(self):
+        super().__init__()
+        self.started = []
+        self.cancelled_ids = []
+        self._next_job_id = 0
+
+    def start_refresh(self, media_id, match):
+        self._next_job_id += 1
+        job_id = f"providers-job-{self._next_job_id}"
+        self.started.append((job_id, media_id, deepcopy(match)))
+        return job_id
+
+    def cancel(self, job_id):
+        self.cancelled_ids.append(job_id)
+        return True
+
+
 class MediaDetailsDialogWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -43,6 +70,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
     def setUp(self):
         self.manager = FakeRefreshManager()
+        self.provider_manager = FakeWatchProviderRefreshManager()
         self.load_lists_patch = patch.object(
             MediaDetailsDialog,
             "_load_all_lists",
@@ -444,11 +472,338 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         )
         dialog.close()
 
+    def test_existing_media_starts_automatic_provider_refresh_after_show(self):
+        dialog = self._dialog(auto_refresh_watch_providers=True)
+
+        self.assertEqual(self.provider_manager.started, [])
+        dialog.show()
+        self.application.processEvents()
+
+        self.assertEqual(len(self.provider_manager.started), 1)
+        _job_id, media_id, match = self.provider_manager.started[0]
+        self.assertEqual(media_id, 1)
+        self.assertEqual(
+            match,
+            {"media_type": "series", "tmdb_id": 100},
+        )
+        self.assertEqual(self.manager.started, [])
+        self.assertFalse(dialog.providers_block.action_button.isEnabled())
+        self.assertTrue(dialog.metadata_block.action_button.isEnabled())
+        dialog.close()
+
+    def test_new_media_does_not_start_automatic_provider_refresh(self):
+        dialog = self._dialog(
+            media_id=None,
+            auto_refresh_watch_providers=True,
+        )
+        dialog.show()
+        self.application.processEvents()
+
+        self.assertEqual(self.provider_manager.started, [])
+        dialog.close()
+
+    def test_automatic_provider_success_persists_and_updates_both_drafts(self):
+        old_providers = [self._provider(1, "Old Service")]
+        new_providers = [self._provider(8, "Netflix")]
+        dialog = self._dialog(
+            providers=old_providers,
+            auto_refresh_watch_providers=True,
+        )
+        dialog.show()
+        self.application.processEvents()
+        job_id = self.provider_manager.started[0][0]
+        good_index = dialog.impression_combo.findData("good")
+        dialog.impression_combo.setCurrentIndex(good_index)
+        self.assertTrue(dialog._is_dirty)
+        conn = sqlite3.connect(":memory:")
+
+        with patch(
+            "app.media_details.dialog.get_connection",
+            return_value=conn,
+        ), patch(
+            "app.media_details.dialog.media_repo.replace_media_watch_providers",
+        ) as replace_providers:
+            self.provider_manager.succeeded.emit(
+                job_id,
+                {
+                    "media_id": 1,
+                    "watch_providers": new_providers,
+                    "checked_at": "2026-08-14 12:00:00",
+                },
+            )
+
+        replace_providers.assert_called_once_with(
+            conn,
+            1,
+            new_providers,
+            checked_at="2026-08-14 12:00:00",
+        )
+        self.assertEqual(dialog.media_draft["watch_providers"], new_providers)
+        self.assertEqual(
+            dialog._baseline_media_draft["watch_providers"],
+            new_providers,
+        )
+
+        for draft in (dialog.media_draft, dialog._baseline_media_draft):
+            self.assertEqual(
+                draft["metadata"]["last_tmdb_watch_providers_checked_at"],
+                "2026-08-14 12:00:00",
+            )
+
+        self.assertTrue(dialog._is_dirty)
+        self.assertEqual(dialog.impression_combo.currentData(), "good")
+        self.assertTrue(dialog.result_payload["database_changed"])
+        self.provider_manager.finished.emit(job_id, {"status": "succeeded"})
+        self.assertTrue(dialog.providers_block.action_button.isEnabled())
+        conn.close()
+        dialog.close()
+
+    def test_automatic_empty_provider_result_clears_existing_providers(self):
+        dialog = self._dialog(
+            providers=[self._provider(1, "Old Service")],
+            auto_refresh_watch_providers=True,
+        )
+        dialog.show()
+        self.application.processEvents()
+        job_id = self.provider_manager.started[0][0]
+        conn = sqlite3.connect(":memory:")
+
+        with patch(
+            "app.media_details.dialog.get_connection",
+            return_value=conn,
+        ), patch(
+            "app.media_details.dialog.media_repo.replace_media_watch_providers",
+        ) as replace_providers:
+            self.provider_manager.succeeded.emit(
+                job_id,
+                {
+                    "media_id": 1,
+                    "watch_providers": [],
+                    "checked_at": "2026-08-14 12:00:00",
+                },
+            )
+
+        replace_providers.assert_called_once_with(
+            conn,
+            1,
+            [],
+            checked_at="2026-08-14 12:00:00",
+        )
+        self.assertEqual(dialog.media_draft["watch_providers"], [])
+        self.assertEqual(dialog._baseline_media_draft["watch_providers"], [])
+        conn.close()
+        dialog.close()
+
+    def test_automatic_provider_failures_are_silent_and_preserve_drafts(self):
+        old_providers = [self._provider(1, "Old Service")]
+        dialog = self._dialog(
+            providers=old_providers,
+            auto_refresh_watch_providers=True,
+        )
+        dialog.show()
+        self.application.processEvents()
+        job_id = self.provider_manager.started[0][0]
+
+        with patch("app.media_details.dialog.QMessageBox.warning") as warning:
+            self.provider_manager.failed.emit(
+                job_id,
+                {"message": "offline", "type": "ConnectionError"},
+            )
+            self.provider_manager.finished.emit(
+                job_id,
+                {"status": "failed"},
+            )
+
+        warning.assert_not_called()
+        self.assertEqual(dialog.media_draft["watch_providers"], old_providers)
+        self.assertEqual(
+            dialog._baseline_media_draft["watch_providers"],
+            old_providers,
+        )
+        self.assertNotIn("database_changed", dialog.result_payload)
+        self.assertTrue(dialog.providers_block.action_button.isEnabled())
+        dialog.close()
+
+    def test_automatic_provider_database_failure_is_silent_and_atomic(self):
+        old_providers = [self._provider(1, "Old Service")]
+        dialog = self._dialog(
+            providers=old_providers,
+            auto_refresh_watch_providers=True,
+        )
+        dialog.show()
+        self.application.processEvents()
+        job_id = self.provider_manager.started[0][0]
+        conn = sqlite3.connect(":memory:")
+
+        with patch(
+            "app.media_details.dialog.get_connection",
+            return_value=conn,
+        ), patch(
+            "app.media_details.dialog.media_repo.replace_media_watch_providers",
+            side_effect=RuntimeError("database unavailable"),
+        ), patch("app.media_details.dialog.QMessageBox.warning") as warning:
+            self.provider_manager.succeeded.emit(
+                job_id,
+                {
+                    "media_id": 1,
+                    "watch_providers": [self._provider(8, "Netflix")],
+                    "checked_at": "2026-08-14 12:00:00",
+                },
+            )
+
+        warning.assert_not_called()
+        self.assertEqual(dialog.media_draft["watch_providers"], old_providers)
+        self.assertEqual(
+            dialog._baseline_media_draft["watch_providers"],
+            old_providers,
+        )
+        self.assertNotIn("database_changed", dialog.result_payload)
+        conn.close()
+        dialog.close()
+
+    def test_closing_cancels_provider_refresh_and_ignores_late_success(self):
+        dialog = self._dialog(auto_refresh_watch_providers=True)
+        dialog.show()
+        self.application.processEvents()
+        job_id = self.provider_manager.started[0][0]
+
+        dialog.reject()
+
+        self.assertIn(job_id, self.provider_manager.cancelled_ids)
+
+        with patch("app.media_details.dialog.get_connection") as get_connection:
+            self.provider_manager.succeeded.emit(
+                job_id,
+                {
+                    "media_id": 1,
+                    "watch_providers": [self._provider(8, "Netflix")],
+                    "checked_at": "2026-08-14 12:00:00",
+                },
+            )
+
+        get_connection.assert_not_called()
+        self.assertEqual(dialog.media_draft["watch_providers"], [])
+
+    def test_replacing_draft_ignores_stale_provider_result(self):
+        dialog = self._dialog(auto_refresh_watch_providers=True)
+        dialog.show()
+        self.application.processEvents()
+        stale_job_id = self.provider_manager.started[0][0]
+        replacement = self._series_draft()
+        replacement["media_id"] = 2
+
+        dialog.set_media_draft(replacement)
+        self.application.processEvents()
+
+        self.assertIn(stale_job_id, self.provider_manager.cancelled_ids)
+        self.assertEqual(self.provider_manager.started[-1][1], 2)
+
+        with patch("app.media_details.dialog.get_connection") as get_connection:
+            self.provider_manager.succeeded.emit(
+                stale_job_id,
+                {
+                    "media_id": 1,
+                    "watch_providers": [self._provider(8, "Netflix")],
+                    "checked_at": "2026-08-14 12:00:00",
+                },
+            )
+
+        get_connection.assert_not_called()
+        self.assertEqual(dialog.media_draft["media_id"], 2)
+        self.assertEqual(dialog.media_draft["watch_providers"], [])
+        dialog.close()
+
+    def test_replacing_same_draft_restarts_cancelled_provider_refresh(self):
+        dialog = self._dialog(auto_refresh_watch_providers=True)
+        dialog.show()
+        self.application.processEvents()
+        first_job_id = self.provider_manager.started[0][0]
+
+        dialog.set_media_draft(self._series_draft())
+        self.application.processEvents()
+
+        self.assertIn(first_job_id, self.provider_manager.cancelled_ids)
+        self.assertEqual(len(self.provider_manager.started), 2)
+        second_job_id, media_id, _match = self.provider_manager.started[-1]
+        self.assertNotEqual(second_job_id, first_job_id)
+        self.assertEqual(media_id, 1)
+        dialog.close()
+
+    def test_manual_provider_refresh_still_reports_network_failure(self):
+        dialog = self._dialog()
+
+        with patch(
+            "app.media_details.dialog.tmdb.get_tmdb_media_watch_providers",
+            side_effect=ConnectionError("offline"),
+        ), patch("app.media_details.dialog.QMessageBox.warning") as warning:
+            dialog.reload_watch_providers()
+
+        warning.assert_called_once_with(
+            dialog,
+            "Watch Providers",
+            "offline",
+        )
+
+    def test_manual_provider_database_failure_preserves_live_draft(self):
+        old_providers = [self._provider(1, "Old Service")]
+        dialog = self._dialog(providers=old_providers)
+        conn = sqlite3.connect(":memory:")
+
+        with patch(
+            "app.media_details.dialog.tmdb.get_tmdb_media_watch_providers",
+            return_value=[self._provider(8, "Netflix")],
+        ), patch(
+            "app.media_details.dialog.current_freshness_timestamp",
+            return_value="2026-08-14 12:00:00",
+        ), patch(
+            "app.media_details.dialog.get_connection",
+            return_value=conn,
+        ), patch(
+            "app.media_details.dialog.media_repo.replace_media_watch_providers",
+            side_effect=RuntimeError("database unavailable"),
+        ), patch("app.media_details.dialog.QMessageBox.warning") as warning:
+            dialog.reload_watch_providers()
+
+        warning.assert_called_once_with(
+            dialog,
+            "Watch Providers",
+            "database unavailable",
+        )
+        self.assertEqual(dialog.media_draft["watch_providers"], old_providers)
+        self.assertEqual(
+            dialog._baseline_media_draft["watch_providers"],
+            old_providers,
+        )
+        self.assertNotIn("database_changed", dialog.result_payload)
+        conn.close()
+        dialog.close()
+
+    def test_rejected_wrapper_preserves_database_change_result(self):
+        with patch(
+            "app.media_details.dialog.MediaDetailsDialog"
+        ) as dialog_class:
+            dialog = dialog_class.return_value
+            dialog.exec.return_value = QDialog.Rejected
+            dialog.result_payload = {
+                "status": "cancelled",
+                "database_changed": True,
+            }
+
+            result = open_media_details_dialog(None, {"media_id": 1})
+
+        self.assertEqual(
+            result,
+            {"status": "cancelled", "database_changed": True},
+        )
+
     def _dialog(
         self,
         media_type="series",
         watch_state="to_watch",
         watch_history=None,
+        media_id=1,
+        providers=None,
+        auto_refresh_watch_providers=False,
     ):
         media_draft = self._series_draft(
             media_type=media_type,
@@ -457,10 +812,14 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         media_draft["user_data"]["watch_history"] = list(
             watch_history or []
         )
+        media_draft["media_id"] = media_id
+        media_draft["watch_providers"] = deepcopy(providers or [])
         return MediaDetailsDialog(
             None,
             media_draft,
             metadata_refresh_manager=self.manager,
+            watch_provider_refresh_manager=self.provider_manager,
+            auto_refresh_watch_providers=auto_refresh_watch_providers,
         )
 
     def _activate_status(self, dialog, watch_state):
@@ -518,6 +877,14 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
             "episode_num": episode_num,
             "title": f"Episode {episode_num}",
             "release_date": "2026-01-01",
+        }
+
+    def _provider(self, provider_tmdb_id, provider_name):
+        return {
+            "provider_tmdb_id": provider_tmdb_id,
+            "provider_name": provider_name,
+            "country_code": "AT",
+            "access_type": "flatrate",
         }
 
 

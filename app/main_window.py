@@ -330,8 +330,10 @@ class MainWindow(QMainWindow):
     def on_find_media_input(self, media_query, *, source_page=None):
         print("Find Media:", media_query)
         result = handle_find_media_input(self, media_query)
+        status = (result or {}).get("status")
+        was_saved_or_deleted = status in {"saved", "deleted"}
 
-        if result and result.get("status") in {"saved", "deleted"}:
+        if was_saved_or_deleted:
             source_page = source_page or getattr(self, "active_page", None)
             clear_find_media_query = getattr(
                 source_page,
@@ -342,6 +344,7 @@ class MainWindow(QMainWindow):
             if callable(clear_find_media_query):
                 clear_find_media_query()
 
+        if was_saved_or_deleted or (result or {}).get("database_changed"):
             self._refresh_after_media_change()
 
         return result
@@ -363,7 +366,13 @@ class MainWindow(QMainWindow):
 
         result = open_media_details_dialog(self, media_draft)
 
-        if result and result.get("status") in {"saved", "deleted"}:
+        if (
+            result
+            and (
+                result.get("status") in {"saved", "deleted"}
+                or result.get("database_changed")
+            )
+        ):
             self._refresh_after_media_change()
 
         return result

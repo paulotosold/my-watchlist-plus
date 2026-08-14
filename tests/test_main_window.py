@@ -13,13 +13,17 @@ from app.main_window import MainWindow
 
 
 class MainWindowInputTests(unittest.TestCase):
-    def test_find_media_refreshes_only_after_saved_or_deleted(self):
-        for status, should_refresh in (
-            ("saved", True),
-            ("deleted", True),
-            ("cancelled", False),
+    def test_find_media_refreshes_after_save_delete_or_database_change(self):
+        for status, database_changed, should_clear, should_refresh in (
+            ("saved", False, True, True),
+            ("deleted", False, True, True),
+            ("cancelled", True, False, True),
+            ("cancelled", False, False, False),
         ):
-            with self.subTest(status=status):
+            with self.subTest(
+                status=status,
+                database_changed=database_changed,
+            ):
                 clear_find_media_query = Mock()
                 source_page = SimpleNamespace(
                     clear_find_media_query=clear_find_media_query,
@@ -30,7 +34,10 @@ class MainWindowInputTests(unittest.TestCase):
 
                 with patch(
                     "app.main_window.handle_find_media_input",
-                    return_value={"status": status},
+                    return_value={
+                        "status": status,
+                        "database_changed": database_changed,
+                    },
                 ) as handler:
                     MainWindow.on_find_media_input(
                         harness,
@@ -40,11 +47,14 @@ class MainWindowInputTests(unittest.TestCase):
 
                 handler.assert_called_once_with(harness, "tt1234567")
 
-                if should_refresh:
+                if should_clear:
                     clear_find_media_query.assert_called_once_with()
-                    harness._refresh_after_media_change.assert_called_once_with()
                 else:
                     clear_find_media_query.assert_not_called()
+
+                if should_refresh:
+                    harness._refresh_after_media_change.assert_called_once_with()
+                else:
                     harness._refresh_after_media_change.assert_not_called()
 
 
@@ -538,6 +548,29 @@ class MainWindowShellTests(unittest.TestCase):
             self.window.history_page.load_count,
             history_load_count + 1,
         )
+
+    def test_cancelled_details_refreshes_pages_after_database_change(self):
+        media_draft = {"media_id": 42, "metadata": {"title": "Movie"}}
+        history_load_count = self.window.history_page.load_count
+
+        with patch(
+            "app.main_window.open_media_details_dialog",
+            return_value={
+                "status": "cancelled",
+                "database_changed": True,
+            },
+        ):
+            self.window.watchlist_page.details_requested.emit(media_draft)
+
+        self.assertEqual(
+            self.window.watchlist_page.preserved_refresh_count,
+            1,
+        )
+        self.assertEqual(
+            self.window.history_page.load_count,
+            history_load_count,
+        )
+        self.assertTrue(self.window.history_page.is_invalidated)
 
 
 class MainWindowWatchlistIntegrationTests(unittest.TestCase):

@@ -226,6 +226,7 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
             None,
             self._draft(notes or []),
             metadata_refresh_manager=FakeRefreshManager(),
+            auto_refresh_watch_providers=False,
         )
 
     def _draft(self, notes):
