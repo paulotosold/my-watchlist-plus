@@ -29,16 +29,21 @@ STATUS_RIGHT_MARGIN = 12
 
 ACTIVE_VIEW_BACKGROUND = "#8fc4ff"
 ACTIVE_VIEW_BORDER = "#4f93cc"
+VIEW_BUTTON_HOVER_BACKGROUND = "rgba(0, 0, 0, 18)"
+VIEW_BUTTON_RADIUS = 5
 
 VIEW_BUTTON_STYLE = f"""
 QToolButton {{
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 5px;
+    border-radius: {VIEW_BUTTON_RADIUS}px;
     padding: 0;
 }}
 QToolButton:focus {{
     border: 1px dotted #3f3f3f;
+}}
+QToolButton:hover {{
+    background: {VIEW_BUTTON_HOVER_BACKGROUND};
 }}
 QToolButton:checked {{
     background: {ACTIVE_VIEW_BACKGROUND};
@@ -64,7 +69,7 @@ class HistoryStatusControl(QWidget):
         )
 
         self._watched_count = 0
-        self._view_mode = HISTORY_VIEW_LIST
+        self._view_mode = HISTORY_VIEW_GRID
         self._posters_per_row = DEFAULT_HISTORY_POSTERS_PER_ROW
 
         self.count_label = QLabel(self)
@@ -88,25 +93,25 @@ class HistoryStatusControl(QWidget):
         self.view_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         self.view_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
-        self.list_view_button = self._make_view_button(
-            "status_bar_view_list.png",
-            object_name="historyListViewButton",
-            accessible_name="List view",
-            tooltip="Show history as a list",
-        )
         self.grid_view_button = self._make_view_button(
             "status_bar_view_grid.png",
             object_name="historyGridViewButton",
             accessible_name="Grid view",
             tooltip="Show history as a grid",
         )
+        self.list_view_button = self._make_view_button(
+            "status_bar_view_list.png",
+            object_name="historyListViewButton",
+            accessible_name="List view",
+            tooltip="Show history as a list",
+        )
         self.list_button = self.list_view_button
         self.grid_button = self.grid_view_button
 
         self.view_button_group = QButtonGroup(self)
         self.view_button_group.setExclusive(True)
-        self.view_button_group.addButton(self.list_view_button)
         self.view_button_group.addButton(self.grid_view_button)
+        self.view_button_group.addButton(self.list_view_button)
 
         # Keep status-bar text at one system size on platforms that give
         # tool-button-adjacent controls a smaller implicit font.
@@ -126,17 +131,17 @@ class HistoryStatusControl(QWidget):
         layout.addStretch(1)
         layout.addWidget(self.poster_size_control)
         layout.addWidget(self.view_label)
-        layout.addWidget(self.list_view_button)
         layout.addWidget(self.grid_view_button)
+        layout.addWidget(self.list_view_button)
 
-        self.list_view_button.clicked.connect(
-            lambda _checked=False: self._request_view_mode(
-                HISTORY_VIEW_LIST
-            )
-        )
         self.grid_view_button.clicked.connect(
             lambda _checked=False: self._request_view_mode(
                 HISTORY_VIEW_GRID
+            )
+        )
+        self.list_view_button.clicked.connect(
+            lambda _checked=False: self._request_view_mode(
+                HISTORY_VIEW_LIST
             )
         )
         self.poster_size_control.value_changed.connect(
@@ -149,16 +154,16 @@ class HistoryStatusControl(QWidget):
         )
         self.setTabOrder(
             self.poster_size_control.plus_button,
-            self.list_view_button,
+            self.grid_view_button,
         )
         self.setTabOrder(
-            self.list_view_button,
             self.grid_view_button,
+            self.list_view_button,
         )
 
         self.set_state(
             watched_count=0,
-            view_mode=HISTORY_VIEW_LIST,
+            view_mode=HISTORY_VIEW_GRID,
             posters_per_row=DEFAULT_HISTORY_POSTERS_PER_ROW,
         )
 

@@ -147,7 +147,7 @@ class FakeHistoryPage(FakePage):
             parent,
         )
         self.entries = [object() for _ in range(19)]
-        self.view_mode = "list"
+        self.view_mode = "grid"
         self.posters_per_row = 18
         self.view_mode_values = []
         self.history_posters_per_row_values = []
@@ -340,6 +340,15 @@ class MainWindowShellTests(unittest.TestCase):
         self.window.section_tabs.setCurrentIndex(1)
         control = self.window.history_status_control
 
+        self.assertEqual(control.view_mode, "grid")
+        self.assertFalse(control.poster_size_control.isHidden())
+
+        control.list_view_button.click()
+
+        self.assertEqual(
+            self.window.history_page.view_mode_values,
+            ["list"],
+        )
         self.assertEqual(control.view_mode, "list")
         self.assertTrue(control.poster_size_control.isHidden())
 
@@ -347,7 +356,7 @@ class MainWindowShellTests(unittest.TestCase):
 
         self.assertEqual(
             self.window.history_page.view_mode_values,
-            ["grid"],
+            ["list", "grid"],
         )
         self.assertEqual(control.view_mode, "grid")
         self.assertFalse(control.poster_size_control.isHidden())
@@ -782,7 +791,7 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             control.width()
-            - control.grid_view_button.geometry().right()
+            - control.list_view_button.geometry().right()
             - 1,
             12,
         )

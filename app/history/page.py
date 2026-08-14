@@ -56,7 +56,7 @@ class HistoryPage(QWidget):
         self._is_loaded = False
         self._is_invalidated = True
         self._status_message = ""
-        self._view_mode = HISTORY_VIEW_LIST
+        self._view_mode = HISTORY_VIEW_GRID
         self.entries = []
         self.entry_widgets = []
         self._widgets_by_media_id = defaultdict(list)
@@ -190,7 +190,7 @@ class HistoryPage(QWidget):
         self.view_stack.setObjectName("historyViewStack")
         self.view_stack.addWidget(self.scroll_area)
         self.view_stack.addWidget(self.grid_scroll_area)
-        self.view_stack.setCurrentWidget(self.scroll_area)
+        self.view_stack.setCurrentWidget(self.grid_scroll_area)
 
         layout.addWidget(self.top_bar)
         layout.addWidget(self.view_stack, 1)
@@ -229,7 +229,12 @@ class HistoryPage(QWidget):
         self.entries = list(entries)
         self._render_entries()
 
-        if self._grid_initialized:
+        if (
+            self._view_mode == HISTORY_VIEW_GRID
+            and not self._grid_initialized
+        ):
+            self._ensure_grid_initialized()
+        elif self._grid_initialized:
             self.grid_board.set_entries(self.entries)
             self.grid_board.set_layout_width(
                 self._stable_grid_width()

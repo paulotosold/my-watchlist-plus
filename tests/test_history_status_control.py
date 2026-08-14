@@ -19,6 +19,8 @@ from app.history.status_control import (
     ACTIVE_VIEW_BORDER,
     STATUS_LEFT_MARGIN,
     STATUS_RIGHT_MARGIN,
+    VIEW_BUTTON_HOVER_BACKGROUND,
+    VIEW_BUTTON_RADIUS,
     HistoryStatusControl,
 )
 
@@ -55,11 +57,11 @@ class HistoryStatusControlTests(unittest.TestCase):
         )
         self.assertIs(
             layout.itemAt(4).widget(),
-            self.control.list_view_button,
+            self.control.grid_view_button,
         )
         self.assertIs(
             layout.itemAt(5).widget(),
-            self.control.grid_view_button,
+            self.control.list_view_button,
         )
         self.assertEqual(
             layout.contentsMargins().left(),
@@ -70,10 +72,20 @@ class HistoryStatusControlTests(unittest.TestCase):
             STATUS_RIGHT_MARGIN,
         )
         self.assertEqual(self.control.view_label.text(), "View")
+        self.control.poster_size_control.plus_button.setFocus()
+        QTest.keyClick(
+            self.control.poster_size_control.plus_button,
+            Qt.Key.Key_Tab,
+        )
+        self.assertTrue(self.control.grid_view_button.hasFocus())
+        self.assertIs(
+            self.control.grid_view_button.nextInFocusChain(),
+            self.control.list_view_button,
+        )
 
-    def test_default_state_is_list_with_hidden_density_control(self):
+    def test_default_state_is_grid_with_visible_density_control(self):
         self.assertEqual(self.control.watched_count, 0)
-        self.assertEqual(self.control.view_mode, LIST_VIEW)
+        self.assertEqual(self.control.view_mode, GRID_VIEW)
         self.assertEqual(
             self.control.posters_per_row,
             DEFAULT_HISTORY_POSTERS_PER_ROW,
@@ -86,9 +98,9 @@ class HistoryStatusControlTests(unittest.TestCase):
             self.control.count_label.accessibleName(),
             "0 history entries – Showing: All, Newest First",
         )
-        self.assertTrue(self.control.list_view_button.isChecked())
-        self.assertFalse(self.control.grid_view_button.isChecked())
-        self.assertTrue(
+        self.assertFalse(self.control.list_view_button.isChecked())
+        self.assertTrue(self.control.grid_view_button.isChecked())
+        self.assertFalse(
             self.control.poster_size_control.isHidden()
         )
 
@@ -117,6 +129,18 @@ class HistoryStatusControlTests(unittest.TestCase):
                 self.assertIn(
                     ACTIVE_VIEW_BORDER,
                     button.styleSheet(),
+                )
+                self.assertIn(
+                    VIEW_BUTTON_HOVER_BACKGROUND,
+                    button.styleSheet(),
+                )
+                self.assertIn(
+                    f"border-radius: {VIEW_BUTTON_RADIUS}px",
+                    button.styleSheet(),
+                )
+                self.assertLess(
+                    button.styleSheet().index("QToolButton:hover"),
+                    button.styleSheet().index("QToolButton:checked"),
                 )
 
     def test_set_state_updates_everything_without_emitting(self):
@@ -169,29 +193,29 @@ class HistoryStatusControlTests(unittest.TestCase):
     def test_clicking_view_buttons_emits_only_mode_changes(self):
         spy = QSignalSpy(self.control.view_mode_requested)
 
-        self.control.list_view_button.click()
+        self.control.grid_view_button.click()
         self.assertEqual(spy.count(), 0)
 
-        self.control.grid_view_button.click()
+        self.control.list_view_button.click()
 
         self.assertEqual(spy.count(), 1)
-        self.assertEqual(spy.at(0), [GRID_VIEW])
-        self.assertEqual(self.control.view_mode, GRID_VIEW)
-        self.assertTrue(self.control.grid_view_button.isChecked())
-        self.assertFalse(self.control.list_view_button.isChecked())
-        self.assertFalse(
+        self.assertEqual(spy.at(0), [LIST_VIEW])
+        self.assertEqual(self.control.view_mode, LIST_VIEW)
+        self.assertTrue(self.control.list_view_button.isChecked())
+        self.assertFalse(self.control.grid_view_button.isChecked())
+        self.assertTrue(
             self.control.poster_size_control.isHidden()
         )
 
-        self.control.grid_view_button.click()
+        self.control.list_view_button.click()
         self.assertEqual(spy.count(), 1)
 
-        self.control.list_view_button.click()
+        self.control.grid_view_button.click()
 
         self.assertEqual(spy.count(), 2)
-        self.assertEqual(spy.at(1), [LIST_VIEW])
-        self.assertEqual(self.control.view_mode, LIST_VIEW)
-        self.assertTrue(
+        self.assertEqual(spy.at(1), [GRID_VIEW])
+        self.assertEqual(self.control.view_mode, GRID_VIEW)
+        self.assertFalse(
             self.control.poster_size_control.isHidden()
         )
 
@@ -229,16 +253,16 @@ class HistoryStatusControlTests(unittest.TestCase):
 
     def test_view_buttons_are_keyboard_accessible(self):
         spy = QSignalSpy(self.control.view_mode_requested)
-        self.control.grid_view_button.setFocus()
+        self.control.list_view_button.setFocus()
 
         QTest.keyClick(
-            self.control.grid_view_button,
+            self.control.list_view_button,
             Qt.Key.Key_Space,
         )
 
         self.assertEqual(spy.count(), 1)
-        self.assertEqual(spy.at(0), [GRID_VIEW])
-        self.assertTrue(self.control.grid_view_button.isChecked())
+        self.assertEqual(spy.at(0), [LIST_VIEW])
+        self.assertTrue(self.control.list_view_button.isChecked())
 
     def test_invalid_view_mode_is_rejected_without_changing_state(self):
         with self.assertRaisesRegex(
@@ -247,7 +271,7 @@ class HistoryStatusControlTests(unittest.TestCase):
         ):
             self.control.set_state(10, "gallery", 18)
 
-        self.assertEqual(self.control.view_mode, LIST_VIEW)
+        self.assertEqual(self.control.view_mode, GRID_VIEW)
         self.assertEqual(
             self.control.count_label.text(),
             "0 history entries – Showing: All, Newest First",

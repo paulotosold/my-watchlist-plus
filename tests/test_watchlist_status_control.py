@@ -56,6 +56,18 @@ class WatchlistStatusControlTests(unittest.TestCase):
             self.control.reload_button.size(),
             QSize(24, 24),
         )
+        self.assertIn(
+            "QToolButton:hover",
+            self.control.reload_button.styleSheet(),
+        )
+        self.assertIn(
+            "background: rgba(0, 0, 0, 18)",
+            self.control.reload_button.styleSheet(),
+        )
+        self.assertIn(
+            "border-radius: 12px",
+            self.control.reload_button.styleSheet(),
+        )
         self.assertIsInstance(self.control.filtered_label, QLabel)
         self.assertEqual(
             self.control.filtered_label.focusPolicy(),

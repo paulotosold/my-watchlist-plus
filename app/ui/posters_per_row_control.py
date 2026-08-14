@@ -8,17 +8,23 @@ from app.paths import ASSETS_DIR
 
 STATUS_ICON_SIZE = 20
 STATUS_BUTTON_SIZE = 24
-ICON_BUTTON_STYLE = """
-QToolButton {
+STATUS_BUTTON_RADIUS = STATUS_BUTTON_SIZE // 2
+STATUS_BUTTON_HOVER_BACKGROUND = "rgba(0, 0, 0, 18)"
+ICON_BUTTON_STYLE = f"""
+QToolButton {{
     background: transparent;
     border: none;
+    border-radius: {STATUS_BUTTON_RADIUS}px;
     padding: 0;
-}
-QToolButton:disabled {
+}}
+QToolButton:hover {{
+    background: {STATUS_BUTTON_HOVER_BACKGROUND};
+}}
+QToolButton:disabled {{
     background: transparent;
     border: none;
     color: #8a8a8a;
-}
+}}
 """
 
 

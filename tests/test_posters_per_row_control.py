@@ -12,7 +12,11 @@ from app.watchlist.board import (
     MAX_POSTERS_PER_ROW,
     MIN_POSTERS_PER_ROW,
 )
-from app.ui.posters_per_row_control import PostersPerRowControl
+from app.ui.posters_per_row_control import (
+    STATUS_BUTTON_HOVER_BACKGROUND,
+    STATUS_BUTTON_RADIUS,
+    PostersPerRowControl,
+)
 
 
 class PostersPerRowControlTests(unittest.TestCase):
@@ -58,6 +62,26 @@ class PostersPerRowControlTests(unittest.TestCase):
         self.assertIn(
             "QToolButton:disabled",
             self.control.minus_button.styleSheet(),
+        )
+        self.assertIn(
+            "QToolButton:hover",
+            self.control.minus_button.styleSheet(),
+        )
+        self.assertIn(
+            STATUS_BUTTON_HOVER_BACKGROUND,
+            self.control.minus_button.styleSheet(),
+        )
+        self.assertIn(
+            f"border-radius: {STATUS_BUTTON_RADIUS}px",
+            self.control.minus_button.styleSheet(),
+        )
+        self.assertLess(
+            self.control.minus_button.styleSheet().index(
+                "QToolButton:hover"
+            ),
+            self.control.minus_button.styleSheet().index(
+                "QToolButton:disabled"
+            ),
         )
         self.assertEqual(
             self.control.minus_button.accessibleName(),

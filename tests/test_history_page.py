@@ -11,6 +11,7 @@ from PySide6.QtGui import QImage
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
+from app.history.constants import HISTORY_VIEW_LIST
 from app.history.entry_widget import HistoryEntryWidget, POSTER_WIDTH
 from app.history.page import HistoryPage
 from app.history.repository import (
@@ -162,6 +163,7 @@ class HistoryPageTests(unittest.TestCase):
             make_entry(index, title=f"Movie {index}")
             for index in range(1, 9)
         ]
+        self.page.set_view_mode(HISTORY_VIEW_LIST)
         self.page.resize(1000, 420)
         self.page.show()
         self.page.ensure_loaded()
@@ -190,6 +192,7 @@ class HistoryPageTests(unittest.TestCase):
             make_entry(index, title=f"Movie {index}")
             for index in range(1, 9)
         ]
+        self.page.set_view_mode(HISTORY_VIEW_LIST)
         self.page.resize(1000, 420)
         self.page.show()
         self.page.ensure_loaded()
