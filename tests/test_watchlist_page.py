@@ -196,7 +196,10 @@ class WatchlistPageTests(unittest.TestCase):
             self.page.media_board.loaded_media,
             [self.page.filtered_media],
         )
-        self.assertEqual(self.page.status_message, "2 filtered titles")
+        self.assertEqual(
+            self.page.status_message,
+            "2 titles – Showing: To Watch, Released, Random",
+        )
         self.assertEqual(
             self.page.top_bar.filter_input.text(),
             DEFAULT_FILTER_TEXT,
@@ -218,8 +221,14 @@ class WatchlistPageTests(unittest.TestCase):
         self.page.media_board._emit_view_state()
 
         self.assertEqual(state_spy.at(0), [1, 1, False])
-        self.assertEqual(status_spy.at(0), ["1 filtered title"])
-        self.assertEqual(self.page.status_message, "1 filtered title")
+        self.assertEqual(
+            status_spy.at(0),
+            ["1 title – Showing: To Watch, Released, Random"],
+        )
+        self.assertEqual(
+            self.page.status_message,
+            "1 title – Showing: To Watch, Released, Random",
+        )
         self.assertEqual(self.page.filtered_count, 1)
         self.assertEqual(self.page.pinned_count, 1)
 
@@ -283,7 +292,10 @@ class WatchlistPageTests(unittest.TestCase):
         self.assertIsNot(self.page.filtered_media, original_filtered_media)
         self.assertEqual(self.page.filtered_media.refresh_count, 1)
         self.assertEqual(status_spy.count(), 1)
-        self.assertEqual(status_spy.at(0), ["2 filtered titles"])
+        self.assertEqual(
+            status_spy.at(0),
+            ["2 titles – Showing: To Watch, Released, Random"],
+        )
 
     def test_default_filter_reload_forces_filtered_mode(self):
         cards = self.page.media_board.cards
@@ -296,7 +308,10 @@ class WatchlistPageTests(unittest.TestCase):
 
         self.assertFalse(self.page.pinned_only)
         self.assertIsNot(self.page.filtered_media, original_filtered_media)
-        self.assertEqual(self.page.status_message, "2 filtered titles")
+        self.assertEqual(
+            self.page.status_message,
+            "2 titles – Showing: To Watch, Released, Random",
+        )
 
     def test_pinned_only_rejects_zero_pins_without_storing_an_anchor(self):
         self.assertFalse(self.page.set_pinned_only(True))

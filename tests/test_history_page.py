@@ -116,8 +116,14 @@ class HistoryPageTests(unittest.TestCase):
         self.assertTrue(self.page.is_loaded)
         self.assertFalse(self.page.is_invalidated)
         self.assertEqual(len(self.page.entry_widgets), 2)
-        self.assertEqual(self.page.status_message, "2 watched entries")
-        self.assertEqual(status_spy.at(0), ["2 watched entries"])
+        self.assertEqual(
+            self.page.status_message,
+            "2 history entries – Showing: All, Newest First",
+        )
+        self.assertEqual(
+            status_spy.at(0),
+            ["2 history entries – Showing: All, Newest First"],
+        )
         self.assertEqual(
             self.page.scroll_area.horizontalScrollBarPolicy(),
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
@@ -373,7 +379,10 @@ class HistoryPageTests(unittest.TestCase):
         self.entries = [make_entry(1)]
         self.page.ensure_loaded()
 
-        self.assertEqual(self.page.status_message, "1 watched entry")
+        self.assertEqual(
+            self.page.status_message,
+            "1 history entry – Showing: All, Newest First",
+        )
 
 
 class HistoryEntryWidgetTests(unittest.TestCase):

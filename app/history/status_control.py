@@ -189,7 +189,8 @@ class HistoryStatusControl(QWidget):
             "entry" if self._watched_count == 1 else "entries"
         )
         count_text = (
-            f"{self._watched_count} watched {count_noun}"
+            f"{self._watched_count} history {count_noun} – "
+            "Showing: All, Newest First"
         )
         self.count_label.setText(count_text)
         self.count_label.setAccessibleName(count_text)

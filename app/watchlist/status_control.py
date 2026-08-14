@@ -27,7 +27,9 @@ STATUS_ICON_SIZE = 20
 STATUS_BUTTON_SIZE = 24
 STATUS_LEFT_MARGIN = 12
 STATUS_RIGHT_MARGIN = 12
-FILTERED_LABEL_MAX_TEXT = "9999 filtered titles"
+FILTERED_LABEL_MAX_TEXT = (
+    "9999 titles – Showing: To Watch, Released, Random"
+)
 PINNED_BUTTON_MAX_TEXT = "99 pinned"
 PINNED_PILL_HEIGHT = 25
 PINNED_PILL_RADIUS = PINNED_PILL_HEIGHT // 2
@@ -283,7 +285,8 @@ class WatchlistStatusControl(QWidget):
             "title" if self._filtered_count == 1 else "titles"
         )
         filtered_text = (
-            f"{self._filtered_count} filtered {filtered_noun}"
+            f"{self._filtered_count} {filtered_noun} – "
+            "Showing: To Watch, Released, Random"
         )
         pinned_text = f"{self._pinned_count} pinned"
 

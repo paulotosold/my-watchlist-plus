@@ -248,7 +248,8 @@ class WatchlistPage(QWidget):
 
         title_label = "title" if filtered_count == 1 else "titles"
         self._set_status_message(
-            f"{filtered_count} filtered {title_label}"
+            f"{filtered_count} {title_label} – "
+            "Showing: To Watch, Released, Random"
         )
         self.watchlist_state_changed.emit(
             filtered_count,

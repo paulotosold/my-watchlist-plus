@@ -221,11 +221,11 @@ class WatchlistStatusControlTests(unittest.TestCase):
         self.assertTrue(self.control.pinned_only)
         self.assertEqual(
             self.control.filtered_label.text(),
-            "42 filtered titles",
+            "42 titles – Showing: To Watch, Released, Random",
         )
         self.assertEqual(
             self.control.filtered_label.accessibleName(),
-            "42 filtered titles",
+            "42 titles – Showing: To Watch, Released, Random",
         )
         self.assertEqual(self.control.pinned_button.text(), "3 pinned")
         self.assertFalse(self.control.pinned_pill.isHidden())
@@ -267,7 +267,7 @@ class WatchlistStatusControlTests(unittest.TestCase):
         self.assertEqual(scope_spy.count(), 0)
         self.assertEqual(
             self.control.filtered_label.text(),
-            "1 filtered title",
+            "1 title – Showing: To Watch, Released, Random",
         )
         self.assertEqual(self.control.pinned_button.text(), "0 pinned")
         self.assertFalse(self.control.pinned_only)

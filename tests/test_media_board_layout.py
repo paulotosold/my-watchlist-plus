@@ -559,7 +559,10 @@ class WatchlistScrollTests(unittest.TestCase):
         dismissed_card = self.page.media_board.cards[0]
         dismissed_card.btn_close.click()
         self.application.processEvents()
-        self.assertEqual(self.page.status_message, "19 filtered titles")
+        self.assertEqual(
+            self.page.status_message,
+            "19 titles – Showing: To Watch, Released, Random",
+        )
 
     def test_reflow_keeps_the_anchor_card_at_the_same_vertical_offset(self):
         self.page.resize(900, 300)

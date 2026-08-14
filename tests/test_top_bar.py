@@ -40,8 +40,9 @@ class TopBarTests(unittest.TestCase):
         self.assertEqual(spy.at(0), [DEFAULT_FILTER_TEXT])
         self.assertEqual(spy.at(1), [f" {DEFAULT_FILTER_TEXT}"])
 
-    def test_filter_button_is_inert_and_replaces_the_plus_button(self):
+    def test_filter_controls_remain_configured_but_outside_the_layout(self):
         spy = QSignalSpy(self.top_bar.filter_submitted)
+        layout = self.top_bar.layout()
 
         QTest.mouseClick(
             self.top_bar.filter_button,
@@ -50,12 +51,30 @@ class TopBarTests(unittest.TestCase):
 
         self.assertEqual(spy.count(), 0)
         self.assertFalse(self.top_bar.filter_button.icon().isNull())
+        for filter_widget in (
+            self.top_bar.filter_label,
+            self.top_bar.filter_input,
+            self.top_bar.filter_button,
+        ):
+            with self.subTest(filter_widget=filter_widget):
+                self.assertEqual(layout.indexOf(filter_widget), -1)
+
+        self.assertGreaterEqual(
+            layout.indexOf(self.top_bar.find_media_label),
+            0,
+        )
+        self.assertGreaterEqual(
+            layout.indexOf(self.top_bar.find_media_input),
+            0,
+        )
+        self.assertTrue(self.top_bar.find_media_label.isVisible())
+        self.assertTrue(self.top_bar.find_media_input.isVisible())
         direct_tool_buttons = [
             button
             for button in self.top_bar.findChildren(QToolButton)
             if button.parent() is self.top_bar
         ]
-        self.assertEqual(direct_tool_buttons, [self.top_bar.filter_button])
+        self.assertEqual(direct_tool_buttons, [])
 
     def test_text_inputs_use_the_builtin_clear_button(self):
         for input_widget in (
@@ -69,7 +88,10 @@ class TopBarTests(unittest.TestCase):
                 clear_button = input_widget.findChild(QToolButton)
 
                 self.assertIsNotNone(clear_button)
-                self.assertTrue(clear_button.isVisible())
+                self.assertEqual(
+                    clear_button.isVisible(),
+                    input_widget is self.top_bar.find_media_input,
+                )
                 clear_button.click()
                 self.assertEqual(input_widget.text(), "")
 

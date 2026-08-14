@@ -85,9 +85,10 @@ class TopBar(QWidget):
         self.find_media_input.setPlaceholderText(self.find_media_placeholder)
         self.find_media_input.setStyleSheet(INPUT_BOX_STYLE)
 
-        layout.addWidget(self.filter_label)
-        layout.addWidget(self.filter_input, 1)
-        layout.addWidget(self.filter_button)
+        # Temporarily hidden until library/history filtering is implemented.
+        # layout.addWidget(self.filter_label)
+        # layout.addWidget(self.filter_input, 1)
+        # layout.addWidget(self.filter_button)
         layout.addWidget(self.find_media_label)
         layout.addWidget(self.find_media_input, 1)
 

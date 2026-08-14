@@ -86,7 +86,10 @@ class FakeWatchlistPage(FakePage):
     watchlist_state_changed = Signal(int, int, bool)
 
     def __init__(self, parent=None):
-        super().__init__("22 filtered titles", parent)
+        super().__init__(
+            "22 titles – Showing: To Watch, Released, Random",
+            parent,
+        )
         self.filtered_count = 22
         self.pinned_count = 0
         self.pinned_only = False
@@ -139,7 +142,10 @@ class FakeHistoryPage(FakePage):
     view_state_changed = Signal(str, int)
 
     def __init__(self, parent=None):
-        super().__init__("19 watched entries", parent)
+        super().__init__(
+            "19 history entries – Showing: All, Newest First",
+            parent,
+        )
         self.entries = [object() for _ in range(19)]
         self.view_mode = "list"
         self.posters_per_row = 18
@@ -247,7 +253,7 @@ class MainWindowShellTests(unittest.TestCase):
         self.assertTrue(self.window.history_status_control.isHidden())
         self.assertEqual(
             self.window.watchlist_status_control.filtered_label.text(),
-            "22 filtered titles",
+            "22 titles – Showing: To Watch, Released, Random",
         )
         self.assertEqual(
             self.window.watchlist_status_control.pinned_button.text(),
@@ -271,7 +277,7 @@ class MainWindowShellTests(unittest.TestCase):
         self.assertFalse(self.window.history_status_control.isHidden())
         self.assertEqual(
             self.window.history_status_control.count_label.text(),
-            "19 watched entries",
+            "19 history entries – Showing: All, Newest First",
         )
 
         self.window.section_tabs.setCurrentIndex(0)
@@ -367,9 +373,11 @@ class MainWindowShellTests(unittest.TestCase):
             "",
         )
 
-        self.window.watchlist_page.status_message = "21 filtered titles"
+        self.window.watchlist_page.status_message = (
+            "21 titles – Showing: To Watch, Released, Random"
+        )
         self.window.watchlist_page.status_message_changed.emit(
-            "21 filtered titles"
+            "21 titles – Showing: To Watch, Released, Random"
         )
         self.assertEqual(
             self.window.status_bar.currentMessage(),
@@ -604,7 +612,10 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         control = self.window.watchlist_status_control
         original_cards = list(board.cards)
 
-        self.assertEqual(control.filtered_label.text(), "8 filtered titles")
+        self.assertEqual(
+            control.filtered_label.text(),
+            "8 titles – Showing: To Watch, Released, Random",
+        )
         self.assertEqual(control.pinned_button.text(), "0 pinned")
         self.assertTrue(control.pinned_pill.isHidden())
 
@@ -623,7 +634,10 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
             board.visible_cards,
             [original_cards[1], original_cards[5]],
         )
-        self.assertEqual(control.filtered_label.text(), "8 filtered titles")
+        self.assertEqual(
+            control.filtered_label.text(),
+            "8 titles – Showing: To Watch, Released, Random",
+        )
         self.assertTrue(control.pinned_button.isChecked())
         self.assertTrue(control.pinned_pill.property("active"))
 
@@ -660,7 +674,10 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         control.pinned_button.click()
         self._process_events()
         self.assertTrue(board.pinned_only)
-        self.assertEqual(control.filtered_label.text(), "7 filtered titles")
+        self.assertEqual(
+            control.filtered_label.text(),
+            "7 titles – Showing: To Watch, Released, Random",
+        )
 
         control.reload_button.click()
         self._process_events()
@@ -672,7 +689,10 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
             pinned_index_before_reload,
         )
         self.assertTrue(pinned_card.is_pinned)
-        self.assertEqual(control.filtered_label.text(), "8 filtered titles")
+        self.assertEqual(
+            control.filtered_label.text(),
+            "8 titles – Showing: To Watch, Released, Random",
+        )
         self.assertEqual(control.pinned_button.text(), "1 pinned")
         self.assertFalse(control.pinned_pill.isHidden())
         self.assertFalse(control.pinned_pill.property("active"))
