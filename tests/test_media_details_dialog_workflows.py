@@ -183,49 +183,42 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
         self.assertEqual(self.manager.cancelled_ids, ["refresh-job"])
 
-    def test_find_media_and_smart_inputs_use_the_builtin_clear_button(self):
+    def test_find_media_input_uses_the_builtin_clear_button(self):
         dialog = self._dialog()
         dialog.show()
 
-        for input_widget in (
-            dialog.find_media_input,
-            dialog.smart_input,
-        ):
-            with self.subTest(input_widget=input_widget):
-                self.assertTrue(input_widget.isClearButtonEnabled())
-                input_widget.setText("clear me")
-                self.application.processEvents()
-                clear_button = input_widget.findChild(QToolButton)
+        input_widget = dialog.find_media_input
+        self.assertTrue(input_widget.isClearButtonEnabled())
+        input_widget.setText("clear me")
+        self.application.processEvents()
+        clear_button = input_widget.findChild(QToolButton)
 
-                self.assertIsNotNone(clear_button)
-                self.assertTrue(clear_button.isVisible())
-                clear_button.click()
-                self.assertEqual(input_widget.text(), "")
+        self.assertIsNotNone(clear_button)
+        self.assertTrue(clear_button.isVisible())
+        clear_button.click()
+        self.assertEqual(input_widget.text(), "")
 
         dialog.close()
 
-    def test_find_media_and_smart_fill_use_labels_and_main_input_style(self):
+    def test_find_media_uses_label_placeholder_and_main_input_style(self):
         dialog = self._dialog()
 
         self.assertEqual(dialog.find_media_label.text(), "Find Media:")
-        self.assertEqual(dialog.smart_label.text(), "Smart Fill:")
         self.assertEqual(
             dialog.find_media_input.placeholderText(),
             FIND_MEDIA_INPUT_PLACEHOLDER,
         )
-
-        for input_widget in (dialog.find_media_input, dialog.smart_input):
-            with self.subTest(input_widget=input_widget):
-                self.assertEqual(input_widget.styleSheet(), INPUT_BOX_STYLE)
+        self.assertEqual(
+            dialog.find_media_input.styleSheet(),
+            INPUT_BOX_STYLE,
+        )
 
         self.assertFalse(hasattr(dialog, "find_media_button"))
-        self.assertFalse(hasattr(dialog, "smart_button"))
         dialog.close()
 
-    def test_find_media_and_smart_fill_are_submitted_with_enter(self):
+    def test_find_media_is_submitted_with_enter(self):
         dialog = self._dialog()
         dialog.find_media_input.setText("tt1234567")
-        dialog.smart_input.setText("watched yesterday")
 
         with patch(
             "app.media_details.dialog.resolve_media_draft_from_query",
@@ -233,11 +226,14 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         ) as resolve_media:
             QTest.keyClick(dialog.find_media_input, Qt.Key.Key_Return)
 
-        with patch("builtins.print") as print_mock:
-            QTest.keyClick(dialog.smart_input, Qt.Key.Key_Return)
-
         resolve_media.assert_called_once_with(dialog, "tt1234567")
-        print_mock.assert_called_once_with("Smart Fill clicked")
+        dialog.close()
+
+    def test_smart_fill_controls_are_not_loaded(self):
+        dialog = self._dialog()
+
+        self.assertFalse(hasattr(dialog, "smart_label"))
+        self.assertFalse(hasattr(dialog, "smart_input"))
         dialog.close()
 
     def test_initial_watched_status_does_not_open_watch_entry_details(self):

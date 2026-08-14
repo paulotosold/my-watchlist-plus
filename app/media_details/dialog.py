@@ -89,6 +89,7 @@ POSTER_PREVIEW_HEIGHT = 232
 ENTRY_ACTION_LINE_HEIGHT = DETAIL_ICON_BUTTON_SIZE
 LIST_CHECKBOX_SIZE = ENTRY_ACTION_LINE_HEIGHT
 LIST_CHECKBOX_TO_TEXT_SPACING = 8
+DETAIL_BLOCK_SPACING = 14
 
 
 def open_media_details_dialog(parent, media_draft, media_query=None):
@@ -179,7 +180,7 @@ class MediaDetailsDialog(QDialog):
     def _build_ui(self, media_query):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(20, 16, 20, 16)
-        main_layout.setSpacing(14)
+        main_layout.setSpacing(DETAIL_BLOCK_SPACING)
 
         self.find_media_input = QLineEdit(self)
         self.find_media_input.setClearButtonEnabled(True)
@@ -198,7 +199,7 @@ class MediaDetailsDialog(QDialog):
 
         upper_layout = QHBoxLayout()
         upper_layout.setContentsMargins(0, 0, 0, 0)
-        upper_layout.setSpacing(18)
+        upper_layout.setSpacing(DETAIL_BLOCK_SPACING)
 
         self.metadata_block = self._build_metadata_block()
         right_column = self._build_right_column()
@@ -215,7 +216,12 @@ class MediaDetailsDialog(QDialog):
         main_layout.addLayout(footer_layout)
 
     def _build_metadata_block(self):
-        block = DetailBlock("Metadata (via TMDB API)", "details_reload.png", self)
+        block = DetailBlock(
+            "Metadata (via TMDB API)",
+            "details_reload.png",
+            self,
+            action_tooltip="Refresh metadata",
+        )
         block.action_button.clicked.connect(self.reload_metadata)
 
         self.metadata_refresh_status_label = QLabel("", block)
@@ -242,9 +248,14 @@ class MediaDetailsDialog(QDialog):
     def _build_right_column(self):
         right_column = QVBoxLayout()
         right_column.setContentsMargins(0, 0, 0, 0)
-        right_column.setSpacing(14)
+        right_column.setSpacing(DETAIL_BLOCK_SPACING)
 
-        self.providers_block = DetailBlock("Watch Providers (via TMDB API / JustWatch)", "details_reload.png", self)
+        self.providers_block = DetailBlock(
+            "Watch Providers (via TMDB API / JustWatch)",
+            "details_reload.png",
+            self,
+            action_tooltip="Refresh watch providers",
+        )
         self.providers_block.action_button.clicked.connect(self.reload_watch_providers)
 
         self.providers_scroll = QScrollArea(self.providers_block)
@@ -265,7 +276,12 @@ class MediaDetailsDialog(QDialog):
         self.providers_scroll.setWidget(self.providers_content)
         self.providers_block.body_layout.addWidget(self.providers_scroll)
 
-        self.posters_block = DetailBlock("Posters", "details_edit.png", self)
+        self.posters_block = DetailBlock(
+            "Posters",
+            "details_edit.png",
+            self,
+            action_tooltip="Edit posters",
+        )
         self.posters_block.action_button.clicked.connect(self.edit_posters)
         self.poster_status_label = QLabel(self.posters_block)
         self.posters_block.body_layout.addWidget(self.poster_status_label)
@@ -298,20 +314,8 @@ class MediaDetailsDialog(QDialog):
         lower_layout.setContentsMargins(16, 14, 16, 14)
         lower_layout.setSpacing(8)
 
-        smart_layout = QHBoxLayout()
-        smart_layout.setContentsMargins(0, 0, 0, 0)
-        smart_layout.setSpacing(8)
-
-        self.smart_input = QLineEdit(lower_block)
-        self.smart_input.setFixedHeight(32)
-        self.smart_input.setClearButtonEnabled(True)
-        self.smart_input.setStyleSheet(INPUT_BOX_STYLE)
-        self.smart_input.returnPressed.connect(self.smart_fill)
-
-        self.smart_label = QLabel("Smart Fill:", lower_block)
-        smart_layout.addWidget(self.smart_label)
-        smart_layout.addWidget(self.smart_input, stretch=1)
-        lower_layout.addLayout(smart_layout)
+        # Smart Fill stays out of the UI until its behavior is implemented.
+        # self._add_smart_fill_row(lower_block, lower_layout)
 
         columns_layout = QHBoxLayout()
         columns_layout.setContentsMargins(0, 0, 0, 0)
@@ -327,6 +331,22 @@ class MediaDetailsDialog(QDialog):
 
         lower_layout.addLayout(columns_layout, stretch=1)
         return lower_block
+
+    def _add_smart_fill_row(self, lower_block, lower_layout):
+        smart_layout = QHBoxLayout()
+        smart_layout.setContentsMargins(0, 0, 0, 0)
+        smart_layout.setSpacing(8)
+
+        self.smart_input = QLineEdit(lower_block)
+        self.smart_input.setFixedHeight(32)
+        self.smart_input.setClearButtonEnabled(True)
+        self.smart_input.setStyleSheet(INPUT_BOX_STYLE)
+        self.smart_input.returnPressed.connect(self.smart_fill)
+
+        self.smart_label = QLabel("Smart Fill:", lower_block)
+        smart_layout.addWidget(self.smart_label)
+        smart_layout.addWidget(self.smart_input, stretch=1)
+        lower_layout.addLayout(smart_layout)
 
     def _build_footer(self):
         footer_layout = QHBoxLayout()
@@ -550,7 +570,12 @@ class MediaDetailsDialog(QDialog):
         clear_layout(self.watch_history_layout)
 
         self.watch_history_layout.addWidget(
-            make_icon_button("details_add.png", self, self.add_watch_history)
+            make_icon_button(
+                "details_add.png",
+                self,
+                self.add_watch_history,
+                tooltip="Add watch history entry",
+            )
         )
 
         for entry in build_watch_history_display_entries(self.media_draft):
@@ -567,7 +592,12 @@ class MediaDetailsDialog(QDialog):
         clear_layout(self.notes_layout)
 
         self.notes_layout.addWidget(
-            make_icon_button("details_add.png", self, self.add_note)
+            make_icon_button(
+                "details_add.png",
+                self,
+                self.add_note,
+                tooltip="Add note",
+            )
         )
 
         notes = self.media_draft.get("user_data", {}).get("notes", [])
@@ -592,7 +622,12 @@ class MediaDetailsDialog(QDialog):
         self.list_checkboxes = []
 
         self.lists_layout.addWidget(
-            make_icon_button("details_add.png", self, self.add_list)
+            make_icon_button(
+                "details_add.png",
+                self,
+                self.add_list,
+                tooltip="Create list",
+            )
         )
 
         selected_lists = self.media_draft.get("user_data", {}).get("lists", [])

@@ -10,10 +10,13 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QToolButton
 
 from app.media_details.dialog import (
+    DETAIL_BLOCK_SPACING,
     ENTRY_ACTION_LINE_HEIGHT,
     MediaDetailsDialog,
 )
+from app.media_details.constants import DETAIL_ICON_BUTTON_SIZE
 from app.media_details.note_dialog import NotePreviewLabel
+from app.media_details.widgets import DETAIL_ICON_BUTTON_HOVER_SIZE
 from app.ui.clickable_entry_label import ClickableEntryLabel
 
 
@@ -67,6 +70,80 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
             dialog.watch_history_layout.itemAt(1).widget(),
             ClickableEntryLabel,
         )
+
+    def test_action_buttons_have_round_hover_and_specific_tooltips(self):
+        dialog = self._dialog(notes=[{"id": 1, "note": "Existing note"}])
+        buttons_and_tooltips = (
+            (dialog.metadata_block.action_button, "Refresh metadata"),
+            (
+                dialog.providers_block.action_button,
+                "Refresh watch providers",
+            ),
+            (dialog.posters_block.action_button, "Edit posters"),
+            (
+                dialog.watch_history_layout.itemAt(0).widget(),
+                "Add watch history entry",
+            ),
+            (dialog.notes_layout.itemAt(0).widget(), "Add note"),
+            (dialog.lists_layout.itemAt(0).widget(), "Create list"),
+        )
+
+        for button, tooltip in buttons_and_tooltips:
+            with self.subTest(tooltip=tooltip):
+                self.assertIsInstance(button, QToolButton)
+                self.assertEqual(button.toolTip(), tooltip)
+                self.assertEqual(button.accessibleName(), tooltip)
+                self.assertEqual(button.width(), DETAIL_ICON_BUTTON_SIZE)
+                self.assertEqual(button.height(), DETAIL_ICON_BUTTON_SIZE)
+                self.assertIn("border-radius: 10px", button.styleSheet())
+
+        dialog.show()
+        self.application.processEvents()
+        add_note_button = dialog.notes_layout.itemAt(0).widget()
+        first_note_label = dialog.notes_layout.itemAt(1).widget()
+        original_button_geometry = add_note_button.geometry()
+        original_label_geometry = first_note_label.geometry()
+
+        add_note_button._set_hover_circle_visible(True)
+        self.application.processEvents()
+
+        hover_circle = add_note_button._hover_circle
+        self.assertIsNotNone(hover_circle)
+        self.assertTrue(hover_circle.isVisible())
+        self.assertEqual(
+            hover_circle.size().width(),
+            DETAIL_ICON_BUTTON_HOVER_SIZE,
+        )
+        self.assertEqual(
+            hover_circle.size().height(),
+            DETAIL_ICON_BUTTON_HOVER_SIZE,
+        )
+        self.assertIn(
+            "background: rgba(0, 0, 0, 18)",
+            hover_circle.styleSheet(),
+        )
+        self.assertIn("border-radius: 12px", hover_circle.styleSheet())
+        self.assertEqual(add_note_button.geometry(), original_button_geometry)
+        self.assertEqual(first_note_label.geometry(), original_label_geometry)
+
+    def test_upper_detail_blocks_use_consistent_spacing(self):
+        dialog = self._dialog()
+        dialog.show()
+        self.application.processEvents()
+
+        horizontal_gap = (
+            dialog.providers_block.geometry().left()
+            - dialog.metadata_block.geometry().right()
+            - 1
+        )
+        vertical_gap = (
+            dialog.posters_block.geometry().top()
+            - dialog.providers_block.geometry().bottom()
+            - 1
+        )
+
+        self.assertEqual(horizontal_gap, DETAIL_BLOCK_SPACING)
+        self.assertEqual(vertical_gap, DETAIL_BLOCK_SPACING)
 
     def test_watch_history_and_note_texts_open_the_correct_details_dialogs(self):
         with (
