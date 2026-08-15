@@ -40,6 +40,15 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             ):
                 dialog = self._dialog(media_draft)
 
+                self.assertTrue(dialog.exact_date_mode_button.isChecked())
+                self.assertFalse(dialog.range_date_mode_button.isChecked())
+                self.assertEqual(dialog.date_earliest_label.text(), "Date:")
+                self.assertEqual(
+                    dialog.date_earliest_picker_button.toolTip(),
+                    "Choose date",
+                )
+                self.assertTrue(dialog.date_latest_input.isHidden())
+                self.assertFalse(hasattr(dialog, "copy_date_button"))
                 self.assertTrue(dialog.save_entry_button.isEnabled())
                 dialog.save_entry_button.click()
 
@@ -75,6 +84,62 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             ):
                 dialog = self._dialog(media_draft)
                 self.assertEqual(dialog.preview_label.text(), expected_preview)
+
+    def test_preview_is_rendered_above_date_mode_and_fields(self):
+        dialog = self._dialog(self._movie_draft())
+        dialog.show()
+        self.application.processEvents()
+
+        preview_top = dialog.preview_label.mapTo(dialog, QPoint(0, 0)).y()
+        toggle_top = dialog.date_mode_toggle.mapTo(dialog, QPoint(0, 0)).y()
+
+        self.assertLess(preview_top, toggle_top)
+
+    def test_existing_entry_infers_exact_or_range_without_losing_dates(self):
+        cases = (
+            ("empty", None, None, "exact"),
+            ("exact", "2026-05-01", "2026-05-01", "exact"),
+            ("range", "2026-05-01", "2026-05-03", "range"),
+            ("earliest only", "2026-05-01", None, "range"),
+            ("latest only", None, "2026-05-03", "range"),
+        )
+
+        for name, earliest, latest, expected_mode in cases:
+            with self.subTest(case=name):
+                entry = {
+                    "kind": "media_event",
+                    "watch_history_id": 50,
+                    "date_earliest": earliest,
+                    "date_latest": latest,
+                }
+                dialog = self._dialog(self._movie_draft(), entry)
+                is_range = expected_mode == "range"
+
+                self.assertEqual(
+                    dialog.range_date_mode_button.isChecked(),
+                    is_range,
+                )
+                self.assertEqual(
+                    dialog.exact_date_mode_button.isChecked(),
+                    not is_range,
+                )
+                self.assertEqual(
+                    dialog.date_earliest_input.text(),
+                    earliest or "",
+                )
+                self.assertEqual(
+                    dialog.date_latest_input.text(),
+                    (latest or "") if is_range else "",
+                )
+                self.assertEqual(
+                    dialog.date_earliest_label.text(),
+                    "Earliest Date:" if is_range else "Date:",
+                )
+                self.assertEqual(
+                    dialog.date_latest_input.isHidden(),
+                    not is_range,
+                )
+                self.assertFalse(dialog.save_entry_button.isEnabled())
 
     def test_edited_empty_entry_preview_uses_existing_created_at(self):
         today = QDate.currentDate()
@@ -126,6 +191,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         self.assertEqual(dialog.preview_label.text(), expected_empty_preview)
 
         dialog.date_earliest_input.setText("2026-05-02")
+        dialog.range_date_mode_button.click()
         dialog.date_latest_input.setText("2026-05-01")
         self.assertFalse(dialog.save_entry_button.isEnabled())
         self.assertEqual(
@@ -151,15 +217,17 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
 
         self.assertFalse(dialog.save_entry_button.isEnabled())
 
-        dialog.date_latest_input.setText("2026-05-02")
+        dialog.date_earliest_input.setText("2026-05-02")
         self.assertTrue(dialog.save_entry_button.isEnabled())
 
-        dialog.date_latest_input.setText("invalid")
+        dialog.date_earliest_input.setText("invalid")
         self.assertFalse(dialog.save_entry_button.isEnabled())
 
     def test_date_inputs_use_the_builtin_clear_button(self):
         dialog = self._dialog(self._movie_draft())
         dialog.show()
+        dialog.range_date_mode_button.click()
+        self.application.processEvents()
 
         for input_widget in (
             dialog.date_earliest_input,
@@ -178,10 +246,11 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
 
     def test_inline_date_buttons_have_expected_size_and_icons(self):
         dialog = self._dialog(self._movie_draft())
+        dialog.show()
+        self.application.processEvents()
 
         for button in (
             dialog.date_earliest_picker_button,
-            dialog.copy_date_button,
             dialog.date_latest_picker_button,
         ):
             with self.subTest(tooltip=button.toolTip()):
@@ -190,14 +259,54 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
                 self.assertEqual(button.iconSize(), QSize(20, 20))
                 self.assertFalse(button.icon().isNull())
 
-    def test_copy_over_copies_literal_invalid_and_empty_values(self):
+        self.assertFalse(hasattr(dialog, "copy_date_button"))
+        self.assertEqual(dialog.date_mode_toggle.size(), QSize(175, 32))
+        self.assertEqual(
+            dialog.date_mode_toggle.height(),
+            dialog.date_earliest_input.height(),
+        )
+
+        for button in (
+            dialog.exact_date_mode_button,
+            dialog.range_date_mode_button,
+        ):
+            with self.subTest(mode=button.text()):
+                self.assertEqual(button.minimumHeight(), 32)
+                self.assertEqual(button.maximumHeight(), 32)
+                self.assertTrue(button.isCheckable())
+                self.assertEqual(button.accessibleName(), button.text())
+                self.assertEqual(
+                    button.font().pixelSize(),
+                    dialog.date_earliest_label.font().pixelSize(),
+                )
+
+        self.assertEqual(
+            dialog.exact_date_mode_button.width()
+            + dialog.range_date_mode_button.width(),
+            175,
+        )
+        self.assertLessEqual(
+            abs(
+                dialog.exact_date_mode_button.width()
+                - dialog.range_date_mode_button.width()
+            ),
+            1,
+        )
+
+    def test_mode_toggles_transfer_primary_date_and_clear_latest_date(self):
         dialog = self._dialog(self._movie_draft())
         dialog.date_earliest_input.setText("not-a-date")
-        dialog.date_latest_input.setText("2026-05-01")
 
-        dialog.copy_date_button.click()
+        dialog.range_date_mode_button.click()
 
-        self.assertEqual(dialog.date_latest_input.text(), "not-a-date")
+        self.assertEqual(dialog.date_earliest_input.text(), "not-a-date")
+        self.assertEqual(dialog.date_latest_input.text(), "")
+        self.assertEqual(dialog.date_earliest_label.text(), "Earliest Date:")
+        self.assertEqual(
+            dialog.date_earliest_picker_button.toolTip(),
+            "Choose earliest date",
+        )
+        self.assertFalse(dialog.date_latest_input.isHidden())
         self.assertFalse(hasattr(dialog, "error_label"))
         self.assertEqual(
             dialog.preview_label.text(),
@@ -205,20 +314,74 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         )
         self.assertFalse(dialog.save_entry_button.isEnabled())
 
-        dialog.date_earliest_input.clear()
-        dialog.copy_date_button.click()
+        dialog.date_earliest_input.setText("2026-05-01")
+        dialog.date_latest_input.setText("2026-05-03")
+        dialog.exact_date_mode_button.click()
 
+        self.assertEqual(dialog.date_earliest_input.text(), "2026-05-01")
         self.assertEqual(dialog.date_latest_input.text(), "")
+        self.assertEqual(dialog.date_earliest_label.text(), "Date:")
+        self.assertTrue(dialog.date_latest_input.isHidden())
         self.assertEqual(
             dialog.preview_label.text(),
-            f"Preview: ~2020-{QDate.currentDate().year()}",
+            "Preview: 1 May 2026, Fri",
         )
         self.assertTrue(dialog.save_entry_button.isEnabled())
+
+        dialog.save_entry_button.click()
+
+        self.assertEqual(dialog.result_payload["date_earliest"], "2026-05-01")
+        self.assertEqual(dialog.result_payload["date_latest"], "2026-05-01")
+
+    def test_exact_to_range_keeps_primary_date_and_saves_empty_latest(self):
+        dialog = self._dialog(self._movie_draft())
+        dialog.date_earliest_input.setText("2026-05-01")
+
+        dialog.range_date_mode_button.click()
+
+        self.assertEqual(dialog.date_earliest_input.text(), "2026-05-01")
+        self.assertEqual(dialog.date_latest_input.text(), "")
+        dialog.save_entry_button.click()
+
+        self.assertEqual(dialog.result_payload["date_earliest"], "2026-05-01")
+        self.assertIsNone(dialog.result_payload["date_latest"])
+
+    def test_exact_range_round_trip_restores_unchanged_entry_signature(self):
+        entry = {
+            "kind": "media_event",
+            "watch_history_id": 50,
+            "date_earliest": "2026-05-01",
+            "date_latest": "2026-05-01",
+        }
+        dialog = self._dialog(self._movie_draft(), entry)
+
+        self.assertFalse(dialog.save_entry_button.isEnabled())
+        dialog.range_date_mode_button.click()
+        self.assertTrue(dialog.save_entry_button.isEnabled())
+        dialog.exact_date_mode_button.click()
+        self.assertFalse(dialog.save_entry_button.isEnabled())
+
+    def test_switching_modes_closes_an_open_date_picker(self):
+        dialog = self._dialog(self._movie_draft())
+        dialog.show()
+        self.application.processEvents()
+        dialog.date_earliest_picker_button.click()
+        self.application.processEvents()
+        popup = dialog._date_picker_popup
+
+        self.assertIsNotNone(popup)
+        self.assertTrue(popup.isVisible())
+
+        dialog.range_date_mode_button.click()
+        self.application.processEvents()
+
+        self.assertIsNone(dialog._date_picker_popup)
 
     def test_each_date_picker_uses_initial_date_and_updates_its_field(self):
         cases = (
             (
                 "earliest",
+                "exact",
                 "date_earliest_input",
                 "date_earliest_picker_button",
                 "2026-07-04",
@@ -228,6 +391,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             ),
             (
                 "latest",
+                "range",
                 "date_latest_input",
                 "date_latest_picker_button",
                 "invalid",
@@ -239,6 +403,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
 
         for (
             name,
+            mode,
             input_name,
             button_name,
             initial_text,
@@ -248,6 +413,10 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         ) in cases:
             with self.subTest(field=name):
                 dialog = self._dialog(self._movie_draft())
+
+                if mode == "range":
+                    dialog.range_date_mode_button.click()
+
                 target_input = getattr(dialog, input_name)
                 other_input = getattr(dialog, other_input_name)
                 picker_button = getattr(dialog, button_name)
@@ -613,6 +782,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
                 }
                 dialog = self._dialog(self._movie_draft(), entry)
                 dialog.show()
+                dialog.range_date_mode_button.click()
                 dialog.date_latest_input.setText("2026-05-02")
                 dialog.date_latest_input.setFocus()
                 self.application.processEvents()
@@ -649,6 +819,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
                     }
                     dialog = self._dialog(self._movie_draft(), entry)
                     dialog.show()
+                    dialog.range_date_mode_button.click()
                     dialog.date_latest_input.setText(latest_date)
                     dialog.date_latest_input.setFocus()
                     self.application.processEvents()
@@ -672,6 +843,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             "date_latest": "2026-05-01",
         }
         save_dialog = self._dialog(self._movie_draft(), entry)
+        save_dialog.range_date_mode_button.click()
         save_dialog.date_latest_input.setText("2026-05-02")
 
         save_dialog.save_entry_button.click()

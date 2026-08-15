@@ -3,6 +3,7 @@ from copy import deepcopy
 from PySide6.QtCore import QDate, QPoint, QSize, Qt, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QDialog,
     QFrame,
     QHBoxLayout,
@@ -52,10 +53,16 @@ WATCH_ENTRY_DIALOG_DEFAULT_WIDTH = 960
 WATCH_ENTRY_DIALOG_MAX_HEIGHT = 750
 WATCH_ENTRY_EPISODE_SELECTOR_MAX_HEIGHT = 520
 WATCH_ENTRY_DATE_GROUP_SPACING = 2
+WATCH_ENTRY_DATE_CONTROL_HEIGHT = 32
+WATCH_ENTRY_DATE_MODE_WIDTH = 175
+WATCH_ENTRY_DATE_MODE_TO_FIELDS_SPACING = 16
+WATCH_ENTRY_PREVIEW_TO_DATE_SPACING = 12
 WATCH_ENTRY_INLINE_BUTTON_SIZE = 32
 WATCH_ENTRY_INLINE_ICON_SIZE = 20
 WATCH_ENTRY_SEASON_LABEL_WIDTH = 60
 WATCH_ENTRY_SEASON_LABEL_BUTTON_SPACING = 20
+WATCH_ENTRY_DATE_MODE_EXACT = "exact"
+WATCH_ENTRY_DATE_MODE_RANGE = "range"
 
 
 class WatchEntryDetailsDialog(QDialog):
@@ -70,6 +77,7 @@ class WatchEntryDetailsDialog(QDialog):
         self.season_episode_keys = {}
         self.initial_signature = None
         self._date_picker_popup = None
+        self._date_mode = self._infer_initial_date_mode()
 
         self.setWindowTitle("Watch Entry Details")
         self.setMinimumWidth(WATCH_ENTRY_DIALOG_DEFAULT_WIDTH)
@@ -127,6 +135,37 @@ class WatchEntryDetailsDialog(QDialog):
             QToolButton#watchEntryInlineButton:hover {{
                 background-color: #f2f2f2;
             }}
+
+            QFrame#watchEntryDateModeToggle {{
+                background-color: #e8e8e8;
+                border: none;
+                border-radius: 8px;
+            }}
+
+            QLabel#watchEntryDateLabel {{
+                font-size: 12px;
+            }}
+
+            QPushButton#watchEntryDateModeButton {{
+                background-color: transparent;
+                border: 1px solid transparent;
+                border-radius: 7px;
+                color: #707070;
+                font-size: 12px;
+                font-weight: normal;
+                padding: 0px;
+            }}
+
+            QPushButton#watchEntryDateModeButton:hover {{
+                background-color: #f2f2f2;
+                color: black;
+            }}
+
+            QPushButton#watchEntryDateModeButton:checked {{
+                background-color: white;
+                border-color: #d0d0d0;
+                color: black;
+            }}
         """)
 
     def _build_ui(self):
@@ -134,11 +173,20 @@ class WatchEntryDetailsDialog(QDialog):
         main_layout.setContentsMargins(20, 16, 20, 16)
         main_layout.setSpacing(0)
 
+        self.preview_label = QLabel(self)
+        self.preview_label.setWordWrap(False)
+        main_layout.addWidget(self.preview_label)
+        main_layout.addSpacing(WATCH_ENTRY_PREVIEW_TO_DATE_SPACING)
+
         date_layout = QHBoxLayout()
         date_layout.setContentsMargins(0, 0, 0, 0)
         date_layout.setSpacing(8)
 
+        self.date_mode_toggle = self._build_date_mode_toggle()
+        self.date_earliest_label = QLabel(self)
+        self.date_earliest_label.setObjectName("watchEntryDateLabel")
         self.date_earliest_input = self._make_date_input()
+        self.date_input = self.date_earliest_input
         self.date_latest_input = self._make_date_input()
         self.date_earliest_picker_button = self._make_inline_icon_button(
             "watch_history_calendar_picker.png",
@@ -148,11 +196,8 @@ class WatchEntryDetailsDialog(QDialog):
                 self.date_earliest_picker_button,
             ),
         )
-        self.copy_date_button = self._make_inline_icon_button(
-            "watch_history_copy_over.png",
-            "Copy earliest date to latest date",
-            self._copy_earliest_to_latest,
-        )
+        self.date_latest_label = QLabel("Latest Date:", self)
+        self.date_latest_label.setObjectName("watchEntryDateLabel")
         self.date_latest_picker_button = self._make_inline_icon_button(
             "watch_history_calendar_picker.png",
             "Choose latest date",
@@ -161,20 +206,20 @@ class WatchEntryDetailsDialog(QDialog):
                 self.date_latest_picker_button,
             ),
         )
-        self.preview_label = QLabel(self)
-        self.preview_label.setWordWrap(False)
 
-        date_layout.addWidget(QLabel("Earliest Date:", self))
+        date_layout.addWidget(self.date_mode_toggle)
+        date_layout.addSpacing(WATCH_ENTRY_DATE_MODE_TO_FIELDS_SPACING)
+        date_layout.addWidget(self.date_earliest_label)
         date_layout.addWidget(self.date_earliest_input)
         date_layout.addWidget(self.date_earliest_picker_button)
-        date_layout.addWidget(self.copy_date_button)
         date_layout.addSpacing(WATCH_ENTRY_DATE_GROUP_SPACING)
-        date_layout.addWidget(QLabel("Latest Date:", self))
+        date_layout.addWidget(self.date_latest_label)
         date_layout.addWidget(self.date_latest_input)
         date_layout.addWidget(self.date_latest_picker_button)
         date_layout.addSpacing(WATCH_ENTRY_DATE_GROUP_SPACING)
-        date_layout.addWidget(self.preview_label, stretch=1)
+        date_layout.addStretch(1)
         main_layout.addLayout(date_layout)
+        self._sync_date_mode_ui()
 
         if self._is_series():
             main_layout.addSpacing(WATCH_ENTRY_HEADER_TO_EPISODES_SPACING)
@@ -185,9 +230,62 @@ class WatchEntryDetailsDialog(QDialog):
 
         main_layout.addWidget(self._build_button_bar())
 
+    def _build_date_mode_toggle(self):
+        toggle = QFrame(self)
+        toggle.setObjectName("watchEntryDateModeToggle")
+        toggle.setFixedSize(
+            WATCH_ENTRY_DATE_MODE_WIDTH,
+            WATCH_ENTRY_DATE_CONTROL_HEIGHT,
+        )
+
+        layout = QHBoxLayout(toggle)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.exact_date_mode_button = self._make_date_mode_button(
+            "Exact",
+            "Use one exact watch date",
+        )
+        self.range_date_mode_button = self._make_date_mode_button(
+            "Range",
+            "Use an earliest and latest watch date",
+        )
+        layout.addWidget(self.exact_date_mode_button, stretch=1)
+        layout.addWidget(self.range_date_mode_button, stretch=1)
+
+        self.date_mode_button_group = QButtonGroup(self)
+        self.date_mode_button_group.setExclusive(True)
+        self.date_mode_button_group.addButton(self.exact_date_mode_button)
+        self.date_mode_button_group.addButton(self.range_date_mode_button)
+
+        self.exact_date_mode_button.clicked.connect(
+            lambda checked=False: checked
+            and self._set_date_mode(WATCH_ENTRY_DATE_MODE_EXACT)
+        )
+        self.range_date_mode_button.clicked.connect(
+            lambda checked=False: checked
+            and self._set_date_mode(WATCH_ENTRY_DATE_MODE_RANGE)
+        )
+        return toggle
+
+    def _make_date_mode_button(self, text, tooltip):
+        button = QPushButton(text, self)
+        button.setObjectName("watchEntryDateModeButton")
+        button.setCheckable(True)
+        button.setAutoDefault(False)
+        button.setFixedHeight(WATCH_ENTRY_DATE_CONTROL_HEIGHT)
+        button.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        button.setToolTip(tooltip)
+        button.setAccessibleName(text)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        return button
+
     def _make_date_input(self):
         input_widget = QLineEdit(self)
-        input_widget.setFixedHeight(32)
+        input_widget.setFixedHeight(WATCH_ENTRY_DATE_CONTROL_HEIGHT)
         input_widget.setFixedWidth(WATCH_ENTRY_DATE_INPUT_WIDTH)
         input_widget.setClearButtonEnabled(True)
         input_widget.textChanged.connect(self._refresh_state)
@@ -211,9 +309,6 @@ class WatchEntryDetailsDialog(QDialog):
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.clicked.connect(callback)
         return button
-
-    def _copy_earliest_to_latest(self):
-        self.date_latest_input.setText(self.date_earliest_input.text())
 
     def _open_date_picker(self, target_input, anchor_button):
         self._close_date_picker_popup()
@@ -412,9 +507,60 @@ class WatchEntryDetailsDialog(QDialog):
         self.date_earliest_input.setText(
             (self.entry or {}).get("date_earliest") or ""
         )
-        self.date_latest_input.setText(
-            (self.entry or {}).get("date_latest") or ""
+
+        if self._date_mode == WATCH_ENTRY_DATE_MODE_RANGE:
+            self.date_latest_input.setText(
+                (self.entry or {}).get("date_latest") or ""
+            )
+        else:
+            self.date_latest_input.clear()
+
+        self._sync_date_mode_ui()
+
+    def _infer_initial_date_mode(self):
+        entry = self.entry or {}
+        earliest = entry.get("date_earliest") or ""
+        latest = entry.get("date_latest") or ""
+
+        if earliest == latest:
+            return WATCH_ENTRY_DATE_MODE_EXACT
+
+        return WATCH_ENTRY_DATE_MODE_RANGE
+
+    def _set_date_mode(self, mode):
+        if mode not in {
+            WATCH_ENTRY_DATE_MODE_EXACT,
+            WATCH_ENTRY_DATE_MODE_RANGE,
+        }:
+            raise ValueError(f"Unsupported watch-entry date mode: {mode}")
+
+        if mode == self._date_mode:
+            self._sync_date_mode_ui()
+            return
+
+        self._close_date_picker_popup()
+        self._date_mode = mode
+        self.date_latest_input.clear()
+        self._sync_date_mode_ui()
+        self._refresh_state()
+
+    def _sync_date_mode_ui(self):
+        is_range = self._date_mode == WATCH_ENTRY_DATE_MODE_RANGE
+        self.exact_date_mode_button.setChecked(not is_range)
+        self.range_date_mode_button.setChecked(is_range)
+        self.date_earliest_label.setText(
+            "Earliest Date:" if is_range else "Date:"
         )
+        self.date_earliest_input.setAccessibleName(
+            "Earliest Date" if is_range else "Date"
+        )
+        self.date_earliest_picker_button.setToolTip(
+            "Choose earliest date" if is_range else "Choose date"
+        )
+        self.date_latest_input.setAccessibleName("Latest Date")
+        self.date_latest_label.setVisible(is_range)
+        self.date_latest_input.setVisible(is_range)
+        self.date_latest_picker_button.setVisible(is_range)
 
     def _selectable_episodes(self):
         catalog_episodes = get_series_episodes(self.media_draft)
@@ -594,6 +740,10 @@ class WatchEntryDetailsDialog(QDialog):
         label.setAccessibleDescription(tooltip)
 
     def _validated_dates(self):
+        if self._date_mode == WATCH_ENTRY_DATE_MODE_EXACT:
+            date_text = self.date_earliest_input.text()
+            return validate_watch_dates(date_text, date_text)
+
         return validate_watch_dates(
             self.date_earliest_input.text(),
             self.date_latest_input.text(),
