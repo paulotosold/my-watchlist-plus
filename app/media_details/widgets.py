@@ -179,9 +179,9 @@ class DetailBlock(QFrame):
         self.main_layout.setContentsMargins(12, 10, 12, 12)
         self.main_layout.setSpacing(5)
 
-        header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(DETAIL_HEADER_ICON_TEXT_SPACING)
+        self.header_layout = QHBoxLayout()
+        self.header_layout.setContentsMargins(0, 0, 0, 0)
+        self.header_layout.setSpacing(DETAIL_HEADER_ICON_TEXT_SPACING)
 
         if icon_name:
             self.action_button = make_icon_button(
@@ -189,19 +189,25 @@ class DetailBlock(QFrame):
                 self,
                 tooltip=action_tooltip,
             )
-            header_layout.addWidget(self.action_button)
+            self.header_layout.addWidget(self.action_button)
 
-        title_label = QLabel(title, self)
-        title_label.setObjectName("blockTitle")
-        header_layout.addWidget(title_label)
-        header_layout.addStretch()
+        self.title_label = QLabel(title, self)
+        self.title_label.setObjectName("blockTitle")
+        self.header_layout.addWidget(self.title_label)
+        self.header_layout.addStretch()
 
         self.body_layout = QVBoxLayout()
         self.body_layout.setContentsMargins(0, 0, 0, 0)
         self.body_layout.setSpacing(3)
 
-        self.main_layout.addLayout(header_layout)
+        self.main_layout.addLayout(self.header_layout)
         self.main_layout.addLayout(self.body_layout, stretch=1)
+
+    def add_header_widget(self, widget):
+        self.header_layout.insertWidget(
+            self.header_layout.count() - 1,
+            widget,
+        )
 
 
 def clear_layout(layout):

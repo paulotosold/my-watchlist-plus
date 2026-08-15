@@ -169,10 +169,31 @@ class WatchProviderRefreshManagerTests(unittest.TestCase):
             {"message": "offline", "type": "ConnectionError"},
         )
 
-    def test_requires_an_existing_media_id(self):
-        with self.assertRaisesRegex(ValueError, "existing media id"):
-            self.manager.start_refresh(
+    def test_new_media_without_database_id_is_supported(self):
+        success_spy = QSignalSpy(self.manager.succeeded)
+
+        with patch.object(
+            watch_provider_refresh_worker.tmdb,
+            "get_tmdb_media_watch_providers",
+            return_value=deepcopy(PROVIDERS),
+        ), patch.object(
+            watch_provider_refresh_worker,
+            "current_freshness_timestamp",
+            return_value="2026-08-15 12:00:00",
+        ):
+            job_id = self.manager.start_refresh(
                 None,
+                {"media_type": "movie", "tmdb_id": 7},
+            )
+            self._wait_for(success_spy)
+
+        self.assertEqual(success_spy.at(0)[0], job_id)
+        self.assertIsNone(success_spy.at(0)[1]["media_id"])
+
+    def test_rejects_an_invalid_media_id(self):
+        with self.assertRaisesRegex(ValueError, "valid media id"):
+            self.manager.start_refresh(
+                0,
                 {"media_type": "movie", "tmdb_id": 7},
             )
 

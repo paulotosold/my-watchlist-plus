@@ -74,45 +74,38 @@ class TmdbConsumerBoundaryTests(unittest.TestCase):
         response.raise_for_status.assert_called_once_with()
         pixmap.loadFromData.assert_called_once_with(b"preview-bytes")
 
-    def test_media_details_provider_reload_uses_tmdb_facade(self):
+    def test_media_details_provider_reload_uses_background_manager(self):
+        refresh_manager = Mock()
+        refresh_manager.start_refresh.return_value = "provider-job"
         dialog = SimpleNamespace(
             _metadata_refresh_in_progress=False,
             _watch_provider_refresh_in_progress=False,
-            _is_dirty=False,
             media_draft={
                 "media_id": None,
                 "metadata": {"media_type": "movie", "tmdb_id": 7},
             },
-            render_watch_providers=Mock(),
-            _update_action_buttons=Mock(),
+            watch_provider_refresh_manager=refresh_manager,
+            _hide_watch_provider_refresh_feedback=Mock(),
+            _set_watch_provider_refresh_busy=Mock(),
+            _show_watch_provider_refresh_feedback=Mock(),
         )
-        providers = [{"provider_name": "Example"}]
 
-        with patch.object(
-            details_dialog.tmdb,
-            "get_tmdb_media_watch_providers",
-            return_value=providers,
-        ) as fetch_providers, patch.object(
-            details_dialog,
-            "current_freshness_timestamp",
-            return_value="2026-08-09 12:00:00",
-        ):
-            details_dialog.MediaDetailsDialog.reload_watch_providers(dialog)
+        details_dialog.MediaDetailsDialog.reload_watch_providers(dialog)
 
-        fetch_providers.assert_called_once_with({
-            "media_type": "movie",
-            "tmdb_id": 7,
-        })
-        self.assertEqual(dialog.media_draft["watch_providers"], providers)
-        self.assertEqual(
-            dialog.media_draft["metadata"][
-                "last_tmdb_watch_providers_checked_at"
-            ],
-            "2026-08-09 12:00:00",
+        refresh_manager.start_refresh.assert_called_once_with(
+            None,
+            {"media_type": "movie", "tmdb_id": 7},
         )
-        self.assertTrue(dialog._is_dirty)
-        dialog.render_watch_providers.assert_called_once_with()
-        dialog._update_action_buttons.assert_called_once_with()
+        self.assertEqual(dialog._watch_provider_refresh_job_id, "provider-job")
+        self.assertIsNone(dialog._watch_provider_refresh_target_media_id)
+        self.assertTrue(dialog._watch_provider_refresh_is_manual)
+        self.assertFalse(
+            dialog._watch_provider_refresh_completed_successfully
+        )
+        dialog._set_watch_provider_refresh_busy.assert_called_once_with(True)
+        dialog._show_watch_provider_refresh_feedback.assert_called_once_with(
+            "Fetching providers…"
+        )
 
 
 if __name__ == "__main__":

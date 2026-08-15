@@ -43,13 +43,18 @@ class WatchProviderRefreshManager(QObject):
         self._jobs: dict[str, _ActiveJob] = {}
         self._lock = RLock()
 
-    def start_refresh(self, media_id: int, match: Mapping) -> str:
+    def start_refresh(self, media_id: int | None, match: Mapping) -> str:
         if (
-            not isinstance(media_id, int)
-            or isinstance(media_id, bool)
-            or media_id < 1
+            media_id is not None
+            and (
+                not isinstance(media_id, int)
+                or isinstance(media_id, bool)
+                or media_id < 1
+            )
         ):
-            raise ValueError("Watch-provider refresh requires an existing media id.")
+            raise ValueError(
+                "Watch-provider refresh requires a valid media id."
+            )
 
         if not isinstance(match, Mapping):
             raise TypeError("match must be a mapping")

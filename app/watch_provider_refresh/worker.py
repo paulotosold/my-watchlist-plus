@@ -33,7 +33,7 @@ class _WatchProviderRefreshWorker(QRunnable):
         self,
         *,
         job_id: str,
-        media_id: int,
+        media_id: int | None,
         match: dict,
         token: _CancellationToken,
         signals: _WorkerSignals,

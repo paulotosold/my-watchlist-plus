@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
 import app.media_draft.saver as draft_saver
 import app.media_repository as media_repo
 import app.tmdb as tmdb
-from app.tmdb import current_freshness_timestamp
 from .constants import (
     DETAIL_BUTTON_WIDTH,
     DETAIL_ICON_BUTTON_SIZE,
@@ -90,6 +89,7 @@ ENTRY_ACTION_LINE_HEIGHT = DETAIL_ICON_BUTTON_SIZE
 LIST_CHECKBOX_SIZE = ENTRY_ACTION_LINE_HEIGHT
 LIST_CHECKBOX_TO_TEXT_SPACING = 8
 DETAIL_BLOCK_SPACING = 14
+REFRESH_FEEDBACK_DURATION_MS = 500
 
 
 def open_media_details_dialog(parent, media_draft, media_query=None):
@@ -124,9 +124,12 @@ class MediaDetailsDialog(QDialog):
         self._baseline_media_draft = deepcopy(media_draft)
         self._metadata_refresh_job_id = None
         self._metadata_refresh_in_progress = False
+        self._metadata_refresh_completed_successfully = False
         self._watch_provider_refresh_job_id = None
         self._watch_provider_refresh_target_media_id = None
         self._watch_provider_refresh_in_progress = False
+        self._watch_provider_refresh_is_manual = False
+        self._watch_provider_refresh_completed_successfully = False
         self._auto_refresh_watch_providers = auto_refresh_watch_providers
         self._auto_refreshed_watch_provider_media_ids = set()
         self._is_closing = False
@@ -170,7 +173,7 @@ class MediaDetailsDialog(QDialog):
         )
 
         self.setWindowTitle("Media Details")
-        self.setFixedSize(1320, 850)
+        self.setFixedSize(1320, 810)
 
         self._load_all_lists()
         self._build_ui(media_query)
@@ -204,8 +207,8 @@ class MediaDetailsDialog(QDialog):
         self.metadata_block = self._build_metadata_block()
         right_column = self._build_right_column()
 
-        upper_layout.addWidget(self.metadata_block, stretch=2)
-        upper_layout.addLayout(right_column, stretch=1)
+        upper_layout.addWidget(self.metadata_block, stretch=3)
+        upper_layout.addLayout(right_column, stretch=2)
 
         self.lower_block = self._build_lower_block()
         footer_layout = self._build_footer()
@@ -226,8 +229,18 @@ class MediaDetailsDialog(QDialog):
 
         self.metadata_refresh_status_label = QLabel("", block)
         self.metadata_refresh_status_label.setObjectName("refreshStatus")
+        self.metadata_refresh_status_label.setContentsMargins(5, 0, 0, 0)
         self.metadata_refresh_status_label.hide()
-        block.body_layout.addWidget(self.metadata_refresh_status_label)
+        block.add_header_widget(self.metadata_refresh_status_label)
+
+        self._metadata_refresh_feedback_timer = QTimer(self)
+        self._metadata_refresh_feedback_timer.setSingleShot(True)
+        self._metadata_refresh_feedback_timer.setInterval(
+            REFRESH_FEEDBACK_DURATION_MS
+        )
+        self._metadata_refresh_feedback_timer.timeout.connect(
+            self._hide_metadata_refresh_feedback
+        )
 
         self.metadata_scroll = QScrollArea(block)
         self.metadata_scroll.setObjectName("transparentScroll")
@@ -257,6 +270,33 @@ class MediaDetailsDialog(QDialog):
             action_tooltip="Refresh watch providers",
         )
         self.providers_block.action_button.clicked.connect(self.reload_watch_providers)
+
+        self.watch_provider_refresh_status_label = QLabel(
+            "",
+            self.providers_block,
+        )
+        self.watch_provider_refresh_status_label.setObjectName(
+            "refreshStatus"
+        )
+        self.watch_provider_refresh_status_label.setContentsMargins(
+            5,
+            0,
+            0,
+            0,
+        )
+        self.watch_provider_refresh_status_label.hide()
+        self.providers_block.add_header_widget(
+            self.watch_provider_refresh_status_label
+        )
+
+        self._watch_provider_refresh_feedback_timer = QTimer(self)
+        self._watch_provider_refresh_feedback_timer.setSingleShot(True)
+        self._watch_provider_refresh_feedback_timer.setInterval(
+            REFRESH_FEEDBACK_DURATION_MS
+        )
+        self._watch_provider_refresh_feedback_timer.timeout.connect(
+            self._hide_watch_provider_refresh_feedback
+        )
 
         self.providers_scroll = QScrollArea(self.providers_block)
         self.providers_scroll.setObjectName("transparentScroll")
@@ -308,7 +348,7 @@ class MediaDetailsDialog(QDialog):
     def _build_lower_block(self):
         lower_block = QFrame(self)
         lower_block.setObjectName("detailBlock")
-        lower_block.setFixedHeight(241)
+        lower_block.setFixedHeight(201)
 
         lower_layout = QVBoxLayout(lower_block)
         lower_layout.setContentsMargins(16, 14, 16, 14)
@@ -441,6 +481,10 @@ class MediaDetailsDialog(QDialog):
 
     def set_media_draft(self, media_draft):
         self._cancel_active_watch_provider_refresh(reset_state=True)
+        self._metadata_refresh_completed_successfully = False
+        self._hide_metadata_refresh_feedback()
+        self._watch_provider_refresh_completed_successfully = False
+        self._hide_watch_provider_refresh_feedback()
         self.media_draft = deepcopy(media_draft)
         self._baseline_media_draft = deepcopy(self.media_draft)
         self._is_dirty = self.media_draft.get("media_id") is None
@@ -843,6 +887,7 @@ class MediaDetailsDialog(QDialog):
 
     def _cancel_active_metadata_refresh(self):
         self._is_closing = True
+        self._hide_metadata_refresh_feedback()
 
         if self._metadata_refresh_job_id is not None:
             self.metadata_refresh_manager.cancel(self._metadata_refresh_job_id)
@@ -853,6 +898,8 @@ class MediaDetailsDialog(QDialog):
         if self._metadata_refresh_in_progress:
             return
 
+        self._metadata_refresh_completed_successfully = False
+        self._hide_metadata_refresh_feedback()
         self._apply_form_to_draft()
         match = build_tmdb_match_from_metadata(
             self.media_draft.get("metadata") or {}
@@ -875,7 +922,7 @@ class MediaDetailsDialog(QDialog):
             return
 
         message = (payload or {}).get("message") or "Refreshing metadata…"
-        self.metadata_refresh_status_label.setText(message)
+        self._show_metadata_refresh_feedback(message)
 
     def _on_metadata_refresh_succeeded(self, job_id, payload):
         if not self._is_current_metadata_refresh(job_id) or self._is_closing:
@@ -898,6 +945,7 @@ class MediaDetailsDialog(QDialog):
         self._is_dirty = was_dirty
         self._render_all()
         self._update_action_buttons()
+        self._metadata_refresh_completed_successfully = True
 
         refresh_result = (payload or {}).get("refresh_result") or {}
         stats = refresh_result.get("stats") or {}
@@ -932,14 +980,28 @@ class MediaDetailsDialog(QDialog):
         if not self._is_current_metadata_refresh(job_id):
             return
 
-        self.metadata_refresh_status_label.setText("Metadata refresh cancelled.")
+        self._show_metadata_refresh_feedback("Cancelled")
 
     def _on_metadata_refresh_finished(self, job_id, payload):
         if not self._is_current_metadata_refresh(job_id):
             return
 
+        succeeded = (
+            (payload or {}).get("status") == "succeeded"
+            and self._metadata_refresh_completed_successfully
+        )
         self._metadata_refresh_job_id = None
         self._set_metadata_refresh_busy(False)
+        self._metadata_refresh_completed_successfully = False
+
+        if succeeded:
+            self._show_metadata_refresh_feedback(
+                "Updated",
+                auto_hide=True,
+            )
+        else:
+            self._hide_metadata_refresh_feedback()
+
         QTimer.singleShot(0, self._maybe_auto_refresh_watch_providers)
 
     def _is_current_metadata_refresh(self, job_id):
@@ -953,16 +1015,27 @@ class MediaDetailsDialog(QDialog):
         self.lower_block.setEnabled(not is_busy)
 
         if is_busy:
-            self.metadata_refresh_status_label.setText(
+            self._show_metadata_refresh_feedback(
                 message or "Refreshing metadata…"
             )
-            self.metadata_refresh_status_label.show()
             self.save_button.setEnabled(False)
             self.delete_button.setEnabled(False)
             return
 
-        self.metadata_refresh_status_label.hide()
         self._update_action_buttons()
+
+    def _show_metadata_refresh_feedback(self, message, *, auto_hide=False):
+        self._metadata_refresh_feedback_timer.stop()
+        self.metadata_refresh_status_label.setText(message)
+        self.metadata_refresh_status_label.show()
+
+        if auto_hide:
+            self._metadata_refresh_feedback_timer.start()
+
+    def _hide_metadata_refresh_feedback(self):
+        self._metadata_refresh_feedback_timer.stop()
+        self.metadata_refresh_status_label.hide()
+        self.metadata_refresh_status_label.clear()
 
     def _update_refresh_action_buttons(self):
         self.metadata_block.action_button.setEnabled(
@@ -1006,6 +1079,9 @@ class MediaDetailsDialog(QDialog):
 
         self._watch_provider_refresh_job_id = job_id
         self._watch_provider_refresh_target_media_id = media_id
+        self._watch_provider_refresh_is_manual = False
+        self._watch_provider_refresh_completed_successfully = False
+        self._hide_watch_provider_refresh_feedback()
         self._auto_refreshed_watch_provider_media_ids.add(media_id)
         self._set_watch_provider_refresh_busy(True)
 
@@ -1026,33 +1102,60 @@ class MediaDetailsDialog(QDialog):
             or not payload.get("checked_at")
         ):
             self._discard_current_auto_provider_refresh()
+
+            if self._watch_provider_refresh_is_manual:
+                QMessageBox.warning(
+                    self,
+                    "Watch Providers",
+                    "Watch-provider refresh returned incomplete data.",
+                )
+
             return
 
         providers = deepcopy(payload["watch_providers"] or [])
         checked_at = payload["checked_at"]
 
-        try:
-            with get_connection() as conn:
-                media_repo.replace_media_watch_providers(
-                    conn,
-                    media_id,
-                    providers,
-                    checked_at=checked_at,
-                )
-        except Exception:
-            self._discard_current_auto_provider_refresh()
-            return
+        if media_id is not None:
+            try:
+                with get_connection() as conn:
+                    media_repo.replace_media_watch_providers(
+                        conn,
+                        media_id,
+                        providers,
+                        checked_at=checked_at,
+                    )
+            except Exception as exc:
+                self._discard_current_auto_provider_refresh()
 
-        self._apply_watch_provider_refresh(providers, checked_at)
-        self.result_payload["database_changed"] = True
+                if self._watch_provider_refresh_is_manual:
+                    QMessageBox.warning(
+                        self,
+                        "Watch Providers",
+                        str(exc),
+                    )
+
+                return
+
+            self._apply_watch_provider_refresh(providers, checked_at)
+            self.result_payload["database_changed"] = True
+        else:
+            self._apply_new_watch_provider_refresh(providers, checked_at)
+
+        self._watch_provider_refresh_completed_successfully = True
 
     def _on_watch_provider_refresh_failed(self, job_id, payload):
-        del payload
-
         if not self._is_current_watch_provider_refresh(job_id):
             return
 
         self._discard_current_auto_provider_refresh()
+
+        if self._watch_provider_refresh_is_manual and not self._is_closing:
+            QMessageBox.warning(
+                self,
+                "Watch Providers",
+                (payload or {}).get("message")
+                or "Watch-provider refresh failed.",
+            )
 
     def _on_watch_provider_refresh_cancelled(self, job_id, payload):
         del payload
@@ -1063,14 +1166,27 @@ class MediaDetailsDialog(QDialog):
         self._discard_current_auto_provider_refresh()
 
     def _on_watch_provider_refresh_finished(self, job_id, payload):
-        del payload
-
         if not self._is_current_watch_provider_refresh(job_id):
             return
 
+        was_manual = self._watch_provider_refresh_is_manual
+        succeeded = (
+            (payload or {}).get("status") == "succeeded"
+            and self._watch_provider_refresh_completed_successfully
+        )
         self._watch_provider_refresh_job_id = None
         self._watch_provider_refresh_target_media_id = None
+        self._watch_provider_refresh_is_manual = False
+        self._watch_provider_refresh_completed_successfully = False
         self._set_watch_provider_refresh_busy(False)
+
+        if was_manual and succeeded:
+            self._show_watch_provider_refresh_feedback(
+                "Updated",
+                auto_hide=True,
+            )
+        else:
+            self._hide_watch_provider_refresh_feedback()
 
     def _is_current_watch_provider_refresh(self, job_id):
         return job_id == self._watch_provider_refresh_job_id
@@ -1079,7 +1195,27 @@ class MediaDetailsDialog(QDialog):
         self._watch_provider_refresh_in_progress = is_busy
         self._update_refresh_action_buttons()
 
+    def _show_watch_provider_refresh_feedback(
+        self,
+        message,
+        *,
+        auto_hide=False,
+    ):
+        self._watch_provider_refresh_feedback_timer.stop()
+        self.watch_provider_refresh_status_label.setText(message)
+        self.watch_provider_refresh_status_label.show()
+
+        if auto_hide:
+            self._watch_provider_refresh_feedback_timer.start()
+
+    def _hide_watch_provider_refresh_feedback(self):
+        self._watch_provider_refresh_feedback_timer.stop()
+        self.watch_provider_refresh_status_label.hide()
+        self.watch_provider_refresh_status_label.clear()
+
     def _cancel_active_watch_provider_refresh(self, reset_state=False):
+        self._hide_watch_provider_refresh_feedback()
+
         if self._watch_provider_refresh_job_id is not None:
             self.watch_provider_refresh_manager.cancel(
                 self._watch_provider_refresh_job_id
@@ -1091,10 +1227,15 @@ class MediaDetailsDialog(QDialog):
         self._discard_current_auto_provider_refresh()
         self._watch_provider_refresh_job_id = None
         self._watch_provider_refresh_target_media_id = None
+        self._watch_provider_refresh_is_manual = False
+        self._watch_provider_refresh_completed_successfully = False
         self._set_watch_provider_refresh_busy(False)
 
     def _discard_current_auto_provider_refresh(self):
-        if self._watch_provider_refresh_target_media_id is not None:
+        if (
+            not self._watch_provider_refresh_is_manual
+            and self._watch_provider_refresh_target_media_id is not None
+        ):
             self._auto_refreshed_watch_provider_media_ids.discard(
                 self._watch_provider_refresh_target_media_id
             )
@@ -1115,6 +1256,14 @@ class MediaDetailsDialog(QDialog):
         self.render_watch_providers()
         self._update_action_buttons()
 
+    def _apply_new_watch_provider_refresh(self, providers, checked_at):
+        metadata = self.media_draft.setdefault("metadata", {})
+        metadata["last_tmdb_watch_providers_checked_at"] = checked_at
+        self.media_draft["watch_providers"] = deepcopy(providers)
+        self._is_dirty = True
+        self.render_watch_providers()
+        self._update_action_buttons()
+
     def reload_watch_providers(self):
         if (
             self._metadata_refresh_in_progress
@@ -1122,38 +1271,29 @@ class MediaDetailsDialog(QDialog):
         ):
             return
 
+        media_id = self.media_draft.get("media_id")
+        match = build_tmdb_match_from_metadata(
+            self.media_draft.get("metadata") or {}
+        )
+        self._watch_provider_refresh_completed_successfully = False
+        self._hide_watch_provider_refresh_feedback()
+
         try:
-            providers = tmdb.get_tmdb_media_watch_providers(
-                build_tmdb_match_from_metadata(self.media_draft.get("metadata") or {})
+            job_id = self.watch_provider_refresh_manager.start_refresh(
+                media_id,
+                match,
             )
         except Exception as exc:
             QMessageBox.warning(self, "Watch Providers", str(exc))
             return
 
-        checked_at = current_freshness_timestamp()
-        media_id = self.media_draft.get("media_id")
-
-        if media_id is not None:
-            try:
-                with get_connection() as conn:
-                    media_repo.replace_media_watch_providers(
-                        conn,
-                        media_id,
-                        providers,
-                        checked_at=checked_at,
-                    )
-            except Exception as exc:
-                QMessageBox.warning(self, "Watch Providers", str(exc))
-                return
-            self._apply_watch_provider_refresh(providers, checked_at)
-            self.result_payload["database_changed"] = True
-        else:
-            metadata = self.media_draft.setdefault("metadata", {})
-            metadata["last_tmdb_watch_providers_checked_at"] = checked_at
-            self.media_draft["watch_providers"] = deepcopy(providers)
-            self._is_dirty = True
-            self.render_watch_providers()
-            self._update_action_buttons()
+        self._watch_provider_refresh_job_id = job_id
+        self._watch_provider_refresh_target_media_id = media_id
+        self._watch_provider_refresh_is_manual = True
+        self._set_watch_provider_refresh_busy(True)
+        self._show_watch_provider_refresh_feedback(
+            "Fetching providers…"
+        )
 
     def edit_posters(self):
         print("Poster edit clicked")
@@ -1473,6 +1613,10 @@ class MediaDetailsDialog(QDialog):
             QLabel#sectionTitle {
                 font-size: 12px;
                 font-weight: normal;
+            }
+
+            QLabel#refreshStatus {
+                font-style: italic;
             }
 
             QFrame#detailBlock {
