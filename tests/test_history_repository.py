@@ -639,6 +639,7 @@ class MediaStatePatchTests(unittest.TestCase):
             "watch_state": "watched",
             "impression": "very_good",
             "is_cabinet_worthy": False,
+            "cabinet_order": None,
         })
 
     def test_patch_is_idempotent_when_desired_value_is_already_current(self):
@@ -724,6 +725,7 @@ class MediaStatePatchTests(unittest.TestCase):
             "watch_state": None,
             "impression": None,
             "is_cabinet_worthy": None,
+            "cabinet_order": None,
         })
         self.assertIsNone(self.conn.execute(
             "SELECT 1 FROM media_state WHERE media_id = ?",

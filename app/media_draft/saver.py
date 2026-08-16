@@ -88,7 +88,7 @@ def save_media_draft_with_posters(
         ] = management_state["checked_at"]
 
     if media_draft["metadata"].get("media_type") == "episode":
-        return _save_episode_draft_with_series_context(
+        result = _save_episode_draft_with_series_context(
             conn,
             media_draft,
             poster_dir=poster_dir,
@@ -97,9 +97,8 @@ def save_media_draft_with_posters(
             fail_on_poster_error=fail_on_poster_error,
             fetch_episode_imdb_ids=fetch_episode_imdb_ids,
         )
-
-    if media_draft["metadata"].get("media_type") == "series":
-        return _save_series_draft_with_episode_context(
+    elif media_draft["metadata"].get("media_type") == "series":
+        result = _save_series_draft_with_episode_context(
             conn,
             media_draft,
             poster_dir=poster_dir,
@@ -108,15 +107,21 @@ def save_media_draft_with_posters(
             fail_on_poster_error=fail_on_poster_error,
             fetch_episode_imdb_ids=fetch_episode_imdb_ids,
         )
+    else:
+        result = _save_single_media_draft_with_posters(
+            conn,
+            media_draft,
+            poster_dir=poster_dir,
+            poster_size=poster_size,
+            max_posters_per_media=max_posters_per_media,
+            fail_on_poster_error=fail_on_poster_error,
+        )
 
-    return _save_single_media_draft_with_posters(
+    result["media_state"] = media_repository.get_media_state(
         conn,
-        media_draft,
-        poster_dir=poster_dir,
-        poster_size=poster_size,
-        max_posters_per_media=max_posters_per_media,
-        fail_on_poster_error=fail_on_poster_error,
+        result["media_id"],
     )
+    return result
 
 
 def save_existing_media_changes(

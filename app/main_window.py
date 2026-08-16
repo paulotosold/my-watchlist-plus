@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.cabinet import CabinetPage, CabinetStatusControl
 from app.find_media.handler import handle_find_media_input
 from app.history import HistoryPage
 from app.history.status_control import HistoryStatusControl
@@ -87,6 +88,9 @@ class MainWindow(QMainWindow):
         self.history_status_control = HistoryStatusControl(
             self.status_bar
         )
+        self.cabinet_status_control = CabinetStatusControl(
+            self.status_bar
+        )
         self.status_bar.register_control(
             "watchlist",
             self.watchlist_status_control,
@@ -95,6 +99,10 @@ class MainWindow(QMainWindow):
             "history",
             self.history_status_control,
         )
+        self.status_bar.register_control(
+            "cabinet",
+            self.cabinet_status_control,
+        )
         self.posters_per_row_control = (
             self.watchlist_status_control.poster_size_control
         )
@@ -102,8 +110,10 @@ class MainWindow(QMainWindow):
 
         self.watchlist_page = WatchlistPage(self)
         self.history_page = HistoryPage(self)
+        self.cabinet_page = CabinetPage(self)
         self._register_page("Watchlist", self.watchlist_page)
         self._register_page("History", self.history_page)
+        self._register_page("Cabinet", self.cabinet_page)
 
         self.section_tabs.currentChanged.connect(self._activate_page)
         self.posters_per_row_control.value_changed.connect(
@@ -114,6 +124,9 @@ class MainWindow(QMainWindow):
         )
         self.history_status_control.posters_per_row_requested.connect(
             self._set_history_posters_per_row
+        )
+        self.cabinet_status_control.posters_per_row_requested.connect(
+            self._set_cabinet_posters_per_row
         )
         self.watchlist_status_control.reload_requested.connect(
             self._reload_watchlist
@@ -136,6 +149,15 @@ class MainWindow(QMainWindow):
         if history_view_state_changed is not None:
             history_view_state_changed.connect(
                 self._on_history_view_state_changed
+            )
+        cabinet_view_state_changed = getattr(
+            self.cabinet_page,
+            "view_state_changed",
+            None,
+        )
+        if cabinet_view_state_changed is not None:
+            cabinet_view_state_changed.connect(
+                self._on_cabinet_view_state_changed
             )
 
         self.section_tabs.setCurrentIndex(0)
@@ -213,19 +235,25 @@ class MainWindow(QMainWindow):
     def _update_active_status_control(self):
         is_watchlist = self.active_page is self.watchlist_page
         is_history = self.active_page is self.history_page
+        is_cabinet = self.active_page is self.cabinet_page
         active_control = (
             "watchlist"
             if is_watchlist
             else "history"
             if is_history
+            else "cabinet"
+            if is_cabinet
             else None
         )
         self.status_bar.set_active_control(active_control)
         self.posters_per_row_control.setVisible(is_watchlist)
 
     def _on_page_status_message(self, page, _message):
-        if page is self.active_page and page is self.history_page:
-            self._sync_history_status()
+        if page is self.active_page:
+            if page is self.history_page:
+                self._sync_history_status()
+            elif page is self.cabinet_page:
+                self._sync_cabinet_status()
 
     def _on_watchlist_state_changed(
         self,
@@ -304,6 +332,25 @@ class MainWindow(QMainWindow):
             posters_per_row,
         )
 
+    def _set_cabinet_posters_per_row(self, posters_per_row):
+        setter = getattr(self.cabinet_page, "set_posters_per_row", None)
+        if callable(setter):
+            setter(posters_per_row)
+        self._sync_cabinet_status()
+
+    def _on_cabinet_view_state_changed(self, title_count, posters_per_row):
+        self._sync_cabinet_status(
+            title_count=title_count,
+            posters_per_row=posters_per_row,
+        )
+
+    def _sync_cabinet_status(self, *, title_count=None, posters_per_row=None):
+        if title_count is None:
+            title_count = getattr(self.cabinet_page, "title_count", 0)
+        if posters_per_row is None:
+            posters_per_row = getattr(self.cabinet_page, "posters_per_row", 8)
+        self.cabinet_status_control.set_state(title_count, posters_per_row)
+
     def _reload_watchlist(self):
         reload_button = self.watchlist_status_control.reload_button
         reload_button.setEnabled(False)
@@ -324,6 +371,10 @@ class MainWindow(QMainWindow):
         for page in self._pages:
             if page is not source_page:
                 page.invalidate()
+
+        active_page = self.active_page
+        if active_page is not None and active_page is not source_page:
+            active_page.ensure_loaded()
 
         self._show_active_status()
 
@@ -418,3 +469,5 @@ class MainWindow(QMainWindow):
 
         if page is self.history_page:
             self._sync_history_status()
+        elif page is self.cabinet_page:
+            self._sync_cabinet_status()

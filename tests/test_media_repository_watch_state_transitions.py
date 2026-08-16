@@ -39,7 +39,7 @@ class MediaRepositoryWatchStateTests(unittest.TestCase):
         media_repository.save_media_draft(self.conn, draft)
         self.assertIsNone(self._state(media_id))
 
-    def test_cabinet_order_is_loaded_but_not_saved_from_drafts(self):
+    def test_cabinet_order_is_canonical_and_ignores_draft_numbers(self):
         draft = self._movie_draft(
             2,
             self._user_data(
@@ -50,7 +50,8 @@ class MediaRepositoryWatchStateTests(unittest.TestCase):
         )
         media_id = media_repository.save_media_draft(self.conn, draft)
 
-        self.assertIsNone(self._state(media_id)["cabinet_order"])
+        self.assertEqual(self._state(media_id)["cabinet_order"], 1)
+        self.assertEqual(draft["user_data"]["cabinet_order"], 1)
 
         self.conn.execute(
             "UPDATE media_state SET cabinet_order = 4 WHERE media_id = ?",

@@ -258,6 +258,32 @@ def _save_media_state(conn, media_id, user_data):
     media_type = _get_media_type(conn, media_id)
     validate_watch_state(media_type, watch_state)
 
+    previous_state = conn.execute(
+        """
+        SELECT is_cabinet_worthy, cabinet_order
+        FROM media_state
+        WHERE media_id = ?
+        """,
+        (media_id,),
+    ).fetchone()
+    previous_is_cabinet_worthy = (
+        previous_state["is_cabinet_worthy"] == 1
+        if previous_state is not None
+        else False
+    )
+    previous_cabinet_order = (
+        previous_state["cabinet_order"]
+        if previous_state is not None
+        else None
+    )
+    cabinet_order = _cabinet_order_for_transition(
+        conn,
+        previous_is_cabinet_worthy,
+        previous_cabinet_order,
+        is_cabinet_worthy == 1,
+    )
+    user_data["cabinet_order"] = cabinet_order
+
     if watch_state is None and impression is None and is_cabinet_worthy is None:
         conn.execute(
             """
@@ -274,13 +300,15 @@ def _save_media_state(conn, media_id, user_data):
             media_id,
             watch_state,
             impression,
-            is_cabinet_worthy
+            is_cabinet_worthy,
+            cabinet_order
         )
-        VALUES (?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT (media_id) DO UPDATE SET
             watch_state = excluded.watch_state,
             impression = excluded.impression,
             is_cabinet_worthy = excluded.is_cabinet_worthy,
+            cabinet_order = excluded.cabinet_order,
             updated_at = CURRENT_TIMESTAMP
         """,
         (
@@ -288,8 +316,35 @@ def _save_media_state(conn, media_id, user_data):
             watch_state,
             impression,
             is_cabinet_worthy,
+            cabinet_order,
         ),
     )
+
+
+def _next_cabinet_order(conn):
+    row = conn.execute(
+        """
+        SELECT COALESCE(MAX(cabinet_order), 0) + 1 AS next_order
+        FROM media_state
+        WHERE is_cabinet_worthy IS 1
+        """
+    ).fetchone()
+    return row["next_order"]
+
+
+def _cabinet_order_for_transition(
+    conn,
+    previous_is_cabinet_worthy,
+    previous_cabinet_order,
+    desired_is_cabinet_worthy,
+):
+    if not desired_is_cabinet_worthy:
+        return None
+
+    if previous_is_cabinet_worthy:
+        return previous_cabinet_order
+
+    return _next_cabinet_order(conn)
 
 def set_media_watch_state(conn, media_id, watch_state):
     media_type = _get_media_type(conn, media_id)
@@ -977,6 +1032,7 @@ def apply_media_user_changes(conn, media_id, baseline_draft, current_draft):
         "media_id": media_id,
         "inserted_ids_by_draft_id": inserted_ids,
         "counts": counts,
+        "media_state": get_media_state(conn, media_id),
     }
 
 def _empty_owned_delta_result():
@@ -1059,7 +1115,8 @@ def get_media_state(conn, media_id):
         SELECT
             watch_state,
             impression,
-            is_cabinet_worthy
+            is_cabinet_worthy,
+            cabinet_order
         FROM media_state
         WHERE media_id = ?
         """,
@@ -1074,6 +1131,9 @@ def get_media_state(conn, media_id):
             None
             if state is None or state["is_cabinet_worthy"] is None
             else bool(state["is_cabinet_worthy"])
+        ),
+        "cabinet_order": (
+            state["cabinet_order"] if state is not None else None
         ),
     }
 
@@ -1158,6 +1218,12 @@ def apply_media_state_patch(
         for field in editable_fields
     }
     values_to_write.update(normalized_changes)
+    cabinet_order = _cabinet_order_for_transition(
+        conn,
+        current_state["is_cabinet_worthy"] is True,
+        current_state["cabinet_order"],
+        values_to_write["is_cabinet_worthy"] is True,
+    )
 
     state_exists = conn.execute(
         "SELECT 1 FROM media_state WHERE media_id = ?",
@@ -1201,15 +1267,17 @@ def apply_media_state_patch(
                     media_id,
                     watch_state,
                     impression,
-                    is_cabinet_worthy
+                    is_cabinet_worthy,
+                    cabinet_order
                 )
-                VALUES (?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     media_id,
                     values_to_write["watch_state"],
                     values_to_write["impression"],
                     _to_db_bool(values_to_write["is_cabinet_worthy"]),
+                    cabinet_order,
                 ),
             )
         except sqlite3.IntegrityError as exc:
@@ -1224,13 +1292,17 @@ def apply_media_state_patch(
 
         return get_media_state(conn, media_id)
 
-    assignments = ", ".join(f"{field} = ?" for field in fields_to_write)
+    assignments_to_write = [f"{field} = ?" for field in fields_to_write]
     parameters = [
         _to_db_bool(normalized_changes[field])
         if field == "is_cabinet_worthy"
         else normalized_changes[field]
         for field in fields_to_write
     ]
+    if "is_cabinet_worthy" in fields_to_write:
+        assignments_to_write.append("cabinet_order = ?")
+        parameters.append(cabinet_order)
+    assignments = ", ".join(assignments_to_write)
     expected_predicates = " AND ".join(
         f"{field} IS ?"
         for field in fields_to_write
@@ -1278,7 +1350,7 @@ def _apply_media_state_field_changes(
     fields = ("watch_state", "impression", "is_cabinet_worthy")
     state_row = conn.execute(
         """
-        SELECT watch_state, impression, is_cabinet_worthy
+        SELECT watch_state, impression, is_cabinet_worthy, cabinet_order
         FROM media_state
         WHERE media_id = ?
         """,
@@ -1324,6 +1396,12 @@ def _apply_media_state_field_changes(
         return 0
 
     validate_watch_state(media_type, values_to_write["watch_state"])
+    cabinet_order = _cabinet_order_for_transition(
+        conn,
+        database_values["is_cabinet_worthy"] is True,
+        state_row["cabinet_order"] if state_row is not None else None,
+        values_to_write["is_cabinet_worthy"] is True,
+    )
 
     if all(values_to_write[field] is None for field in fields):
         conn.execute("DELETE FROM media_state WHERE media_id = ?", (media_id,))
@@ -1336,26 +1414,32 @@ def _apply_media_state_field_changes(
                 media_id,
                 watch_state,
                 impression,
-                is_cabinet_worthy
+                is_cabinet_worthy,
+                cabinet_order
             )
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
                 media_id,
                 values_to_write["watch_state"],
                 values_to_write["impression"],
                 _to_db_bool(values_to_write["is_cabinet_worthy"]),
+                cabinet_order,
             ),
         )
         return len(changed_fields)
 
-    assignments = ", ".join(f"{field} = ?" for field in changed_fields)
+    assignments_to_write = [f"{field} = ?" for field in changed_fields]
     parameters = [
         _to_db_bool(values_to_write[field])
         if field == "is_cabinet_worthy"
         else values_to_write[field]
         for field in changed_fields
     ]
+    if "is_cabinet_worthy" in changed_fields:
+        assignments_to_write.append("cabinet_order = ?")
+        parameters.append(cabinet_order)
+    assignments = ", ".join(assignments_to_write)
     conn.execute(
         f"""
         UPDATE media_state

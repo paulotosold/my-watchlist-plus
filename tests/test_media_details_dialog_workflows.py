@@ -221,6 +221,13 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
                 "notes": {},
             },
             "counts": {},
+            "media_state": {
+                "media_id": 1,
+                "watch_state": None,
+                "impression": "very_good",
+                "is_cabinet_worthy": True,
+                "cabinet_order": 7,
+            },
         }
 
         with patch(
@@ -239,6 +246,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         current = local_save.call_args.args[2]
         self.assertIsNone(baseline["user_data"]["impression"])
         self.assertEqual(current["user_data"]["impression"], "very_good")
+        self.assertEqual(dialog.media_draft["user_data"]["cabinet_order"], 7)
         import_save.assert_not_called()
         self.assertEqual(dialog.result(), QDialog.Accepted)
         conn.close()

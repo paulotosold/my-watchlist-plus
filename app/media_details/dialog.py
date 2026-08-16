@@ -1515,6 +1515,7 @@ class MediaDetailsDialog(QDialog):
                 draft_to_save = deepcopy(self.media_draft)
 
                 with get_connection() as conn:
+                    conn.execute("BEGIN IMMEDIATE")
                     save_result = draft_saver.save_media_draft_with_posters(
                         conn,
                         draft_to_save,
@@ -1523,6 +1524,7 @@ class MediaDetailsDialog(QDialog):
                 self.media_draft = draft_to_save
             else:
                 with get_connection() as conn:
+                    conn.execute("BEGIN IMMEDIATE")
                     save_result = draft_saver.save_existing_media_changes(
                         conn,
                         self._baseline_media_draft,
@@ -1530,6 +1532,12 @@ class MediaDetailsDialog(QDialog):
                     )
 
                 apply_inserted_ids_to_draft(self.media_draft, save_result)
+
+            canonical_state = save_result.get("media_state") or {}
+            if canonical_state:
+                self.media_draft.setdefault("user_data", {})[
+                    "cabinet_order"
+                ] = canonical_state.get("cabinet_order")
         except Exception as exc:
             if save_result is not None:
                 poster_storage.cleanup_created_poster_files(

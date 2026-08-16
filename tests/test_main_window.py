@@ -187,6 +187,27 @@ class FakeHistoryPage(FakePage):
         return True
 
 
+class FakeCabinetPage(FakePage):
+    view_state_changed = Signal(int, int)
+
+    def __init__(self, parent=None):
+        super().__init__(
+            "26 titles -- Showing: Cabinet Worthy, Custom Order",
+            parent,
+        )
+        self.title_count = 26
+        self.posters_per_row = 8
+        self.posters_per_row_values = []
+
+    def set_posters_per_row(self, posters_per_row):
+        if posters_per_row == self.posters_per_row:
+            return False
+        self.posters_per_row = posters_per_row
+        self.posters_per_row_values.append(posters_per_row)
+        self.view_state_changed.emit(self.title_count, self.posters_per_row)
+        return True
+
+
 class MinimalPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -237,17 +258,23 @@ class MainWindowShellTests(unittest.TestCase):
             "app.main_window.HistoryPage",
             FakeHistoryPage,
         )
+        self.cabinet_patch = patch(
+            "app.main_window.CabinetPage",
+            FakeCabinetPage,
+        )
         self.watchlist_patch.start()
         self.history_patch.start()
+        self.cabinet_patch.start()
         self.window = MainWindow()
 
     def tearDown(self):
         self.window.close()
+        self.cabinet_patch.stop()
         self.history_patch.stop()
         self.watchlist_patch.stop()
         self.application.processEvents()
 
-    def test_watchlist_is_default_and_history_is_loaded_lazily(self):
+    def test_watchlist_is_default_and_other_pages_are_loaded_lazily(self):
         self.assertEqual(self.window.section_tabs.currentIndex(), 0)
         self.assertIs(
             self.window.page_stack.currentWidget(),
@@ -255,6 +282,11 @@ class MainWindowShellTests(unittest.TestCase):
         )
         self.assertEqual(self.window.watchlist_page.load_count, 1)
         self.assertEqual(self.window.history_page.load_count, 0)
+        self.assertEqual(self.window.cabinet_page.load_count, 0)
+        self.assertEqual(
+            [self.window.section_tabs.tabText(index) for index in range(3)],
+            ["Watchlist", "History", "Cabinet"],
+        )
         self.assertEqual(
             self.window.status_bar.currentMessage(),
             "",
@@ -294,16 +326,25 @@ class MainWindowShellTests(unittest.TestCase):
         self.window.section_tabs.setCurrentIndex(1)
         self.assertEqual(history_page.load_count, 1)
 
+        self.window.section_tabs.setCurrentIndex(2)
+        self.assertEqual(self.window.cabinet_page.load_count, 1)
+        self.assertFalse(self.window.cabinet_status_control.isHidden())
+        self.assertEqual(
+            self.window.cabinet_status_control.count_label.text(),
+            "26 titles -- Showing: Cabinet Worthy, Custom Order",
+        )
+
     def test_page_without_media_capabilities_or_top_bar_can_be_registered(self):
         page = MinimalPage(self.window)
 
         self.window._register_page("Stats", page)
-        self.window.section_tabs.setCurrentIndex(2)
+        self.window.section_tabs.setCurrentIndex(3)
 
         self.assertIs(self.window.active_page, page)
         self.assertEqual(page.ensure_count, 1)
         self.assertTrue(self.window.watchlist_status_control.isHidden())
         self.assertTrue(self.window.history_status_control.isHidden())
+        self.assertTrue(self.window.cabinet_status_control.isHidden())
 
     def test_window_starts_large_and_can_resize_down_to_its_minimum(self):
         self.assertEqual(self.window.size().toTuple(), (1440, 900))
@@ -385,6 +426,29 @@ class MainWindowShellTests(unittest.TestCase):
         self.assertEqual(control.view_mode, "grid")
         self.assertEqual(control.posters_per_row, 19)
 
+    def test_cabinet_density_is_independent_and_remembered(self):
+        watchlist_value = self.window.posters_per_row_control.posters_per_row
+        history_value = self.window.history_status_control.posters_per_row
+        self.window.section_tabs.setCurrentIndex(2)
+        control = self.window.cabinet_status_control
+
+        control.poster_size_control.minus_button.click()
+
+        self.assertEqual(self.window.cabinet_page.posters_per_row_values, [9])
+        self.assertEqual(control.posters_per_row, 9)
+        self.assertEqual(
+            self.window.posters_per_row_control.posters_per_row,
+            watchlist_value,
+        )
+        self.assertEqual(
+            self.window.history_status_control.posters_per_row,
+            history_value,
+        )
+
+        self.window.section_tabs.setCurrentIndex(0)
+        self.window.section_tabs.setCurrentIndex(2)
+        self.assertEqual(control.posters_per_row, 9)
+
     def test_status_messages_from_inactive_pages_are_ignored(self):
         self.window.history_page.status_message_changed.emit("new history")
         self.assertEqual(
@@ -442,6 +506,7 @@ class MainWindowShellTests(unittest.TestCase):
 
         self.assertTrue(self.window.watchlist_page.is_invalidated)
         self.assertFalse(self.window.history_page.is_invalidated)
+        self.assertTrue(self.window.cabinet_page.is_invalidated)
         self.assertEqual(
             self.window.history_page.load_count,
             history_load_count,
@@ -548,6 +613,27 @@ class MainWindowShellTests(unittest.TestCase):
             self.window.history_page.load_count,
             history_load_count + 1,
         )
+
+    def test_saved_cabinet_details_refreshes_active_cabinet_immediately(self):
+        media_draft = {"media_id": 42, "metadata": {"title": "Movie"}}
+        self.window.section_tabs.setCurrentIndex(2)
+        cabinet_load_count = self.window.cabinet_page.load_count
+
+        with patch(
+            "app.main_window.open_media_details_dialog",
+            return_value={"status": "saved"},
+        ):
+            self.window.cabinet_page.details_requested.emit(media_draft)
+
+        self.assertEqual(
+            self.window.watchlist_page.preserved_refresh_count,
+            1,
+        )
+        self.assertEqual(
+            self.window.cabinet_page.load_count,
+            cabinet_load_count + 1,
+        )
+        self.assertTrue(self.window.history_page.is_invalidated)
 
     def test_cancelled_details_refreshes_pages_after_database_change(self):
         media_draft = {"media_id": 42, "metadata": {"title": "Movie"}}
