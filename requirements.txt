@@ -2,5 +2,3 @@ PySide6
 python-dotenv
 requests
 openai
-Pillow
-numpy

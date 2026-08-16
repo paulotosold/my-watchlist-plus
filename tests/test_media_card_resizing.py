@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QImage, QImageReader
+from PySide6.QtGui import QColor, QImage, QImageReader
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
@@ -211,6 +211,94 @@ class MediaCardResizingTests(unittest.TestCase):
                         self.card.poster_layer.pixmap().size().toTuple(),
                         (width, round(width * 1.5)),
                     )
+
+    def test_poster_loading_preserves_red_dominant_pixels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            poster_path = Path(directory) / "red-poster.png"
+            expected_color = QColor(240, 30, 20)
+            image = QImage(20, 30, QImage.Format.Format_RGB32)
+            image.fill(expected_color)
+            self.assertTrue(image.save(str(poster_path)))
+            media_draft = {
+                "media_id": 10,
+                "metadata": {"title": "Red poster"},
+                "posters": [{
+                    "filename": poster_path.name,
+                    "curation_status": "selected",
+                    "is_default": True,
+                }],
+            }
+
+            with (
+                patch.object(
+                    self.card,
+                    "_poster_path",
+                    return_value=poster_path,
+                ),
+                patch("app.watchlist.card.random.randrange", return_value=0),
+            ):
+                self.card.init_card_session(
+                    SimpleNamespace(media_list=[media_draft]),
+                    media_draft,
+                )
+
+            loaded_color = self.card.poster_pixmap.toImage().pixelColor(0, 0)
+            self.assertEqual(loaded_color.getRgb(), expected_color.getRgb())
+
+    def test_invalid_poster_clears_pixmap_without_raising(self):
+        with tempfile.TemporaryDirectory() as directory:
+            poster_path = Path(directory) / "invalid-poster.jpg"
+            poster_path.write_bytes(b"not an image")
+            media_draft = {
+                "media_id": 11,
+                "metadata": {"title": "Invalid poster"},
+                "posters": [{
+                    "filename": poster_path.name,
+                    "curation_status": "selected",
+                    "is_default": True,
+                }],
+            }
+
+            with (
+                patch.object(
+                    self.card,
+                    "_poster_path",
+                    return_value=poster_path,
+                ),
+                patch("app.watchlist.card.random.randrange", return_value=0),
+            ):
+                self.card.init_card_session(
+                    SimpleNamespace(media_list=[media_draft]),
+                    media_draft,
+                )
+
+            self.assertTrue(self.card.poster_pixmap.isNull())
+
+    def test_missing_poster_is_filtered_without_loading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            poster_path = Path(directory) / "missing-poster.jpg"
+            media_draft = {
+                "media_id": 12,
+                "metadata": {"title": "Missing poster"},
+                "posters": [{
+                    "filename": poster_path.name,
+                    "curation_status": "selected",
+                    "is_default": True,
+                }],
+            }
+
+            with patch.object(
+                self.card,
+                "_poster_path",
+                return_value=poster_path,
+            ):
+                self.card.init_card_session(
+                    SimpleNamespace(media_list=[media_draft]),
+                    media_draft,
+                )
+
+            self.assertEqual(self.card.poster_filenames, [])
+            self.assertTrue(self.card.poster_pixmap.isNull())
 
     def test_close_clears_pin_and_emits_one_dismiss_request(self):
         spy = QSignalSpy(self.card.dismiss_requested)

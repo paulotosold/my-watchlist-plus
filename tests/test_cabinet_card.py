@@ -49,6 +49,10 @@ class CabinetCardTests(unittest.TestCase):
         self.assertEqual(self.card.poster_index, 0)
         self.card.on_overlay_clicked()
         self.assertEqual(self.card.poster_index, 1)
+        self.assertEqual(
+            self.card.poster_pixmap.toImage().pixelColor(0, 0),
+            QColor("red"),
+        )
         self.card.on_overlay_clicked()
         self.assertEqual(self.card.poster_index, 0)
 

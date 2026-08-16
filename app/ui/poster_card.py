@@ -4,11 +4,8 @@ from copy import deepcopy
 from functools import lru_cache
 import random
 
-import numpy as np
-from PIL import Image
-
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QImage, QImageReader, QPixmap
+from PySide6.QtGui import QIcon, QImageReader, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -40,25 +37,6 @@ def icon_dimensions_for_height(icon_img_path, icon_height):
         max(1, round(icon_height * source_size.width() / source_size.height())),
         icon_height,
     )
-
-
-def load_pixmap_with_red_fix(path, strength=0.85):
-    image = Image.open(path).convert("RGB")
-    pixels = np.array(image).astype(np.float32)
-    red, green, blue = pixels[:, :, 0], pixels[:, :, 1], pixels[:, :, 2]
-    mask = (red > green) & (red > blue)
-    red[mask] *= strength
-    pixels[:, :, 0] = red
-    pixels = np.clip(pixels, 0, 255).astype(np.uint8)
-    height, width, channels = pixels.shape
-    image = QImage(
-        pixels.data,
-        width,
-        height,
-        channels * width,
-        QImage.Format.Format_RGB888,
-    ).copy()
-    return QPixmap.fromImage(image)
 
 
 def get_media_key(media_draft):
@@ -238,9 +216,8 @@ class PosterCard(QFrame):
             self.poster_pixmap = QPixmap()
             return
         poster_path = self._poster_path(self.poster_filenames[self.poster_index])
-        try:
-            self.poster_pixmap = load_pixmap_with_red_fix(poster_path, 0.9)
-        except (FileNotFoundError, OSError):
+        self.poster_pixmap = QPixmap(str(poster_path))
+        if self.poster_pixmap.isNull():
             self.poster_layer.clear()
             self.poster_pixmap = QPixmap()
             return

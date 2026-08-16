@@ -15,7 +15,6 @@ from app.ui.poster_card import (
     PosterCardOverlay,
     get_media_key,
     icon_dimensions_for_height,
-    load_pixmap_with_red_fix,
 )
 
 
