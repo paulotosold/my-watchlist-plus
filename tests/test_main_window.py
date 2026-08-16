@@ -192,11 +192,11 @@ class FakeCabinetPage(FakePage):
 
     def __init__(self, parent=None):
         super().__init__(
-            "26 titles -- Showing: Cabinet Worthy, Custom Order",
+            "26 titles – Showing: Cabinet Worthy, Custom Order",
             parent,
         )
         self.title_count = 26
-        self.posters_per_row = 8
+        self.posters_per_row = 10
         self.posters_per_row_values = []
 
     def set_posters_per_row(self, posters_per_row):
@@ -331,7 +331,7 @@ class MainWindowShellTests(unittest.TestCase):
         self.assertFalse(self.window.cabinet_status_control.isHidden())
         self.assertEqual(
             self.window.cabinet_status_control.count_label.text(),
-            "26 titles -- Showing: Cabinet Worthy, Custom Order",
+            "26 titles – Showing: Cabinet Worthy, Custom Order",
         )
 
     def test_page_without_media_capabilities_or_top_bar_can_be_registered(self):
@@ -434,8 +434,8 @@ class MainWindowShellTests(unittest.TestCase):
 
         control.poster_size_control.minus_button.click()
 
-        self.assertEqual(self.window.cabinet_page.posters_per_row_values, [9])
-        self.assertEqual(control.posters_per_row, 9)
+        self.assertEqual(self.window.cabinet_page.posters_per_row_values, [11])
+        self.assertEqual(control.posters_per_row, 11)
         self.assertEqual(
             self.window.posters_per_row_control.posters_per_row,
             watchlist_value,
@@ -447,7 +447,7 @@ class MainWindowShellTests(unittest.TestCase):
 
         self.window.section_tabs.setCurrentIndex(0)
         self.window.section_tabs.setCurrentIndex(2)
-        self.assertEqual(control.posters_per_row, 9)
+        self.assertEqual(control.posters_per_row, 11)
 
     def test_status_messages_from_inactive_pages_are_ignored(self):
         self.window.history_page.status_message_changed.emit("new history")

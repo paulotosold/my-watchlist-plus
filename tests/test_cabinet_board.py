@@ -32,18 +32,19 @@ class CabinetBoardTests(unittest.TestCase):
         self.application.processEvents()
 
     def test_density_limits_default_and_spacing(self):
-        self.assertEqual(self.board.posters_per_row, 8)
+        self.assertEqual(self.board.posters_per_row, 10)
         first, second = self.board.cards[:2]
-        ninth = self.board.cards[8]
         self.assertEqual(second.x() - first.geometry().right() - 1, BOARD_HORIZONTAL_SPACING)
-        self.assertEqual(ninth.y() - first.geometry().bottom() - 1, BOARD_VERTICAL_SPACING)
+        self.board.set_posters_per_row(4)
+        fifth = self.board.cards[4]
+        self.assertEqual(fifth.y() - first.geometry().bottom() - 1, BOARD_VERTICAL_SPACING)
 
         self.board.set_posters_per_row(1)
         self.assertEqual(self.board.posters_per_row, 4)
         self.board.set_posters_per_row(50)
         self.assertEqual(self.board.posters_per_row, 20)
-        self.board.set_posters_per_row(8)
-        self.assertEqual(self.board.posters_per_row, 8)
+        self.board.set_posters_per_row(10)
+        self.assertEqual(self.board.posters_per_row, 10)
 
     def test_changing_columns_preserves_linear_sequence(self):
         original_ids = self.board.media_ids

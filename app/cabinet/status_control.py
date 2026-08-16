@@ -60,7 +60,7 @@ class CabinetStatusControl(QWidget):
         self._title_count = max(0, int(title_count))
         noun = "title" if self._title_count == 1 else "titles"
         text = (
-            f"{self._title_count} {noun} -- "
+            f"{self._title_count} {noun} – "
             "Showing: Cabinet Worthy, Custom Order"
         )
         self.count_label.setText(text)

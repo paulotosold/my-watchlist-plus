@@ -171,7 +171,7 @@ class CabinetPage(QWidget):
     def _on_view_state_changed(self, title_count, posters_per_row):
         noun = "title" if title_count == 1 else "titles"
         self._status_message = (
-            f"{title_count} {noun} -- Showing: Cabinet Worthy, Custom Order"
+            f"{title_count} {noun} – Showing: Cabinet Worthy, Custom Order"
         )
         self.status_message_changed.emit(self._status_message)
         self.view_state_changed.emit(title_count, posters_per_row)

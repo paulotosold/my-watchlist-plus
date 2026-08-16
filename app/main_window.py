@@ -348,7 +348,7 @@ class MainWindow(QMainWindow):
         if title_count is None:
             title_count = getattr(self.cabinet_page, "title_count", 0)
         if posters_per_row is None:
-            posters_per_row = getattr(self.cabinet_page, "posters_per_row", 8)
+            posters_per_row = getattr(self.cabinet_page, "posters_per_row", 10)
         self.cabinet_status_control.set_state(title_count, posters_per_row)
 
     def _reload_watchlist(self):

@@ -24,9 +24,9 @@ class CabinetStatusControlTests(unittest.TestCase):
     def test_has_exact_count_text_density_and_no_refresh(self):
         self.assertEqual(
             self.control.count_label.text(),
-            "0 titles -- Showing: Cabinet Worthy, Custom Order",
+            "0 titles – Showing: Cabinet Worthy, Custom Order",
         )
-        self.assertEqual(self.control.poster_size_control.posters_per_row, 8)
+        self.assertEqual(self.control.poster_size_control.posters_per_row, 10)
         self.assertEqual(self.control.poster_size_control.minimum, 4)
         self.assertEqual(self.control.poster_size_control.maximum, 20)
         self.assertFalse(hasattr(self.control, "reload_button"))
@@ -34,7 +34,7 @@ class CabinetStatusControlTests(unittest.TestCase):
         self.control.set_state(1, 12)
         self.assertEqual(
             self.control.count_label.text(),
-            "1 title -- Showing: Cabinet Worthy, Custom Order",
+            "1 title – Showing: Cabinet Worthy, Custom Order",
         )
         self.assertEqual(self.control.poster_size_control.posters_per_row, 12)
 
