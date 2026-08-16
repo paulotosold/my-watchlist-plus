@@ -87,8 +87,8 @@ def resolve_imdb_id_from_query(input_query: str) -> dict[str, Any]:
     prompt = build_imdb_id_resolution_prompt(input_query)
 
     response = client.responses.create(
-        model="gpt-5.5",
-        reasoning={"effort": "low"},
+        model="gpt-5.6-luna",
+        reasoning={"effort": "none"},
         tools=[
             {
                 "type": "web_search",
