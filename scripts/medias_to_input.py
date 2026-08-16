@@ -5,7 +5,8 @@ medias_to_input = [
         "media_type": None,
         "watch_state": "watched",
         "impression": "very_good",
-        "is_collection_pick": True,
+        "is_cabinet_worthy": True,
+        "cabinet_order": None,
         "watch_history": [
             {"date_earliest": "1999-05-01", "date_latest": "1999-06-30"},
             {"date_earliest": "2014-11-02", "date_latest": "2014-11-02"},
@@ -18,7 +19,8 @@ medias_to_input = [
         "imdb_id": "tt28069611",  # Star Wars: Starfighter (to be released)
         "watch_state": "to_watch",
         "impression": None,
-        "is_collection_pick": None,
+        "is_cabinet_worthy": None,
+        "cabinet_order": None,
         "watch_history": [],
         "notes": [],
         "lists": ["ver com o benji"],
@@ -27,7 +29,8 @@ medias_to_input = [
         "imdb_id": "tt1535108",  # Elysium
         "watch_state": "watched",
         "impression": "regret_watching",
-        "is_collection_pick": None,
+        "is_cabinet_worthy": None,
+        "cabinet_order": None,
         "watch_history": [
             {"date_earliest": "2021-07-24", "date_latest": "2021-07-24"}
         ],
@@ -41,7 +44,8 @@ medias_to_input = [
             {"season_num": 1, "episode_nums": [1, 2, 3],}
         ],
         "impression": None,
-        "is_collection_pick": None,
+        "is_cabinet_worthy": None,
+        "cabinet_order": None,
         "watch_history": [
             {"date_earliest": "2026-05-16", "date_latest": "2026-05-16"}
         ],
@@ -55,7 +59,8 @@ medias_to_input = [
         # must be recorded explicitly when that detail is known.
         "watched_episodes": "all",
         "impression": "very_good",
-        "is_collection_pick": True,
+        "is_cabinet_worthy": True,
+        "cabinet_order": None,
         "watch_history": [
             {"date_earliest": "1993-01-01", "date_latest": "1996-12-31"}
         ],

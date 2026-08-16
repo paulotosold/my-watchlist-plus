@@ -43,7 +43,7 @@ class FakeHistoryEntryWidget(QWidget):
         self,
         watch_state,
         impression,
-        is_collection_pick,
+        is_cabinet_worthy,
         *,
         confirmed,
     ):
@@ -80,7 +80,7 @@ def make_entry(
         media_type="movie",
         watch_state="watched",
         impression="good",
-        is_collection_pick=False,
+        is_cabinet_worthy=False,
     )
 
 

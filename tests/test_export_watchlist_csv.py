@@ -44,7 +44,7 @@ class ExportWatchlistCsvTests(unittest.TestCase):
             """,
             (episode_id, series_id),
         )
-        self._insert_state(later_id, "watched", "good", 1)
+        self._insert_state(later_id, "watched", "good", 1, cabinet_order=7)
         self._insert_state(earlier_id, "to_watch", None, None)
         self._insert_state(series_id, "dropped", "meh", 0)
         self._insert_state(episode_id, "watched", None, None)
@@ -61,9 +61,11 @@ class ExportWatchlistCsvTests(unittest.TestCase):
                 "Same Title",
             ],
         )
-        self.assertEqual(rows[0]["is_collection_pick"], "false")
-        self.assertEqual(rows[1]["is_collection_pick"], "")
-        self.assertEqual(rows[2]["is_collection_pick"], "true")
+        self.assertEqual(rows[0]["is_cabinet_worthy"], "false")
+        self.assertEqual(rows[1]["is_cabinet_worthy"], "")
+        self.assertEqual(rows[2]["is_cabinet_worthy"], "true")
+        self.assertEqual(rows[0]["cabinet_order"], "")
+        self.assertEqual(rows[2]["cabinet_order"], 7)
         self.assertEqual(rows[3]["impression"], "")
 
     def test_serializes_ordered_notes_history_and_lists_as_json(self):
@@ -210,7 +212,8 @@ class ExportWatchlistCsvTests(unittest.TestCase):
         media_id,
         watch_state,
         impression,
-        is_collection_pick,
+        is_cabinet_worthy,
+        cabinet_order=None,
     ):
         self.conn.execute(
             """
@@ -218,11 +221,18 @@ class ExportWatchlistCsvTests(unittest.TestCase):
                 media_id,
                 watch_state,
                 impression,
-                is_collection_pick
+                is_cabinet_worthy,
+                cabinet_order
             )
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (media_id, watch_state, impression, is_collection_pick),
+            (
+                media_id,
+                watch_state,
+                impression,
+                is_cabinet_worthy,
+                cabinet_order,
+            ),
         )
 
     def _insert_list(self, name):
@@ -240,7 +250,8 @@ class ExportWatchlistCsvTests(unittest.TestCase):
             "title": "Title",
             "watch_state": "watched",
             "impression": "",
-            "is_collection_pick": "",
+            "is_cabinet_worthy": "",
+            "cabinet_order": "",
             "notes": "[]",
             "watch_history": "[]",
             "lists": "[]",

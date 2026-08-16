@@ -561,7 +561,7 @@ class HistoryPage(QWidget):
             self._confirmed_states[entry.state_media_id] = {
                 "watch_state": entry.watch_state,
                 "impression": entry.impression,
-                "is_collection_pick": entry.is_collection_pick,
+                "is_cabinet_worthy": entry.is_cabinet_worthy,
             }
 
         self.entries_layout.addStretch(1)
@@ -653,7 +653,7 @@ class HistoryPage(QWidget):
         normalized_state = {
             "watch_state": state.get("watch_state"),
             "impression": state.get("impression"),
-            "is_collection_pick": state.get("is_collection_pick"),
+            "is_cabinet_worthy": state.get("is_cabinet_worthy"),
         }
         self._confirmed_states[media_id] = normalized_state
         self.entries = [
@@ -661,8 +661,8 @@ class HistoryPage(QWidget):
                 entry,
                 watch_state=normalized_state["watch_state"],
                 impression=normalized_state["impression"],
-                is_collection_pick=normalized_state[
-                    "is_collection_pick"
+                is_cabinet_worthy=normalized_state[
+                    "is_cabinet_worthy"
                 ],
             )
             if entry.state_media_id == media_id
@@ -680,7 +680,7 @@ class HistoryPage(QWidget):
             widget.set_state_values(
                 normalized_state["watch_state"],
                 normalized_state["impression"],
-                normalized_state["is_collection_pick"],
+                normalized_state["is_cabinet_worthy"],
                 confirmed=True,
             )
 

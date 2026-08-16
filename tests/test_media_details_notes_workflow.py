@@ -334,7 +334,8 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
             "user_data": {
                 "watch_state": "to_watch",
                 "impression": None,
-                "is_collection_pick": None,
+                "is_cabinet_worthy": None,
+                "cabinet_order": None,
                 "watch_history": [{
                     "id": 10,
                     "date_earliest": "2026-01-01",

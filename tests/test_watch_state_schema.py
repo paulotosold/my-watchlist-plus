@@ -24,6 +24,8 @@ class WatchStateSchemaTests(unittest.TestCase):
             for row in self.conn.execute("PRAGMA table_info(media_state)")
         }
         self.assertEqual(columns["watch_state"]["notnull"], 0)
+        self.assertEqual(columns["cabinet_order"]["type"], "INTEGER")
+        self.assertEqual(columns["cabinet_order"]["dflt_value"], "NULL")
 
         movie_id = self._insert_media(1, "movie", "Movie")
         self.conn.execute(
@@ -32,7 +34,7 @@ class WatchStateSchemaTests(unittest.TestCase):
                 media_id,
                 watch_state,
                 impression,
-                is_collection_pick
+                is_cabinet_worthy
             )
             VALUES (?, NULL, 'good', 1)
             """,
@@ -45,7 +47,65 @@ class WatchStateSchemaTests(unittest.TestCase):
         ).fetchone()
         self.assertIsNone(row["watch_state"])
         self.assertEqual(row["impression"], "good")
-        self.assertEqual(row["is_collection_pick"], 1)
+        self.assertEqual(row["is_cabinet_worthy"], 1)
+        self.assertIsNone(row["cabinet_order"])
+
+    def test_cabinet_order_requires_cabinet_worthy_true(self):
+        true_without_order_id = self._insert_media(2, "movie", "No order")
+        true_with_order_id = self._insert_media(3, "movie", "Ordered")
+        self.conn.execute(
+            """
+            INSERT INTO media_state (
+                media_id,
+                is_cabinet_worthy,
+                cabinet_order
+            )
+            VALUES (?, 1, NULL)
+            """,
+            (true_without_order_id,),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO media_state (
+                media_id,
+                is_cabinet_worthy,
+                cabinet_order
+            )
+            VALUES (?, 1, 4)
+            """,
+            (true_with_order_id,),
+        )
+
+        for tmdb_id, is_cabinet_worthy in ((4, 0), (5, None)):
+            media_id = self._insert_media(
+                tmdb_id,
+                "movie",
+                f"Invalid {tmdb_id}",
+            )
+
+            with self.subTest(is_cabinet_worthy=is_cabinet_worthy):
+                with self.assertRaises(sqlite3.IntegrityError):
+                    self.conn.execute(
+                        """
+                        INSERT INTO media_state (
+                            media_id,
+                            is_cabinet_worthy,
+                            cabinet_order
+                        )
+                        VALUES (?, ?, 1)
+                        """,
+                        (media_id, is_cabinet_worthy),
+                    )
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.conn.execute(
+                """
+                UPDATE media_state
+                SET is_cabinet_worthy = 0
+                WHERE media_id = ?
+                """,
+                (true_with_order_id,),
+            )
 
     def test_removed_watching_and_suggested_states_are_rejected(self):
         movie_id = self._insert_media(2, "movie", "Movie")

@@ -588,7 +588,8 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         return {
             "watch_state": watch_state,
             "impression": None,
-            "is_collection_pick": None,
+            "is_cabinet_worthy": None,
+            "cabinet_order": None,
             "watch_history": [],
             "notes": [],
             "lists": [],

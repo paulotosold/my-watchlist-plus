@@ -27,6 +27,7 @@ class MediaDetailsStateTests(unittest.TestCase):
 
         apply_inserted_ids_to_draft(draft, result)
 
+        self.assertIsNone(draft["user_data"]["cabinet_order"])
         self.assertEqual(draft["user_data"]["watch_history"][0], {"id": 10})
         self.assertEqual(
             draft["user_data"]["notes"][0],
@@ -102,7 +103,10 @@ class MediaDetailsStateTests(unittest.TestCase):
             merged["metadata"]["last_tmdb_posters_checked_at"],
             "poster-time",
         )
-        self.assertEqual(merged["user_data"], draft["user_data"])
+        self.assertEqual(
+            merged["user_data"],
+            {**draft["user_data"], "cabinet_order": None},
+        )
         self.assertEqual(len(merged["series_view"]["episodes"]), 2)
         history = merged["series_view"]["episode_watch_history"][0]
         self.assertEqual((history["season_num"], history["episode_num"]), (2, 3))
@@ -131,7 +135,10 @@ class MediaDetailsStateTests(unittest.TestCase):
 
         merged = merge_metadata_refresh(draft, payload)
 
-        self.assertEqual(merged["user_data"], {"impression": "good"})
+        self.assertEqual(
+            merged["user_data"],
+            {"impression": "good", "cabinet_order": None},
+        )
         self.assertEqual(
             merged["series_view"]["episodes"][0],
             {

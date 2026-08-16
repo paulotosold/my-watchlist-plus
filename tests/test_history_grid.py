@@ -53,7 +53,7 @@ def make_entry(
         media_type="movie",
         watch_state="watched",
         impression="good",
-        is_collection_pick=False,
+        is_cabinet_worthy=False,
     )
 
 

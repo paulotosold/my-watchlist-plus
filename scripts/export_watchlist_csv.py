@@ -24,7 +24,8 @@ FIELDNAMES = (
     "title",
     "watch_state",
     "impression",
-    "is_collection_pick",
+    "is_cabinet_worthy",
+    "cabinet_order",
     "notes",
     "watch_history",
     "lists",
@@ -47,8 +48,13 @@ def collect_watchlist_rows(conn):
             "title": _format_title(media),
             "watch_state": media["watch_state"] or "",
             "impression": media["impression"] or "",
-            "is_collection_pick": _format_optional_bool(
-                media["is_collection_pick"]
+            "is_cabinet_worthy": _format_optional_bool(
+                media["is_cabinet_worthy"]
+            ),
+            "cabinet_order": (
+                ""
+                if media["cabinet_order"] is None
+                else media["cabinet_order"]
             ),
             "notes": _to_json(notes_by_media_id[media_id]),
             "watch_history": _to_json(history_by_media_id[media_id]),
@@ -122,7 +128,8 @@ def _get_watchlist_media(conn):
             m.title,
             ms.watch_state,
             ms.impression,
-            ms.is_collection_pick,
+            ms.is_cabinet_worthy,
+            ms.cabinet_order,
             parent_series.title AS series_title,
             ed.season_num,
             ed.episode_num

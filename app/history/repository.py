@@ -33,7 +33,7 @@ class HistoryEntry:
     media_type: str
     watch_state: str | None
     impression: str | None
-    is_collection_pick: bool | None
+    is_cabinet_worthy: bool | None
     episodes: tuple[dict[str, Any], ...] = ()
 
 
@@ -120,8 +120,8 @@ def _build_direct_entry(row) -> HistoryEntry:
         media_type=row["display_media_type"],
         watch_state=row.get("display_watch_state"),
         impression=row.get("display_impression"),
-        is_collection_pick=_optional_bool(
-            row.get("display_is_collection_pick")
+        is_cabinet_worthy=_optional_bool(
+            row.get("display_is_cabinet_worthy")
         ),
     )
 
@@ -209,8 +209,8 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         media_type=representative["display_media_type"],
         watch_state=representative.get("display_watch_state"),
         impression=representative.get("display_impression"),
-        is_collection_pick=_optional_bool(
-            representative.get("display_is_collection_pick")
+        is_cabinet_worthy=_optional_bool(
+            representative.get("display_is_cabinet_worthy")
         ),
         episodes=episodes,
     )
@@ -272,8 +272,8 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
         media_type=representative["owner_media_type"],
         watch_state=representative.get("owner_watch_state"),
         impression=representative.get("owner_impression"),
-        is_collection_pick=_optional_bool(
-            representative.get("owner_is_collection_pick")
+        is_cabinet_worthy=_optional_bool(
+            representative.get("owner_is_cabinet_worthy")
         ),
         episodes=episodes,
     )
@@ -379,10 +379,10 @@ _DEFAULT_HISTORY_QUERY = """
         summary.first_air_date AS series_first_air_date,
         owner_state.watch_state AS owner_watch_state,
         owner_state.impression AS owner_impression,
-        owner_state.is_collection_pick AS owner_is_collection_pick,
+        owner_state.is_cabinet_worthy AS owner_is_cabinet_worthy,
         display_state.watch_state AS display_watch_state,
         display_state.impression AS display_impression,
-        display_state.is_collection_pick AS display_is_collection_pick,
+        display_state.is_cabinet_worthy AS display_is_cabinet_worthy,
         owner_poster.filename AS owner_poster_filename,
         owner_poster.source AS owner_poster_source,
         owner_poster.curation_status AS owner_poster_curation_status,

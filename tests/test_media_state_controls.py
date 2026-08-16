@@ -10,8 +10,8 @@ from PySide6.QtWidgets import QApplication
 from app.paths import ASSETS_DIR
 from app.ui.clickable_entry_label import ClickableEntryLabel
 from app.ui.media_state_controls import (
-    COLLECTION_PICK_LABEL,
-    COLLECTION_PICK_OPTIONS,
+    CABINET_WORTHY_LABEL,
+    CABINET_WORTHY_OPTIONS,
     IMPRESSION_OPTIONS,
     MEDIA_STATE_COMBO_STYLE,
     STATUS_OPTIONS_BY_MEDIA_TYPE,
@@ -39,14 +39,14 @@ class MediaStateControlsTests(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            COLLECTION_PICK_OPTIONS,
+            CABINET_WORTHY_OPTIONS,
             (
                 (None, "Undecided"),
                 (True, "Yes!"),
                 (False, "No"),
             ),
         )
-        self.assertEqual(COLLECTION_PICK_LABEL, "Cabinet Worthy?")
+        self.assertEqual(CABINET_WORTHY_LABEL, "Cabinet Worthy?")
 
     def test_combo_style_uses_cwd_independent_dropdown_path(self):
         dropdown_path = ASSETS_DIR / "dropdown_arrow.svg"

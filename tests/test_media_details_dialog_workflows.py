@@ -88,18 +88,17 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
 
         labels = [label.text() for label in dialog.findChildren(QLabel)]
         self.assertIn("Cabinet Worthy?", labels)
-        self.assertNotIn("Collection Pick", labels)
         self.assertEqual(
             [
                 (
-                    dialog.collection_combo.itemData(index),
-                    dialog.collection_combo.itemText(index),
+                    dialog.cabinet_combo.itemData(index),
+                    dialog.cabinet_combo.itemText(index),
                 )
-                for index in range(dialog.collection_combo.count())
+                for index in range(dialog.cabinet_combo.count())
             ],
             [(None, "Undecided"), (True, "Yes!"), (False, "No")],
         )
-        self.assertIsNone(dialog.collection_combo.currentData())
+        self.assertIsNone(dialog.cabinet_combo.currentData())
         dialog.reject()
 
     def test_reload_merges_catalog_and_preserves_pending_user_edit(self):
@@ -1129,7 +1128,8 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
             "user_data": {
                 "watch_state": watch_state,
                 "impression": None,
-                "is_collection_pick": None,
+                "is_cabinet_worthy": None,
+                "cabinet_order": None,
                 "watch_history": [],
                 "notes": [],
                 "lists": [],

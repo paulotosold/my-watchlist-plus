@@ -203,7 +203,8 @@ CREATE TABLE IF NOT EXISTS media_state (
 
     watch_state TEXT,
     impression TEXT,
-    is_collection_pick INTEGER,
+    is_cabinet_worthy INTEGER,
+    cabinet_order INTEGER DEFAULT NULL,
 
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT,
@@ -233,7 +234,8 @@ CREATE TABLE IF NOT EXISTS media_state (
         )
     ),
 
-    CHECK (is_collection_pick IS NULL OR is_collection_pick IN (0, 1))
+    CHECK (is_cabinet_worthy IS NULL OR is_cabinet_worthy IN (0, 1)),
+    CHECK (cabinet_order IS NULL OR is_cabinet_worthy IS 1)
 );
 
 CREATE TRIGGER IF NOT EXISTS trg_media_state_validate_insert

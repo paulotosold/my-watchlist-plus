@@ -7,6 +7,7 @@ from copy import deepcopy
 
 def apply_inserted_ids_to_draft(media_draft, save_result):
     """Apply post-commit IDs without ever exposing rolled-back IDs to a draft."""
+    _ensure_cabinet_order(media_draft)
     mappings = save_result.get("inserted_ids_by_draft_id") or {}
     _apply_event_ids(
         (media_draft.get("user_data") or {}).get("watch_history", []),
@@ -32,6 +33,7 @@ def apply_inserted_ids_to_draft(media_draft, save_result):
 def merge_metadata_refresh(media_draft, refresh_payload):
     """Return a catalog-refreshed draft while preserving all user-owned data."""
     merged = deepcopy(media_draft)
+    _ensure_cabinet_order(merged)
     snapshot = refresh_payload.get("snapshot") or {}
     refresh_result = refresh_payload.get("refresh_result") or {}
     refreshed_metadata = refresh_result.get("metadata") or snapshot.get("metadata")
@@ -71,6 +73,16 @@ def merge_metadata_refresh(media_draft, refresh_payload):
         "episode_watch_history": episode_history,
     }
     return merged
+
+
+def _ensure_cabinet_order(media_draft):
+    user_data = media_draft.get("user_data")
+
+    if user_data is None:
+        user_data = {}
+        media_draft["user_data"] = user_data
+
+    user_data.setdefault("cabinet_order", None)
 
 
 def _apply_event_ids(events, mapping, id_key):

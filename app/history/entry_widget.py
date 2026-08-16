@@ -12,8 +12,8 @@ from PySide6.QtWidgets import (
 
 from app.ui.clickable_entry_label import ClickableEntryLabel
 from app.ui.media_state_controls import (
-    COLLECTION_PICK_LABEL,
-    COLLECTION_PICK_OPTIONS,
+    CABINET_WORTHY_LABEL,
+    CABINET_WORTHY_OPTIONS,
     IMPRESSION_OPTIONS,
     MEDIA_STATE_COMBO_MIN_HEIGHT,
     MEDIA_STATE_COMBO_STYLE,
@@ -55,7 +55,7 @@ class HistoryEntryWidget(QWidget):
         self._confirmed_state = {
             "watch_state": entry.watch_state,
             "impression": entry.impression,
-            "is_collection_pick": entry.is_collection_pick,
+            "is_cabinet_worthy": entry.is_cabinet_worthy,
         }
 
         self.setObjectName("historyEntry")
@@ -63,7 +63,7 @@ class HistoryEntryWidget(QWidget):
         self.set_state_values(
             entry.watch_state,
             entry.impression,
-            entry.is_collection_pick,
+            entry.is_cabinet_worthy,
             confirmed=True,
         )
 
@@ -119,7 +119,7 @@ class HistoryEntryWidget(QWidget):
 
         self.status_combo = self._make_combo(self.details_widget)
         self.impression_combo = self._make_combo(self.details_widget)
-        self.collection_combo = self._make_combo(self.details_widget)
+        self.cabinet_combo = self._make_combo(self.details_widget)
 
         details_layout.addWidget(self.title_label)
         self.status_label = self._add_combo_field(
@@ -132,10 +132,10 @@ class HistoryEntryWidget(QWidget):
             "Impression",
             self.impression_combo,
         )
-        self.collection_label = self._add_combo_field(
+        self.cabinet_label = self._add_combo_field(
             details_layout,
-            COLLECTION_PICK_LABEL,
-            self.collection_combo,
+            CABINET_WORTHY_LABEL,
+            self.cabinet_combo,
         )
         details_layout.addStretch()
 
@@ -149,9 +149,9 @@ class HistoryEntryWidget(QWidget):
         self.impression_combo.activated.connect(
             lambda _index: self._request_state_change("impression")
         )
-        self.collection_combo.activated.connect(
+        self.cabinet_combo.activated.connect(
             lambda _index: self._request_state_change(
-                "is_collection_pick"
+                "is_cabinet_worthy"
             )
         )
 
@@ -201,7 +201,7 @@ class HistoryEntryWidget(QWidget):
         combo = {
             "watch_state": self.status_combo,
             "impression": self.impression_combo,
-            "is_collection_pick": self.collection_combo,
+            "is_cabinet_worthy": self.cabinet_combo,
         }[field]
         expected_value = self._confirmed_state[field]
         desired_value = combo.currentData()
@@ -220,14 +220,14 @@ class HistoryEntryWidget(QWidget):
         self,
         watch_state,
         impression,
-        is_collection_pick,
+        is_cabinet_worthy,
         *,
         confirmed,
     ):
         combos = (
             self.status_combo,
             self.impression_combo,
-            self.collection_combo,
+            self.cabinet_combo,
         )
 
         for combo in combos:
@@ -251,14 +251,14 @@ class HistoryEntryWidget(QWidget):
         else:
             set_combo_value(self.impression_combo, impression)
 
-        if self.collection_combo.count() == 0:
+        if self.cabinet_combo.count() == 0:
             populate_combo(
-                self.collection_combo,
-                COLLECTION_PICK_OPTIONS,
-                is_collection_pick,
+                self.cabinet_combo,
+                CABINET_WORTHY_OPTIONS,
+                is_cabinet_worthy,
             )
         else:
-            set_combo_value(self.collection_combo, is_collection_pick)
+            set_combo_value(self.cabinet_combo, is_cabinet_worthy)
 
         for combo in combos:
             combo.blockSignals(False)
@@ -267,7 +267,7 @@ class HistoryEntryWidget(QWidget):
             self._confirmed_state = {
                 "watch_state": watch_state,
                 "impression": impression,
-                "is_collection_pick": is_collection_pick,
+                "is_cabinet_worthy": is_cabinet_worthy,
             }
 
             for combo in combos:
@@ -276,4 +276,4 @@ class HistoryEntryWidget(QWidget):
     def set_editing_enabled(self, enabled):
         self.status_combo.setEnabled(enabled)
         self.impression_combo.setEnabled(enabled)
-        self.collection_combo.setEnabled(enabled)
+        self.cabinet_combo.setEnabled(enabled)

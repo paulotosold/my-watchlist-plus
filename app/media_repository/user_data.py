@@ -17,7 +17,8 @@ def get_empty_media_user_data():
     return {
         "watch_state": None,
         "impression": None,
-        "is_collection_pick": None,
+        "is_cabinet_worthy": None,
+        "cabinet_order": None,
         "watch_history": [],
         "notes": [],
         "lists": [],
@@ -36,7 +37,8 @@ def get_db_media_user_data(conn, metadata):
         SELECT
             watch_state,
             impression,
-            is_collection_pick
+            is_cabinet_worthy,
+            cabinet_order
         FROM media_state
         WHERE media_id = ?
         """,
@@ -48,11 +50,12 @@ def get_db_media_user_data(conn, metadata):
     if state is not None:
         user_data["watch_state"] = state["watch_state"]
         user_data["impression"] = state["impression"]
-        user_data["is_collection_pick"] = (
+        user_data["is_cabinet_worthy"] = (
             None
-            if state["is_collection_pick"] is None
-            else bool(state["is_collection_pick"])
+            if state["is_cabinet_worthy"] is None
+            else bool(state["is_cabinet_worthy"])
         )
+        user_data["cabinet_order"] = state["cabinet_order"]
 
     cursor = conn.execute(
         """
@@ -251,11 +254,11 @@ def _prepare_watch_history_for_save(
 def _save_media_state(conn, media_id, user_data):
     watch_state = user_data.get("watch_state")
     impression = user_data.get("impression")
-    is_collection_pick = _to_db_bool(user_data.get("is_collection_pick"))
+    is_cabinet_worthy = _to_db_bool(user_data.get("is_cabinet_worthy"))
     media_type = _get_media_type(conn, media_id)
     validate_watch_state(media_type, watch_state)
 
-    if watch_state is None and impression is None and is_collection_pick is None:
+    if watch_state is None and impression is None and is_cabinet_worthy is None:
         conn.execute(
             """
             DELETE FROM media_state
@@ -271,20 +274,20 @@ def _save_media_state(conn, media_id, user_data):
             media_id,
             watch_state,
             impression,
-            is_collection_pick
+            is_cabinet_worthy
         )
         VALUES (?, ?, ?, ?)
         ON CONFLICT (media_id) DO UPDATE SET
             watch_state = excluded.watch_state,
             impression = excluded.impression,
-            is_collection_pick = excluded.is_collection_pick,
+            is_cabinet_worthy = excluded.is_cabinet_worthy,
             updated_at = CURRENT_TIMESTAMP
         """,
         (
             media_id,
             watch_state,
             impression,
-            is_collection_pick,
+            is_cabinet_worthy,
         ),
     )
 
@@ -347,7 +350,7 @@ def _delete_empty_media_state(conn, media_id):
         WHERE media_id = ?
           AND watch_state IS NULL
           AND impression IS NULL
-          AND is_collection_pick IS NULL
+          AND is_cabinet_worthy IS NULL
         """,
         (media_id,),
     )
@@ -1038,7 +1041,7 @@ def _validate_existing_draft_identity(
     return dict(row)
 
 def _normalize_state_value(field, value):
-    if field == "is_collection_pick" and value is not None:
+    if field == "is_cabinet_worthy" and value is not None:
         return bool(value)
     return value
 
@@ -1056,7 +1059,7 @@ def get_media_state(conn, media_id):
         SELECT
             watch_state,
             impression,
-            is_collection_pick
+            is_cabinet_worthy
         FROM media_state
         WHERE media_id = ?
         """,
@@ -1067,10 +1070,10 @@ def get_media_state(conn, media_id):
         "media_id": media_id,
         "watch_state": state["watch_state"] if state is not None else None,
         "impression": state["impression"] if state is not None else None,
-        "is_collection_pick": (
+        "is_cabinet_worthy": (
             None
-            if state is None or state["is_collection_pick"] is None
-            else bool(state["is_collection_pick"])
+            if state is None or state["is_cabinet_worthy"] is None
+            else bool(state["is_cabinet_worthy"])
         ),
     }
 
@@ -1081,7 +1084,7 @@ def apply_media_state_patch(
     changes,
 ):
     """Patch History-editable state fields with optimistic concurrency checks."""
-    editable_fields = ("watch_state", "impression", "is_collection_pick")
+    editable_fields = ("watch_state", "impression", "is_cabinet_worthy")
     expected_values = dict(expected_values or {})
     changes = dict(changes or {})
 
@@ -1117,10 +1120,10 @@ def apply_media_state_patch(
             raise ValueError("Unsupported impression value.")
 
         if (
-            "is_collection_pick" in values
-            and values["is_collection_pick"] not in {None, True, False}
+            "is_cabinet_worthy" in values
+            and values["is_cabinet_worthy"] not in {None, True, False}
         ):
-            raise ValueError("Unsupported collection pick value.")
+            raise ValueError("Unsupported cabinet worthy value.")
 
     current_state = get_media_state(conn, media_id)
     normalized_changes = {
@@ -1168,13 +1171,13 @@ def apply_media_state_patch(
             WHERE media_id = ?
               AND watch_state IS ?
               AND impression IS ?
-              AND is_collection_pick IS ?
+              AND is_cabinet_worthy IS ?
             """,
             (
                 media_id,
                 current_state["watch_state"],
                 current_state["impression"],
-                _to_db_bool(current_state["is_collection_pick"]),
+                _to_db_bool(current_state["is_cabinet_worthy"]),
             ),
         )
 
@@ -1198,7 +1201,7 @@ def apply_media_state_patch(
                     media_id,
                     watch_state,
                     impression,
-                    is_collection_pick
+                    is_cabinet_worthy
                 )
                 VALUES (?, ?, ?, ?)
                 """,
@@ -1206,7 +1209,7 @@ def apply_media_state_patch(
                     media_id,
                     values_to_write["watch_state"],
                     values_to_write["impression"],
-                    _to_db_bool(values_to_write["is_collection_pick"]),
+                    _to_db_bool(values_to_write["is_cabinet_worthy"]),
                 ),
             )
         except sqlite3.IntegrityError as exc:
@@ -1224,7 +1227,7 @@ def apply_media_state_patch(
     assignments = ", ".join(f"{field} = ?" for field in fields_to_write)
     parameters = [
         _to_db_bool(normalized_changes[field])
-        if field == "is_collection_pick"
+        if field == "is_cabinet_worthy"
         else normalized_changes[field]
         for field in fields_to_write
     ]
@@ -1234,7 +1237,7 @@ def apply_media_state_patch(
     )
     expected_parameters = [
         _to_db_bool(normalized_expected[field])
-        if field == "is_collection_pick"
+        if field == "is_cabinet_worthy"
         else normalized_expected[field]
         for field in fields_to_write
     ]
@@ -1272,10 +1275,10 @@ def _apply_media_state_field_changes(
     baseline_user_data,
     current_user_data,
 ):
-    fields = ("watch_state", "impression", "is_collection_pick")
+    fields = ("watch_state", "impression", "is_cabinet_worthy")
     state_row = conn.execute(
         """
-        SELECT watch_state, impression, is_collection_pick
+        SELECT watch_state, impression, is_cabinet_worthy
         FROM media_state
         WHERE media_id = ?
         """,
@@ -1333,7 +1336,7 @@ def _apply_media_state_field_changes(
                 media_id,
                 watch_state,
                 impression,
-                is_collection_pick
+                is_cabinet_worthy
             )
             VALUES (?, ?, ?, ?)
             """,
@@ -1341,7 +1344,7 @@ def _apply_media_state_field_changes(
                 media_id,
                 values_to_write["watch_state"],
                 values_to_write["impression"],
-                _to_db_bool(values_to_write["is_collection_pick"]),
+                _to_db_bool(values_to_write["is_cabinet_worthy"]),
             ),
         )
         return len(changed_fields)
@@ -1349,7 +1352,7 @@ def _apply_media_state_field_changes(
     assignments = ", ".join(f"{field} = ?" for field in changed_fields)
     parameters = [
         _to_db_bool(values_to_write[field])
-        if field == "is_collection_pick"
+        if field == "is_cabinet_worthy"
         else values_to_write[field]
         for field in changed_fields
     ]

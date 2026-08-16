@@ -68,8 +68,8 @@ from app.media_user_data.watch_history_formatters import (
 )
 from app.ui.clickable_entry_label import ClickableEntryLabel
 from app.ui.media_state_controls import (
-    COLLECTION_PICK_LABEL,
-    COLLECTION_PICK_OPTIONS,
+    CABINET_WORTHY_LABEL,
+    CABINET_WORTHY_OPTIONS,
     IMPRESSION_OPTIONS,
     MEDIA_STATE_COMBO_MIN_HEIGHT,
     MEDIA_STATE_COMBO_STYLE,
@@ -454,14 +454,14 @@ class MediaDetailsDialog(QDialog):
         )
         self.status_combo.activated.connect(self._on_status_activated)
         self.impression_combo = self._make_combo(panel_widget)
-        self.collection_combo = self._make_combo(panel_widget)
+        self.cabinet_combo = self._make_combo(panel_widget)
 
         self._add_combo_row(panel_layout, "Status", self.status_combo)
         self._add_combo_row(panel_layout, "Impression", self.impression_combo)
         self._add_combo_row(
             panel_layout,
-            COLLECTION_PICK_LABEL,
-            self.collection_combo,
+            CABINET_WORTHY_LABEL,
+            self.cabinet_combo,
         )
         panel_layout.addStretch()
 
@@ -620,9 +620,9 @@ class MediaDetailsDialog(QDialog):
         self.status_combo.reset_user_activation_baseline()
         populate_combo(self.impression_combo, IMPRESSION_OPTIONS, user_data.get("impression"))
         populate_combo(
-            self.collection_combo,
-            COLLECTION_PICK_OPTIONS,
-            user_data.get("is_collection_pick"),
+            self.cabinet_combo,
+            CABINET_WORTHY_OPTIONS,
+            user_data.get("is_cabinet_worthy"),
         )
 
     def render_watch_history(self):
@@ -1607,6 +1607,7 @@ class MediaDetailsDialog(QDialog):
 
     def _apply_form_to_draft(self):
         user_data = deepcopy(self.media_draft.get("user_data") or {})
+        user_data.setdefault("cabinet_order", None)
         user_data["watch_state"] = self.status_combo.currentData()
 
         if self._is_episode() and user_data["watch_state"] == "watched":
@@ -1620,7 +1621,7 @@ class MediaDetailsDialog(QDialog):
                 })
 
         user_data["impression"] = self.impression_combo.currentData()
-        user_data["is_collection_pick"] = self.collection_combo.currentData()
+        user_data["is_cabinet_worthy"] = self.cabinet_combo.currentData()
         user_data["lists"] = self._collect_selected_lists(user_data.get("lists", []))
         self.media_draft["user_data"] = user_data
 

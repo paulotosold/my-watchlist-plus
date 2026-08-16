@@ -39,6 +39,35 @@ class MediaRepositoryWatchStateTests(unittest.TestCase):
         media_repository.save_media_draft(self.conn, draft)
         self.assertIsNone(self._state(media_id))
 
+    def test_cabinet_order_is_loaded_but_not_saved_from_drafts(self):
+        draft = self._movie_draft(
+            2,
+            self._user_data(
+                watch_state="to_watch",
+                is_cabinet_worthy=True,
+                cabinet_order=7,
+            ),
+        )
+        media_id = media_repository.save_media_draft(self.conn, draft)
+
+        self.assertIsNone(self._state(media_id)["cabinet_order"])
+
+        self.conn.execute(
+            "UPDATE media_state SET cabinet_order = 4 WHERE media_id = ?",
+            (media_id,),
+        )
+        loaded = media_repository.get_db_media_user_data(
+            self.conn,
+            draft["metadata"],
+        )
+        self.assertEqual(loaded["cabinet_order"], 4)
+
+        loaded["cabinet_order"] = 9
+        draft["user_data"] = loaded
+        media_repository.save_media_draft(self.conn, draft)
+
+        self.assertEqual(self._state(media_id)["cabinet_order"], 4)
+
     def test_direct_episode_history_delta_preserves_later_override(self):
         series_id = self._insert_media(10, "series", "Series")
         draft = self._episode_draft(
@@ -347,13 +376,15 @@ class MediaRepositoryWatchStateTests(unittest.TestCase):
         self,
         watch_state=None,
         impression=None,
-        is_collection_pick=None,
+        is_cabinet_worthy=None,
+        cabinet_order=None,
         watch_history=None,
     ):
         return {
             "watch_state": watch_state,
             "impression": impression,
-            "is_collection_pick": is_collection_pick,
+            "is_cabinet_worthy": is_cabinet_worthy,
+            "cabinet_order": cabinet_order,
             "watch_history": list(watch_history or []),
             "notes": [],
             "lists": [],
@@ -392,7 +423,11 @@ class MediaRepositoryWatchStateTests(unittest.TestCase):
     def _state(self, media_id):
         row = self.conn.execute(
             """
-            SELECT watch_state, impression, is_collection_pick
+            SELECT
+                watch_state,
+                impression,
+                is_cabinet_worthy,
+                cabinet_order
             FROM media_state
             WHERE media_id = ?
             """,

@@ -45,7 +45,7 @@ def make_entry(
     media_type="movie",
     watch_state="watched",
     impression="good",
-    is_collection_pick=False,
+    is_cabinet_worthy=False,
     poster=None,
 ):
     details_media_id = details_media_id or state_media_id
@@ -67,7 +67,7 @@ def make_entry(
         media_type=media_type,
         watch_state=watch_state,
         impression=impression,
-        is_collection_pick=is_collection_pick,
+        is_cabinet_worthy=is_cabinet_worthy,
     )
 
 
@@ -252,14 +252,14 @@ class HistoryPageTests(unittest.TestCase):
         def persist(_conn, media_id, expected_values, changes):
             self.assertEqual(media_id, 10)
             self.assertFalse(first_widget.impression_combo.isEnabled())
-            self.assertFalse(second_widget.collection_combo.isEnabled())
+            self.assertFalse(second_widget.cabinet_combo.isEnabled())
             self.assertEqual(expected_values, {"impression": "good"})
             self.assertEqual(changes, {"impression": "very_good"})
             return {
                 "media_id": media_id,
                 "watch_state": "watched",
                 "impression": "very_good",
-                "is_collection_pick": False,
+                "is_cabinet_worthy": False,
             }
 
         with patch(
@@ -278,7 +278,7 @@ class HistoryPageTests(unittest.TestCase):
             for entry in self.page.entries
         ))
         self.assertTrue(first_widget.impression_combo.isEnabled())
-        self.assertTrue(second_widget.collection_combo.isEnabled())
+        self.assertTrue(second_widget.cabinet_combo.isEnabled())
         self.assertEqual(library_spy.count(), 1)
         self.assertIn("BEGIN IMMEDIATE", self.connections[-1].statements)
 
@@ -297,7 +297,7 @@ class HistoryPageTests(unittest.TestCase):
                 "media_id": media_id,
                 "watch_state": "to_watch",
                 "impression": "good",
-                "is_collection_pick": False,
+                "is_cabinet_worthy": False,
             }
 
         with patch(
@@ -316,7 +316,7 @@ class HistoryPageTests(unittest.TestCase):
             for entry in self.page.entries
         ))
         self.assertTrue(first_widget.status_combo.isEnabled())
-        self.assertTrue(second_widget.collection_combo.isEnabled())
+        self.assertTrue(second_widget.cabinet_combo.isEnabled())
         self.assertEqual(library_spy.count(), 1)
 
     def test_failed_save_rolls_back_to_confirmed_values(self):
@@ -330,12 +330,12 @@ class HistoryPageTests(unittest.TestCase):
             ),
             patch("app.history.page.QMessageBox.warning") as warning,
         ):
-            combo = first_widget.collection_combo
+            combo = first_widget.cabinet_combo
             combo.setCurrentIndex(combo.findData(True))
             combo.activated.emit(combo.currentIndex())
 
-        self.assertFalse(first_widget.collection_combo.currentData())
-        self.assertFalse(second_widget.collection_combo.currentData())
+        self.assertFalse(first_widget.cabinet_combo.currentData())
+        self.assertFalse(second_widget.cabinet_combo.currentData())
         warning.assert_called_once()
         self.assertIn("database is busy", warning.call_args.args[2])
 
@@ -355,7 +355,7 @@ class HistoryPageTests(unittest.TestCase):
                     "media_id": 10,
                     "watch_state": "watched",
                     "impression": "meh",
-                    "is_collection_pick": True,
+                    "is_cabinet_worthy": True,
                 },
             ) as reload_state,
             patch("app.history.page.QMessageBox.warning") as warning,
@@ -367,11 +367,11 @@ class HistoryPageTests(unittest.TestCase):
         reload_state.assert_called_once()
         self.assertEqual(first_widget.impression_combo.currentData(), "meh")
         self.assertEqual(second_widget.impression_combo.currentData(), "meh")
-        self.assertTrue(first_widget.collection_combo.currentData())
-        self.assertTrue(second_widget.collection_combo.currentData())
+        self.assertTrue(first_widget.cabinet_combo.currentData())
+        self.assertTrue(second_widget.cabinet_combo.currentData())
         self.assertTrue(all(
             entry.impression == "meh"
-            and entry.is_collection_pick is True
+            and entry.is_cabinet_worthy is True
             for entry in self.page.entries
         ))
         self.assertEqual(library_spy.count(), 1)
@@ -440,8 +440,8 @@ class HistoryEntryWidgetTests(unittest.TestCase):
                 widget.status_combo,
                 widget.impression_label,
                 widget.impression_combo,
-                widget.collection_label,
-                widget.collection_combo,
+                widget.cabinet_label,
+                widget.cabinet_combo,
             )
 
             self.assertGreater(widget.details_widget.width(), 190)
@@ -461,11 +461,11 @@ class HistoryEntryWidgetTests(unittest.TestCase):
             )
             self.assertEqual(widget.status_label.text(), "Status")
             self.assertEqual(widget.impression_label.text(), "Impression")
-            self.assertEqual(widget.collection_label.text(), "Cabinet Worthy?")
+            self.assertEqual(widget.cabinet_label.text(), "Cabinet Worthy?")
             self.assertEqual(
                 [
-                    widget.collection_combo.itemText(index)
-                    for index in range(widget.collection_combo.count())
+                    widget.cabinet_combo.itemText(index)
+                    for index in range(widget.cabinet_combo.count())
                 ],
                 ["Undecided", "Yes!", "No"],
             )
@@ -473,7 +473,7 @@ class HistoryEntryWidgetTests(unittest.TestCase):
             for combo in (
                 widget.status_combo,
                 widget.impression_combo,
-                widget.collection_combo,
+                widget.cabinet_combo,
             ):
                 self.assertEqual(combo.width(), 190)
                 self.assertGreaterEqual(combo.minimumHeight(), 30)

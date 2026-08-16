@@ -27,7 +27,7 @@ class HistoryRepositoryTests(unittest.TestCase):
             movie_id,
             watch_state="watched",
             impression="very_good",
-            is_collection_pick=True,
+            is_cabinet_worthy=True,
         )
         movie_history_id = self._insert_history(
             movie_id,
@@ -53,7 +53,7 @@ class HistoryRepositoryTests(unittest.TestCase):
         self._set_state(
             series_id,
             impression="good",
-            is_collection_pick=False,
+            is_cabinet_worthy=False,
         )
         self._insert_poster(series_id, "fallout.jpg", "selected")
         self._insert_season_poster(
@@ -80,7 +80,7 @@ class HistoryRepositoryTests(unittest.TestCase):
             episode_1,
             watch_state="watched",
             impression="meh",
-            is_collection_pick=True,
+            is_cabinet_worthy=True,
         )
         self._set_state(episode_2, watch_state="watched")
         self._insert_poster(
@@ -168,7 +168,7 @@ class HistoryRepositoryTests(unittest.TestCase):
         self.assertEqual(rewatch.media_type, "episode")
         self.assertEqual(rewatch.watch_state, "watched")
         self.assertEqual(rewatch.impression, "meh")
-        self.assertTrue(rewatch.is_collection_pick)
+        self.assertTrue(rewatch.is_cabinet_worthy)
         self.assertEqual(
             rewatch.poster["filename"],
             "episode-one.jpg",
@@ -193,7 +193,7 @@ class HistoryRepositoryTests(unittest.TestCase):
         self.assertEqual(first_session.media_type, "series")
         self.assertIsNone(first_session.watch_state)
         self.assertEqual(first_session.impression, "good")
-        self.assertFalse(first_session.is_collection_pick)
+        self.assertFalse(first_session.is_cabinet_worthy)
         self.assertEqual(
             first_session.poster["filename"],
             "fallout-season-one.jpg",
@@ -490,7 +490,7 @@ class HistoryRepositoryTests(unittest.TestCase):
         media_id,
         watch_state=None,
         impression=None,
-        is_collection_pick=None,
+        is_cabinet_worthy=None,
     ):
         self.conn.execute(
             """
@@ -498,7 +498,7 @@ class HistoryRepositoryTests(unittest.TestCase):
                 media_id,
                 watch_state,
                 impression,
-                is_collection_pick
+                is_cabinet_worthy
             )
             VALUES (?, ?, ?, ?)
             """,
@@ -508,8 +508,8 @@ class HistoryRepositoryTests(unittest.TestCase):
                 impression,
                 (
                     None
-                    if is_collection_pick is None
-                    else int(is_collection_pick)
+                    if is_cabinet_worthy is None
+                    else int(is_cabinet_worthy)
                 ),
             ),
         )
@@ -616,7 +616,7 @@ class MediaStatePatchTests(unittest.TestCase):
                 media_id,
                 watch_state,
                 impression,
-                is_collection_pick
+                is_cabinet_worthy
             )
             VALUES (?, 'watched', 'good', 0)
             """,
@@ -638,7 +638,7 @@ class MediaStatePatchTests(unittest.TestCase):
             "media_id": self.media_id,
             "watch_state": "watched",
             "impression": "very_good",
-            "is_collection_pick": False,
+            "is_cabinet_worthy": False,
         })
 
     def test_patch_is_idempotent_when_desired_value_is_already_current(self):
@@ -661,7 +661,7 @@ class MediaStatePatchTests(unittest.TestCase):
 
         self.assertEqual(state["watch_state"], "to_watch")
         self.assertEqual(state["impression"], "good")
-        self.assertFalse(state["is_collection_pick"])
+        self.assertFalse(state["is_cabinet_worthy"])
         self.assertEqual(
             self.conn.execute(
                 "SELECT watch_state FROM media_state WHERE media_id = ?",
@@ -708,29 +708,29 @@ class MediaStatePatchTests(unittest.TestCase):
         created = media_repository.apply_media_state_patch(
             self.conn,
             media_id,
-            expected_values={"is_collection_pick": None},
-            changes={"is_collection_pick": True},
+            expected_values={"is_cabinet_worthy": None},
+            changes={"is_cabinet_worthy": True},
         )
-        self.assertTrue(created["is_collection_pick"])
+        self.assertTrue(created["is_cabinet_worthy"])
 
         cleared = media_repository.apply_media_state_patch(
             self.conn,
             media_id,
-            expected_values={"is_collection_pick": True},
-            changes={"is_collection_pick": None},
+            expected_values={"is_cabinet_worthy": True},
+            changes={"is_cabinet_worthy": None},
         )
         self.assertEqual(cleared, {
             "media_id": media_id,
             "watch_state": None,
             "impression": None,
-            "is_collection_pick": None,
+            "is_cabinet_worthy": None,
         })
         self.assertIsNone(self.conn.execute(
             "SELECT 1 FROM media_state WHERE media_id = ?",
             (media_id,),
         ).fetchone())
 
-    def test_patch_rejects_invalid_collection_pick_value(self):
+    def test_patch_rejects_invalid_cabinet_worthy_value(self):
         for expected, desired in (
             (False, "yes"),
             ("false", True),
@@ -741,9 +741,9 @@ class MediaStatePatchTests(unittest.TestCase):
                         self.conn,
                         self.media_id,
                         expected_values={
-                            "is_collection_pick": expected,
+                            "is_cabinet_worthy": expected,
                         },
-                        changes={"is_collection_pick": desired},
+                        changes={"is_cabinet_worthy": desired},
                     )
 
     def test_patch_update_predicate_closes_the_concurrent_write_window(self):
