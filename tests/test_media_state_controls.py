@@ -33,7 +33,7 @@ class MediaStateControlsTests(unittest.TestCase):
                 (None, "None"),
                 ("very_good", "👍👍 Very good"),
                 ("good", "👍 Good"),
-                ("meh", "😐 Meh"),
+                ("meh", "😐 Meh/Ok"),
                 ("not_for_me", "Not for me"),
                 ("regret_watching", "😡 Waste of time"),
             ),
