@@ -708,4 +708,4 @@ class HistoryPage(QWidget):
 
 def _format_entry_count(count):
     noun = "entry" if count == 1 else "entries"
-    return f"{count} history {noun} – Showing: All, Newest First"
+    return f"{count} history {noun} – Showing: All Time, Newest First"

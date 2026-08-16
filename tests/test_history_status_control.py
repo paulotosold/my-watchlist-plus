@@ -92,11 +92,11 @@ class HistoryStatusControlTests(unittest.TestCase):
         )
         self.assertEqual(
             self.control.count_label.text(),
-            "0 history entries – Showing: All, Newest First",
+            "0 history entries – Showing: All Time, Newest First",
         )
         self.assertEqual(
             self.control.count_label.accessibleName(),
-            "0 history entries – Showing: All, Newest First",
+            "0 history entries – Showing: All Time, Newest First",
         )
         self.assertFalse(self.control.list_view_button.isChecked())
         self.assertTrue(self.control.grid_view_button.isChecked())
@@ -163,7 +163,7 @@ class HistoryStatusControlTests(unittest.TestCase):
         self.assertEqual(self.control.posters_per_row, 24)
         self.assertEqual(
             self.control.count_label.text(),
-            "1 history entry – Showing: All, Newest First",
+            "1 history entry – Showing: All Time, Newest First",
         )
         self.assertFalse(self.control.list_view_button.isChecked())
         self.assertTrue(self.control.grid_view_button.isChecked())
@@ -184,7 +184,7 @@ class HistoryStatusControlTests(unittest.TestCase):
         )
         self.assertEqual(
             self.control.count_label.text(),
-            "0 history entries – Showing: All, Newest First",
+            "0 history entries – Showing: All Time, Newest First",
         )
         self.assertTrue(
             self.control.poster_size_control.isHidden()
@@ -274,7 +274,7 @@ class HistoryStatusControlTests(unittest.TestCase):
         self.assertEqual(self.control.view_mode, GRID_VIEW)
         self.assertEqual(
             self.control.count_label.text(),
-            "0 history entries – Showing: All, Newest First",
+            "0 history entries – Showing: All Time, Newest First",
         )
 
 

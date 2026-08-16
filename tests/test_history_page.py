@@ -127,11 +127,11 @@ class HistoryPageTests(unittest.TestCase):
         self.assertEqual(len(self.page.grid_board.tiles), 2)
         self.assertEqual(
             self.page.status_message,
-            "2 history entries – Showing: All, Newest First",
+            "2 history entries – Showing: All Time, Newest First",
         )
         self.assertEqual(
             status_spy.at(0),
-            ["2 history entries – Showing: All, Newest First"],
+            ["2 history entries – Showing: All Time, Newest First"],
         )
         self.assertEqual(
             self.page.scroll_area.horizontalScrollBarPolicy(),
@@ -411,7 +411,7 @@ class HistoryPageTests(unittest.TestCase):
 
         self.assertEqual(
             self.page.status_message,
-            "1 history entry – Showing: All, Newest First",
+            "1 history entry – Showing: All Time, Newest First",
         )
 
 

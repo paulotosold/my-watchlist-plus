@@ -153,7 +153,7 @@ class FakeHistoryPage(FakePage):
 
     def __init__(self, parent=None):
         super().__init__(
-            "19 history entries – Showing: All, Newest First",
+            "19 history entries – Showing: All Time, Newest First",
             parent,
         )
         self.entries = [object() for _ in range(19)]
@@ -319,7 +319,7 @@ class MainWindowShellTests(unittest.TestCase):
         self.assertFalse(self.window.history_status_control.isHidden())
         self.assertEqual(
             self.window.history_status_control.count_label.text(),
-            "19 history entries – Showing: All, Newest First",
+            "19 history entries – Showing: All Time, Newest First",
         )
 
         self.window.section_tabs.setCurrentIndex(0)
