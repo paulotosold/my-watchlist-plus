@@ -9,7 +9,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from PySide6.QtCore import QObject, Signal, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QToolButton
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QToolButton
 
 from app.media_details.dialog import (
     REFRESH_FEEDBACK_DURATION_MS,
@@ -82,6 +82,25 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
     def tearDown(self):
         self.load_lists_patch.stop()
         self.application.processEvents()
+
+    def test_cabinet_worthy_uses_presentation_only_labels(self):
+        dialog = self._dialog()
+
+        labels = [label.text() for label in dialog.findChildren(QLabel)]
+        self.assertIn("Cabinet Worthy?", labels)
+        self.assertNotIn("Collection Pick", labels)
+        self.assertEqual(
+            [
+                (
+                    dialog.collection_combo.itemData(index),
+                    dialog.collection_combo.itemText(index),
+                )
+                for index in range(dialog.collection_combo.count())
+            ],
+            [(None, "Undecided"), (True, "Yes!"), (False, "No")],
+        )
+        self.assertIsNone(dialog.collection_combo.currentData())
+        dialog.reject()
 
     def test_reload_merges_catalog_and_preserves_pending_user_edit(self):
         dialog = self._dialog()
@@ -1004,6 +1023,46 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
             result,
             {"status": "cancelled", "database_changed": True},
         )
+
+    def test_manage_posters_save_only_updates_the_media_details_draft(self):
+        dialog = self._dialog()
+        poster = {
+            "scope": "media",
+            "filename": "alternative.jpg",
+            "source": "tmdb",
+            "curation_status": "selected",
+            "is_default": True,
+        }
+        management_state = {
+            "candidates": [deepcopy(poster)],
+            "selected_keys": ["poster:alternative.jpg"],
+            "default_key": "poster:alternative.jpg",
+            "checked_at": "2026-08-15T10:00:00+00:00",
+        }
+
+        with patch(
+            "app.media_details.dialog.ManagePostersDialog"
+        ) as dialog_class, patch(
+            "app.media_details.dialog.get_connection"
+        ) as get_connection:
+            managed_dialog = dialog_class.return_value
+            managed_dialog.exec.return_value = QDialog.Accepted
+            managed_dialog.result_payload = {
+                "status": "saved",
+                "posters": [deepcopy(poster)],
+                "management_state": deepcopy(management_state),
+            }
+            dialog.edit_posters()
+
+        get_connection.assert_not_called()
+        self.assertEqual(dialog.media_draft["posters"], [poster])
+        self.assertEqual(
+            dialog.media_draft["_poster_management"],
+            management_state,
+        )
+        self.assertTrue(dialog._is_dirty)
+        self.assertTrue(dialog.save_button.isEnabled())
+        dialog.close()
 
     def _dialog(
         self,

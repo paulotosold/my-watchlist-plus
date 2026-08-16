@@ -16,6 +16,7 @@ from .note_dialog import (
     NoteDetailsDialog,
     NotePreviewLabel,
 )
+from .poster_dialog import ManagePostersDialog
 from .watch_entry_dialog import WatchEntryDetailsDialog
 
 
@@ -27,6 +28,7 @@ __all__ = [
     "LIST_DETAILS_INPUT_WIDTH",
     "ListDetailsDialog",
     "MediaDetailsDialog",
+    "ManagePostersDialog",
     "NOTE_DETAILS_INPUT_HEIGHT",
     "NOTE_DETAILS_INPUT_WIDTH",
     "NoteDetailsDialog",

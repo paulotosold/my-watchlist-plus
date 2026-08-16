@@ -1,6 +1,8 @@
 """Download and validate poster files referenced by media drafts."""
 
 from pathlib import Path
+from hashlib import sha256
+import shutil
 
 import requests
 
@@ -16,6 +18,15 @@ def limit_draft_posters(
     media_draft,
     max_posters_per_media=TMDB_MAX_POSTERS_PER_MEDIA,
 ):
+    explicitly_selected = [
+        poster
+        for poster in media_draft.get("posters", [])
+        if poster.get("curation_status") == "selected"
+    ]
+    if explicitly_selected:
+        media_draft["posters"] = explicitly_selected
+        return media_draft
+
     if max_posters_per_media is None:
         return media_draft
 
@@ -71,9 +82,91 @@ def download_missing_draft_posters(
             results["failed"].append(failure)
 
             if fail_on_error:
+                cleanup_created_poster_files(
+                    results["downloaded"],
+                    poster_dir=poster_dir,
+                )
                 raise
 
     return results
+
+
+def materialize_user_posters(media_draft, poster_dir=DEFAULT_POSTER_DIR):
+    """Copy selected user imports, returning newly created filenames."""
+    poster_dir = Path(poster_dir)
+    poster_dir.mkdir(parents=True, exist_ok=True)
+    created = []
+
+    try:
+        for poster in media_draft.get("posters", []):
+            if poster.get("source") != "user":
+                continue
+            filename = _normalize_tmdb_poster_filename(poster.get("filename"))
+            source_value = poster.get("_import_path")
+            destination = poster_dir / filename
+
+            if destination.is_file() and destination.stat().st_size > 0:
+                expected_hash = poster.get("_content_hash")
+                if expected_hash and _hash_file(destination) != expected_hash:
+                    raise ValueError(f"Poster filename collision: {filename}")
+                continue
+
+            if not source_value:
+                raise ValueError(f"Imported poster is no longer available: {filename}")
+            source = Path(source_value)
+            if not source.is_file():
+                raise ValueError(f"Imported poster is no longer available: {source}")
+            expected_hash = poster.get("_content_hash")
+            actual_hash = _hash_file(source)
+            if expected_hash and actual_hash != expected_hash:
+                raise ValueError(f"Imported poster changed after selection: {source.name}")
+
+            temp_path = destination.with_name(f"{destination.name}.tmp")
+            shutil.copy2(source, temp_path)
+            temp_path.replace(destination)
+            created.append(filename)
+    except Exception:
+        cleanup_created_poster_files(created, poster_dir=poster_dir)
+        raise
+
+    return created
+
+
+def cleanup_created_poster_files(filenames, poster_dir=DEFAULT_POSTER_DIR):
+    poster_dir = Path(poster_dir)
+    for filename in filenames or []:
+        path = poster_dir / _normalize_tmdb_poster_filename(filename)
+        if path.is_file():
+            path.unlink()
+
+
+def delete_unreferenced_poster_files(
+    conn,
+    filenames,
+    poster_dir=DEFAULT_POSTER_DIR,
+):
+    import app.media_repository as media_repository
+
+    deleted = []
+    poster_dir = Path(poster_dir)
+    for raw_filename in filenames or []:
+        filename = _normalize_tmdb_poster_filename(raw_filename)
+        if media_repository.poster_filename_is_referenced(conn, filename):
+            continue
+        path = poster_dir / filename
+        if path.is_file():
+            path.unlink()
+            deleted.append(filename)
+    return deleted
+
+
+def finalize_managed_poster_draft(media_draft):
+    """Remove dialog-only poster state after a successful commit."""
+    media_draft.pop("_poster_management", None)
+    for poster in media_draft.get("posters", []):
+        for key in list(poster):
+            if str(key).startswith("_"):
+                poster.pop(key, None)
 
 
 def download_tmdb_poster(
@@ -208,9 +301,21 @@ def _normalize_tmdb_poster_filename(filename):
     return filename
 
 
+def _hash_file(path):
+    digest = sha256()
+    with Path(path).open("rb") as poster_file:
+        for chunk in iter(lambda: poster_file.read(128 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 __all__ = [
     "DEFAULT_POSTER_DIR",
     "download_missing_draft_posters",
     "download_tmdb_poster",
+    "materialize_user_posters",
+    "cleanup_created_poster_files",
+    "delete_unreferenced_poster_files",
+    "finalize_managed_poster_draft",
     "limit_draft_posters",
 ]

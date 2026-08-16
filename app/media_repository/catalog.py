@@ -3,6 +3,8 @@
 from app.config import TMDB_MAX_POSTERS_PER_MEDIA
 
 from .queries import _get_db_media_id
+from .errors import ConcurrentEditError
+from .queries import get_direct_media_posters
 from .user_data import (
     _save_media_user_data,
     _to_db_bool,
@@ -23,6 +25,99 @@ def replace_media_watch_providers(conn, media_id, watch_providers, checked_at=No
         media_id,
         checked_at,
     )
+
+
+def replace_media_posters(
+    conn,
+    media_id,
+    posters,
+    *,
+    expected_posters=None,
+    checked_at=None,
+):
+    """Replace direct poster selections with optimistic concurrency."""
+    owner = conn.execute(
+        "SELECT 1 FROM media WHERE id = ?",
+        (media_id,),
+    ).fetchone()
+    if owner is None:
+        raise ValueError(f"media id {media_id} does not exist.")
+
+    current = get_direct_media_posters(conn, media_id)
+    if (
+        expected_posters is not None
+        and _poster_signature(current) != _poster_signature(expected_posters)
+    ):
+        raise ConcurrentEditError(
+            "Posters changed in another window. Reopen Media Details and try again."
+        )
+
+    normalized = []
+    seen = set()
+    default_count = 0
+    for raw_poster in posters or []:
+        filename = _validate_poster_filename(raw_poster.get("filename"))
+        if filename in seen:
+            continue
+        seen.add(filename)
+        source = raw_poster.get("source") or "other"
+        if source not in {"tmdb", "user", "other"}:
+            raise ValueError("Poster source is invalid.")
+        is_default = bool(raw_poster.get("is_default", False))
+        default_count += int(is_default)
+        normalized.append({
+            "filename": filename,
+            "source": source,
+            "curation_status": "selected",
+            "is_default": is_default,
+        })
+
+    if default_count > 1:
+        raise ValueError("Only one poster can be the default.")
+
+    _replace_media_posters(conn, media_id, normalized)
+    update_media_tmdb_posters_checked_at(conn, media_id, checked_at)
+    return normalized
+
+
+def poster_filename_is_referenced(conn, filename):
+    filename = _validate_poster_filename(filename)
+    row = conn.execute(
+        """
+        SELECT 1 FROM media_posters WHERE filename = ?
+        UNION ALL
+        SELECT 1 FROM season_posters WHERE filename = ?
+        LIMIT 1
+        """,
+        (filename, filename),
+    ).fetchone()
+    return row is not None
+
+
+def _poster_signature(posters):
+    return sorted(
+        (
+            str(poster.get("filename") or "").lstrip("/"),
+            poster.get("source") or "other",
+            poster.get("curation_status") or "pending",
+            bool(poster.get("is_default", False)),
+        )
+        for poster in posters or []
+        if poster.get("filename")
+    )
+
+
+def _validate_poster_filename(filename):
+    filename = str(filename or "").strip().lstrip("/")
+    if (
+        not filename
+        or filename in {".", ".."}
+        or "/" in filename
+        or "\\" in filename
+        or "\x00" in filename
+    ):
+        raise ValueError("Poster filename must be a simple filename.")
+    return filename
 
 def update_media_tmdb_watch_providers_checked_at(conn, media_id, checked_at):
     _update_media_tmdb_freshness(
@@ -964,6 +1059,14 @@ def _save_media_posters(conn, media_id, metadata, posters):
         _insert_media_posters_if_missing(conn, series_id, series_posters)
 
 def _limit_posters(posters, limit):
+    explicitly_selected = [
+        poster
+        for poster in posters
+        if poster.get("curation_status") == "selected"
+    ]
+    if explicitly_selected:
+        return explicitly_selected
+
     if limit is None:
         return posters
 

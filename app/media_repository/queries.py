@@ -574,6 +574,36 @@ def _get_db_media_posters_by_media(conn, media_type, tmdb_id, scope="media"):
         for row in cursor.fetchall()
     ]
 
+
+def get_direct_media_posters(conn, media_id):
+    """Return only poster rows owned directly by one media record."""
+    cursor = conn.execute(
+        """
+        SELECT
+            filename,
+            source,
+            curation_status,
+            is_default
+        FROM media_posters
+        WHERE media_id = ?
+        ORDER BY
+            is_default DESC,
+            CASE curation_status
+                WHEN 'selected' THEN 1
+                WHEN 'pending' THEN 2
+                WHEN 'failed' THEN 3
+                WHEN 'discarded' THEN 4
+                ELSE 5
+            END,
+            filename
+        """,
+        (media_id,),
+    )
+    return [
+        _format_db_poster_row(row, "media")
+        for row in cursor.fetchall()
+    ]
+
 def _get_db_season_posters(conn, series_tmdb_id, season_num):
     cursor = conn.execute(
         """

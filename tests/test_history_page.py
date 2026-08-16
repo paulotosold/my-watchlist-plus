@@ -461,7 +461,14 @@ class HistoryEntryWidgetTests(unittest.TestCase):
             )
             self.assertEqual(widget.status_label.text(), "Status")
             self.assertEqual(widget.impression_label.text(), "Impression")
-            self.assertEqual(widget.collection_label.text(), "Collection Pick")
+            self.assertEqual(widget.collection_label.text(), "Cabinet Worthy?")
+            self.assertEqual(
+                [
+                    widget.collection_combo.itemText(index)
+                    for index in range(widget.collection_combo.count())
+                ],
+                ["Undecided", "Yes!", "No"],
+            )
 
             for combo in (
                 widget.status_combo,

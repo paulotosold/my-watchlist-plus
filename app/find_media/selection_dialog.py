@@ -90,7 +90,7 @@ class TmdbPosterLoader(QObject):
 
     poster_loaded = Signal(str, object)
 
-    def __init__(self, parent=None, network_manager=None):
+    def __init__(self, parent=None, network_manager=None, image_size=None):
         super().__init__(parent)
 
         self.network_manager = (
@@ -99,9 +99,13 @@ class TmdbPosterLoader(QObject):
         self._cache = {}
         self._pending = {}
         self._reply_urls = {}
+        self.image_size = image_size or TMDB_MATCH_POSTER_SIZE
+
+    def url_for(self, poster_path):
+        return _tmdb_poster_url(poster_path, size=self.image_size)
 
     def request(self, poster_path):
-        url = _tmdb_poster_url(poster_path)
+        url = self.url_for(poster_path)
 
         if url is None:
             return None
@@ -501,10 +505,10 @@ def _remote_poster_path(candidate):
     return candidate.get("remote_poster_path")
 
 
-def _tmdb_poster_url(poster_path):
+def _tmdb_poster_url(poster_path, size=TMDB_MATCH_POSTER_SIZE):
     return build_tmdb_image_url(
         poster_path,
-        size=TMDB_MATCH_POSTER_SIZE,
+        size=size,
     )
 
 

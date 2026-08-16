@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from app.ui.clickable_entry_label import ClickableEntryLabel
 from app.ui.media_state_controls import (
+    COLLECTION_PICK_LABEL,
     COLLECTION_PICK_OPTIONS,
     IMPRESSION_OPTIONS,
     MEDIA_STATE_COMBO_MIN_HEIGHT,
@@ -133,7 +134,7 @@ class HistoryEntryWidget(QWidget):
         )
         self.collection_label = self._add_combo_field(
             details_layout,
-            "Collection Pick",
+            COLLECTION_PICK_LABEL,
             self.collection_combo,
         )
         details_layout.addStretch()

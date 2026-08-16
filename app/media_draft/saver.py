@@ -9,6 +9,7 @@ from . import builder, poster_storage
 
 
 DEFAULT_POSTER_DIR = poster_storage.DEFAULT_POSTER_DIR
+POSTER_MANAGEMENT_KEY = "_poster_management"
 
 
 def build_and_save_media_drafts_from_imdb_ids(
@@ -79,6 +80,13 @@ def save_media_draft_with_posters(
     fail_on_poster_error=False,
     fetch_episode_imdb_ids=True,
 ):
+    _normalize_managed_episode_posters(media_draft)
+    management_state = media_draft.get(POSTER_MANAGEMENT_KEY) or {}
+    if management_state.get("checked_at"):
+        media_draft.setdefault("metadata", {})[
+            "last_tmdb_posters_checked_at"
+        ] = management_state["checked_at"]
+
     if media_draft["metadata"].get("media_type") == "episode":
         return _save_episode_draft_with_series_context(
             conn,
@@ -111,29 +119,97 @@ def save_media_draft_with_posters(
     )
 
 
-def save_existing_media_changes(conn, baseline_draft, media_draft):
-    """Persist only user-owned changes for an existing media item.
+def save_existing_media_changes(
+    conn,
+    baseline_draft,
+    media_draft,
+    *,
+    poster_dir=DEFAULT_POSTER_DIR,
+    poster_size=TMDB_POSTER_SIZE,
+):
+    """Persist user-owned and explicitly curated poster changes.
 
-    Catalog metadata, posters, providers, and series episode materialization are
-    deliberately outside this path.  The caller owns the transaction and must
-    apply returned database IDs to the live draft only after commit succeeds.
+    Catalog metadata, providers, and series episode materialization remain
+    outside this path. The caller owns the transaction.
     """
     media_id = media_draft.get("media_id")
 
     if media_id is None or baseline_draft.get("media_id") != media_id:
         raise ValueError("Existing-media save requires matching media ids.")
 
-    result = media_repository.apply_media_user_changes(
-        conn,
-        media_id,
-        baseline_draft,
-        media_draft,
-    )
+    management_state = media_draft.get(POSTER_MANAGEMENT_KEY)
+    poster_downloads = poster_storage._empty_poster_downloads()
+    created_user_files = []
+    files_to_delete = []
+
+    try:
+        if management_state is not None:
+            _normalize_managed_episode_posters(media_draft)
+            created_user_files = poster_storage.materialize_user_posters(
+                media_draft,
+                poster_dir=poster_dir,
+            )
+            poster_downloads = poster_storage.download_missing_draft_posters(
+                media_draft,
+                poster_dir=poster_dir,
+                poster_size=poster_size,
+                fail_on_error=True,
+            )
+
+        result = media_repository.apply_media_user_changes(
+            conn,
+            media_id,
+            baseline_draft,
+            media_draft,
+        )
+
+        if management_state is not None:
+            expected_posters = [
+                poster
+                for poster in baseline_draft.get("posters", [])
+                if poster.get("scope", "media") == "media"
+            ]
+            current_posters = list(media_draft.get("posters", []))
+            media_repository.replace_media_posters(
+                conn,
+                media_id,
+                current_posters,
+                expected_posters=expected_posters,
+                checked_at=management_state.get("checked_at"),
+            )
+            if management_state.get("checked_at"):
+                media_draft.setdefault("metadata", {})[
+                    "last_tmdb_posters_checked_at"
+                ] = management_state["checked_at"]
+            current_filenames = {
+                poster.get("filename")
+                for poster in current_posters
+                if poster.get("filename")
+            }
+            files_to_delete = [
+                poster.get("filename")
+                for poster in expected_posters
+                if (
+                    poster.get("filename")
+                    and poster.get("filename") not in current_filenames
+                )
+            ]
+    except Exception:
+        poster_storage.cleanup_created_poster_files(
+            created_user_files + poster_downloads.get("downloaded", []),
+            poster_dir=poster_dir,
+        )
+        raise
+
     metadata = media_draft.get("metadata") or {}
     return {
         **result,
         "media_id": media_id,
-        "poster_downloads": poster_storage._empty_poster_downloads(),
+        "poster_downloads": poster_downloads,
+        "poster_files_created": (
+            created_user_files + poster_downloads.get("downloaded", [])
+        ),
+        "poster_files_to_delete": files_to_delete,
         "saved_media_type": metadata.get("media_type"),
         "saved_title": metadata.get("title"),
     }
@@ -148,6 +224,9 @@ def _save_episode_draft_with_series_context(
     fail_on_poster_error=False,
     fetch_episode_imdb_ids=True,
 ):
+    managed_checked_at = (
+        (media_draft.get(POSTER_MANAGEMENT_KEY) or {}).get("checked_at")
+    )
     episode_details = media_draft["metadata"].get("episode_details") or {}
     series_tmdb_id = episode_details.get("series_tmdb_id")
 
@@ -253,8 +332,15 @@ def _save_episode_draft_with_series_context(
         original_save_result["poster_downloads"],
     )
     media_draft["metadata"]["last_tmdb_posters_checked_at"] = (
-        previous_episode_posters_checked_at
+        managed_checked_at or previous_episode_posters_checked_at
     )
+
+    if managed_checked_at:
+        media_repository.update_media_tmdb_posters_checked_at(
+            conn,
+            original_save_result["media_id"],
+            managed_checked_at,
+        )
 
     if poster_storage._poster_downloads_succeeded(parent_poster_downloads):
         media_repository.update_media_tmdb_posters_checked_at(
@@ -266,6 +352,11 @@ def _save_episode_draft_with_series_context(
     return {
         "media_id": original_save_result["media_id"],
         "poster_downloads": poster_downloads,
+        "poster_files_created": (
+            original_save_result.get("poster_files_created", [])
+            + poster_downloads.get("downloaded", [])
+        ),
+        "poster_files_to_delete": [],
         "series_completed": True,
         "saved_original_episode": True,
         "series_created": series_created,
@@ -393,6 +484,11 @@ def _save_series_draft_with_episode_context(
     return {
         "media_id": series_save_result["media_id"],
         "poster_downloads": poster_downloads,
+        "poster_files_created": (
+            series_save_result.get("poster_files_created", [])
+            + poster_downloads.get("downloaded", [])
+        ),
+        "poster_files_to_delete": [],
         "series_completed": True,
         "saved_original_episode": True,
         "saved_media_type": "series",
@@ -491,22 +587,41 @@ def _save_single_media_draft_with_posters(
     fail_on_poster_error=False,
 ):
     poster_storage.limit_draft_posters(media_draft, max_posters_per_media)
+    managed = media_draft.get(POSTER_MANAGEMENT_KEY) is not None
+    created_user_files = []
+    poster_downloads = poster_storage._empty_poster_downloads()
 
-    poster_downloads = poster_storage.download_missing_draft_posters(
-        media_draft,
-        poster_dir=poster_dir,
-        poster_size=poster_size,
-        fail_on_error=fail_on_poster_error,
-    )
-    poster_storage._remove_failed_tmdb_poster_references(
-        media_draft,
-        poster_downloads,
-    )
-    media_id = media_repository.save_media_draft(conn, media_draft)
+    try:
+        if managed:
+            created_user_files = poster_storage.materialize_user_posters(
+                media_draft,
+                poster_dir=poster_dir,
+            )
+        poster_downloads = poster_storage.download_missing_draft_posters(
+            media_draft,
+            poster_dir=poster_dir,
+            poster_size=poster_size,
+            fail_on_error=managed or fail_on_poster_error,
+        )
+        poster_storage._remove_failed_tmdb_poster_references(
+            media_draft,
+            poster_downloads,
+        )
+        media_id = media_repository.save_media_draft(conn, media_draft)
+    except Exception:
+        poster_storage.cleanup_created_poster_files(
+            created_user_files + poster_downloads.get("downloaded", []),
+            poster_dir=poster_dir,
+        )
+        raise
 
     return {
         "media_id": media_id,
         "poster_downloads": poster_downloads,
+        "poster_files_created": (
+            created_user_files + poster_downloads.get("downloaded", [])
+        ),
+        "poster_files_to_delete": [],
         "saved_media_type": media_draft["metadata"].get("media_type"),
         "saved_title": media_draft["metadata"].get("title"),
     }
@@ -521,22 +636,41 @@ def _save_catalog_media_draft_with_posters(
     fail_on_poster_error=False,
 ):
     poster_storage.limit_draft_posters(media_draft, max_posters_per_media)
+    managed = media_draft.get(POSTER_MANAGEMENT_KEY) is not None
+    created_user_files = []
+    poster_downloads = poster_storage._empty_poster_downloads()
 
-    poster_downloads = poster_storage.download_missing_draft_posters(
-        media_draft,
-        poster_dir=poster_dir,
-        poster_size=poster_size,
-        fail_on_error=fail_on_poster_error,
-    )
-    poster_storage._remove_failed_tmdb_poster_references(
-        media_draft,
-        poster_downloads,
-    )
-    media_id = media_repository.save_media_catalog_draft(conn, media_draft)
+    try:
+        if managed:
+            created_user_files = poster_storage.materialize_user_posters(
+                media_draft,
+                poster_dir=poster_dir,
+            )
+        poster_downloads = poster_storage.download_missing_draft_posters(
+            media_draft,
+            poster_dir=poster_dir,
+            poster_size=poster_size,
+            fail_on_error=managed or fail_on_poster_error,
+        )
+        poster_storage._remove_failed_tmdb_poster_references(
+            media_draft,
+            poster_downloads,
+        )
+        media_id = media_repository.save_media_catalog_draft(conn, media_draft)
+    except Exception:
+        poster_storage.cleanup_created_poster_files(
+            created_user_files + poster_downloads.get("downloaded", []),
+            poster_dir=poster_dir,
+        )
+        raise
 
     return {
         "media_id": media_id,
         "poster_downloads": poster_downloads,
+        "poster_files_created": (
+            created_user_files + poster_downloads.get("downloaded", [])
+        ),
+        "poster_files_to_delete": [],
         "saved_media_type": media_draft["metadata"].get("media_type"),
         "saved_title": media_draft["metadata"].get("title"),
     }
@@ -549,3 +683,15 @@ def _build_seed_episode_draft(metadata):
         "watch_providers": [],
         "posters": [],
     }
+
+
+def _normalize_managed_episode_posters(media_draft):
+    if media_draft.get(POSTER_MANAGEMENT_KEY) is None:
+        return
+    metadata = media_draft.get("metadata") or {}
+    if metadata.get("media_type") != "episode":
+        return
+    for poster in media_draft.get("posters", []):
+        poster["scope"] = "media"
+        poster["series_tmdb_id"] = None
+        poster["season_num"] = None

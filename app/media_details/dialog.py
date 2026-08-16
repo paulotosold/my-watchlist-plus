@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 import app.media_draft.saver as draft_saver
+import app.media_draft.poster_storage as poster_storage
 import app.media_repository as media_repo
 import app.tmdb as tmdb
 from .constants import (
@@ -35,6 +36,7 @@ from .note_dialog import (
     NoteDetailsDialog,
     NotePreviewLabel,
 )
+from .poster_dialog import ManagePostersDialog, POSTER_MANAGEMENT_KEY
 from .watch_entry_dialog import WatchEntryDetailsDialog
 from .widgets import (
     DetailBlock,
@@ -66,6 +68,7 @@ from app.media_user_data.watch_history_formatters import (
 )
 from app.ui.clickable_entry_label import ClickableEntryLabel
 from app.ui.media_state_controls import (
+    COLLECTION_PICK_LABEL,
     COLLECTION_PICK_OPTIONS,
     IMPRESSION_OPTIONS,
     MEDIA_STATE_COMBO_MIN_HEIGHT,
@@ -455,7 +458,11 @@ class MediaDetailsDialog(QDialog):
 
         self._add_combo_row(panel_layout, "Status", self.status_combo)
         self._add_combo_row(panel_layout, "Impression", self.impression_combo)
-        self._add_combo_row(panel_layout, "Collection Pick", self.collection_combo)
+        self._add_combo_row(
+            panel_layout,
+            COLLECTION_PICK_LABEL,
+            self.collection_combo,
+        )
         panel_layout.addStretch()
 
         parent_layout.addWidget(panel_widget, stretch=0)
@@ -562,6 +569,14 @@ class MediaDetailsDialog(QDialog):
         clear_layout(self.poster_layout)
 
         posters = self.media_draft.get("posters", [])
+        if self._is_episode():
+            direct_posters = [
+                poster
+                for poster in posters
+                if poster.get("scope", "media") == "media"
+            ]
+            if direct_posters:
+                posters = direct_posters
         self.poster_status_label.setText(get_poster_curation_status(posters))
 
         if not posters:
@@ -1296,7 +1311,19 @@ class MediaDetailsDialog(QDialog):
         )
 
     def edit_posters(self):
-        print("Poster edit clicked")
+        dialog = ManagePostersDialog(self, self.media_draft)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.media_draft["posters"] = deepcopy(
+            dialog.result_payload.get("posters", [])
+        )
+        self.media_draft[POSTER_MANAGEMENT_KEY] = deepcopy(
+            dialog.result_payload.get("management_state") or {}
+        )
+        self.mark_dirty()
+        self.render_posters()
 
     def smart_fill(self):
         print("Smart Fill clicked")
@@ -1481,6 +1508,8 @@ class MediaDetailsDialog(QDialog):
         self._apply_form_to_draft()
         media_id = self.media_draft.get("media_id")
 
+        save_result = None
+
         try:
             if media_id is None:
                 draft_to_save = deepcopy(self.media_draft)
@@ -1494,7 +1523,6 @@ class MediaDetailsDialog(QDialog):
                 self.media_draft = draft_to_save
             else:
                 with get_connection() as conn:
-                    conn.execute("BEGIN IMMEDIATE")
                     save_result = draft_saver.save_existing_media_changes(
                         conn,
                         self._baseline_media_draft,
@@ -1503,8 +1531,29 @@ class MediaDetailsDialog(QDialog):
 
                 apply_inserted_ids_to_draft(self.media_draft, save_result)
         except Exception as exc:
+            if save_result is not None:
+                poster_storage.cleanup_created_poster_files(
+                    save_result.get("poster_files_created", [])
+                )
             QMessageBox.warning(self, "Save Media", str(exc))
             return
+
+        files_to_delete = save_result.get("poster_files_to_delete", [])
+        if files_to_delete:
+            try:
+                with get_connection() as conn:
+                    poster_storage.delete_unreferenced_poster_files(
+                        conn,
+                        files_to_delete,
+                    )
+            except Exception as exc:
+                QMessageBox.warning(
+                    self,
+                    "Save Media",
+                    f"Media was saved, but an old poster file could not be removed: {exc}",
+                )
+
+        poster_storage.finalize_managed_poster_draft(self.media_draft)
 
         self._baseline_media_draft = deepcopy(self.media_draft)
 
@@ -1689,6 +1738,12 @@ class MediaDetailsDialog(QDialog):
 
 
 def load_poster_pixmap(poster):
+    import_path = poster.get("_import_path")
+
+    if import_path:
+        pixmap = QPixmap(str(import_path))
+        return pixmap if not pixmap.isNull() else None
+
     filename = poster.get("filename")
 
     if not filename:

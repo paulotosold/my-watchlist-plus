@@ -81,8 +81,9 @@ IMPRESSION_OPTIONS = (
     ("regret_watching", "😡 Waste of time"),
 )
 
+COLLECTION_PICK_LABEL = "Cabinet Worthy?"
 COLLECTION_PICK_OPTIONS = (
-    (None, "None"),
+    (None, "Undecided"),
     (True, "Yes!"),
     (False, "No"),
 )
