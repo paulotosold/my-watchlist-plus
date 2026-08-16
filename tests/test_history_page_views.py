@@ -153,7 +153,9 @@ class HistoryPageViewTests(unittest.TestCase):
 
     def test_grid_population_is_lazy_and_never_reloads_history(self):
         self.assertEqual(self.page.view_mode, HISTORY_VIEW_GRID)
+        self.assertFalse(self.page._list_initialized)
         self.assertFalse(self.page._grid_initialized)
+        self.assertEqual(self.page.entry_widgets, [])
         self.assertEqual(self.page.grid_board.entries, [])
         self.assertEqual(self.page.grid_board.tiles, [])
         self.load_mock.assert_not_called()
@@ -161,6 +163,8 @@ class HistoryPageViewTests(unittest.TestCase):
         self._load_page()
 
         self.assertEqual(self.load_mock.call_count, 1)
+        self.assertFalse(self.page._list_initialized)
+        self.assertEqual(self.page.entry_widgets, [])
         self.assertTrue(self.page._grid_initialized)
         self.assertEqual(self.page.grid_board.entries, self.source_entries)
         self.assertEqual(len(self.page.grid_board.tiles), 180)
@@ -168,6 +172,12 @@ class HistoryPageViewTests(unittest.TestCase):
         self.assertFalse(self.page.set_view_mode(HISTORY_VIEW_GRID))
 
         self.assertTrue(self.page.set_view_mode(HISTORY_VIEW_LIST))
+        first_widgets = list(self.page.entry_widgets)
+        self.assertTrue(self.page._list_initialized)
+        self.assertEqual(len(first_widgets), 180)
+        self.assertTrue(self.page.set_view_mode(HISTORY_VIEW_GRID))
+        self.assertTrue(self.page.set_view_mode(HISTORY_VIEW_LIST))
+        self.assertEqual(self.page.entry_widgets, first_widgets)
         self.assertTrue(self.page.set_view_mode(HISTORY_VIEW_GRID))
         self.assertFalse(self.page.set_view_mode(HISTORY_VIEW_GRID))
         self._process_events()
@@ -273,8 +283,13 @@ class HistoryPageViewTests(unittest.TestCase):
 
     def test_anchor_entry_stays_visible_across_view_switches(self):
         self._load_page()
+        initial_grid_anchor = self._scroll_to_widget(
+            self.page.grid_board.tiles[72],
+            offset=13,
+        )
         self.assertTrue(self.page.set_view_mode(HISTORY_VIEW_LIST))
         self._process_events()
+        self._assert_active_entry_visible(initial_grid_anchor[0])
         source_widget = self.page.entry_widgets[72]
         source_anchor = self._scroll_to_widget(source_widget, offset=13)
 
@@ -342,6 +357,11 @@ class HistoryPageViewTests(unittest.TestCase):
         self._process_events()
 
         self.assertEqual(self.load_mock.call_count, 2)
+        self.assertTrue(self.page._list_initialized)
+        self.assertEqual(
+            [widget.entry for widget in self.page.entry_widgets],
+            self.source_entries,
+        )
         self.assertEqual(list_scroll_bar.value(), 0)
         self.assertEqual(grid_scroll_bar.value(), 0)
         self.assertEqual(self.page.view_mode, HISTORY_VIEW_GRID)
@@ -424,6 +444,8 @@ class HistoryPageViewTests(unittest.TestCase):
         self._process_events()
 
         self.assertEqual(self.load_mock.call_count, 2)
+        self.assertFalse(self.page._list_initialized)
+        self.assertEqual(self.page.entry_widgets, [])
         self.assertEqual(self.page.view_mode, HISTORY_VIEW_GRID)
         self.assertEqual(self.page.posters_per_row, 6)
         self.assertEqual(

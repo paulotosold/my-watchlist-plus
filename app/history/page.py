@@ -61,6 +61,7 @@ class HistoryPage(QWidget):
         self.entry_widgets = []
         self._widgets_by_media_id = defaultdict(list)
         self._confirmed_states = {}
+        self._list_initialized = False
         self._grid_initialized = False
         self._pending_anchor = None
         self._pending_resize_anchor = None
@@ -227,7 +228,11 @@ class HistoryPage(QWidget):
             entries = load_default_history_entries(conn)
 
         self.entries = list(entries)
-        self._render_entries()
+
+        if self._list_initialized:
+            self._render_entries()
+        elif self._view_mode == HISTORY_VIEW_LIST:
+            self._ensure_list_initialized()
 
         if (
             self._view_mode == HISTORY_VIEW_GRID
@@ -267,6 +272,7 @@ class HistoryPage(QWidget):
             self.grid_board.set_layout_width(self._stable_grid_width())
             target_widget = self.grid_scroll_area
         else:
+            self._ensure_list_initialized()
             target_widget = self.scroll_area
 
         self._view_mode = view_mode
@@ -350,6 +356,13 @@ class HistoryPage(QWidget):
         self.grid_board.set_entries(self.entries)
         self.grid_board.set_layout_width(self._stable_grid_width())
         self._grid_initialized = True
+
+    def _ensure_list_initialized(self):
+        if self._list_initialized:
+            return
+
+        self._render_entries()
+        self._list_initialized = True
 
     def _apply_grid_viewport_resize(self):
         anchor = self._pending_resize_anchor

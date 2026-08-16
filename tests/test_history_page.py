@@ -11,7 +11,7 @@ from PySide6.QtGui import QImage
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app.history.constants import HISTORY_VIEW_LIST
+from app.history.constants import HISTORY_VIEW_GRID, HISTORY_VIEW_LIST
 from app.history.entry_widget import HistoryEntryWidget, POSTER_WIDTH
 from app.history.page import HistoryPage
 from app.history.repository import (
@@ -106,9 +106,14 @@ class HistoryPageTests(unittest.TestCase):
         self.connection_patch.stop()
         self.application.processEvents()
 
-    def test_page_is_lazy_and_default_load_builds_vertical_history(self):
+    def _load_list(self):
+        self.page.set_view_mode(HISTORY_VIEW_LIST)
+        self.page.ensure_loaded()
+
+    def test_page_is_lazy_and_default_load_builds_only_grid(self):
         self.assertFalse(self.page.is_loaded)
         self.assertTrue(self.page.is_invalidated)
+        self.assertFalse(self.page._list_initialized)
         self.load_mock.assert_not_called()
 
         status_spy = QSignalSpy(self.page.status_message_changed)
@@ -116,7 +121,10 @@ class HistoryPageTests(unittest.TestCase):
 
         self.assertTrue(self.page.is_loaded)
         self.assertFalse(self.page.is_invalidated)
-        self.assertEqual(len(self.page.entry_widgets), 2)
+        self.assertFalse(self.page._list_initialized)
+        self.assertEqual(self.page.entry_widgets, [])
+        self.assertTrue(self.page._grid_initialized)
+        self.assertEqual(len(self.page.grid_board.tiles), 2)
         self.assertEqual(
             self.page.status_message,
             "2 history entries – Showing: All, Newest First",
@@ -136,18 +144,37 @@ class HistoryPageTests(unittest.TestCase):
 
     def test_switch_style_ensure_loaded_preserves_loaded_page_until_invalidated(self):
         self.page.ensure_loaded()
-        first_widgets = list(self.page.entry_widgets)
+        first_tiles = list(self.page.grid_board.tiles)
 
         self.page.ensure_loaded()
 
         self.assertEqual(self.load_mock.call_count, 1)
-        self.assertEqual(self.page.entry_widgets, first_widgets)
+        self.assertEqual(self.page.grid_board.tiles, first_tiles)
+        self.assertFalse(self.page._list_initialized)
 
         self.page.invalidate()
         self.assertEqual(self.load_mock.call_count, 1)
 
         self.page.ensure_loaded()
         self.assertEqual(self.load_mock.call_count, 2)
+        self.assertFalse(self.page._list_initialized)
+        self.assertEqual(self.page.entry_widgets, [])
+
+    def test_list_is_built_once_from_loaded_entries_without_requery(self):
+        self.page.ensure_loaded()
+
+        self.assertTrue(self.page.set_view_mode(HISTORY_VIEW_LIST))
+        first_widgets = list(self.page.entry_widgets)
+
+        self.assertTrue(self.page._list_initialized)
+        self.assertEqual(len(first_widgets), 2)
+        self.assertEqual(self.load_mock.call_count, 1)
+
+        self.assertTrue(self.page.set_view_mode(HISTORY_VIEW_GRID))
+        self.assertTrue(self.page.set_view_mode(HISTORY_VIEW_LIST))
+
+        self.assertEqual(self.page.entry_widgets, first_widgets)
+        self.assertEqual(self.load_mock.call_count, 1)
 
     def test_clear_find_media_query_clears_only_its_input(self):
         self.page.top_bar.filter_input.setText("keep filter")
@@ -226,7 +253,7 @@ class HistoryPageTests(unittest.TestCase):
                 title="Fallout (S1:E1-3)",
             )
         ]
-        self.page.ensure_loaded()
+        self._load_list()
         details_spy = QSignalSpy(self.page.details_requested)
 
         self.page.entry_widgets[0].title_label.activated.emit()
@@ -234,7 +261,7 @@ class HistoryPageTests(unittest.TestCase):
         self.assertEqual(details_spy.at(0), [99])
 
     def test_population_and_repeated_value_do_not_save(self):
-        self.page.ensure_loaded()
+        self._load_list()
 
         with patch(
             "app.history.page.apply_media_state_patch"
@@ -245,7 +272,7 @@ class HistoryPageTests(unittest.TestCase):
         apply_patch_mock.assert_not_called()
 
     def test_successful_activation_saves_once_and_syncs_duplicate_rows(self):
-        self.page.ensure_loaded()
+        self._load_list()
         library_spy = QSignalSpy(self.page.library_changed)
         first_widget, second_widget = self.page.entry_widgets
 
@@ -283,7 +310,7 @@ class HistoryPageTests(unittest.TestCase):
         self.assertIn("BEGIN IMMEDIATE", self.connections[-1].statements)
 
     def test_status_activation_saves_once_and_syncs_duplicate_rows(self):
-        self.page.ensure_loaded()
+        self._load_list()
         library_spy = QSignalSpy(self.page.library_changed)
         first_widget, second_widget = self.page.entry_widgets
 
@@ -320,7 +347,7 @@ class HistoryPageTests(unittest.TestCase):
         self.assertEqual(library_spy.count(), 1)
 
     def test_failed_save_rolls_back_to_confirmed_values(self):
-        self.page.ensure_loaded()
+        self._load_list()
         first_widget, second_widget = self.page.entry_widgets
 
         with (
@@ -340,7 +367,7 @@ class HistoryPageTests(unittest.TestCase):
         self.assertIn("database is busy", warning.call_args.args[2])
 
     def test_conflict_loads_canonical_state_and_warns(self):
-        self.page.ensure_loaded()
+        self._load_list()
         first_widget, second_widget = self.page.entry_widgets
         library_spy = QSignalSpy(self.page.library_changed)
 
