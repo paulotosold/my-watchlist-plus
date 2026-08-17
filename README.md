@@ -1,5 +1,7 @@
 # My Watchlist+
 
+![My Watchlist+ Watchlist view](docs/images/app-overview-1.png)
+
 ## About the project
 
 This project is my (admittedly slightly overengineered) answer to a very simple problem: I wanted a watchlist for movies and TV series that I could truly make my own.
@@ -8,19 +10,22 @@ By that, I mean a local and independent experience where my data remains mine, a
 
 The result is a clean and enjoyable personal movie and TV series library, simple on the surface but detailed and flexible underneath, with plenty of room to explore and dig deeper.
 
-![My Watchlist+ application overview](docs/images/app-overview.png)
+![My Watchlist+ media details and History view](docs/images/app-overview-2.png)
 
 ## What it does
 
-- Find and add movies, TV series and individual episodes to your library
-- Use LLM-assisted search for title resolution and natural-language library queries
-- Retrieve and keep detailed metadata for every title
+- Add movies, TV series and individual episodes to your library
+- Find them using IMDb IDs, TMDB title search or optional AI-assisted lookup
+- Retrieve and store detailed metadata and poster artwork locally
 - Mark titles as *To Watch*, *Watched*, *Not Interested* or *Dropped* (for series)
-- Keep a complete and flexible watch history, including multiple viewings of the same title
-- Rate titles, keep notes, curate a personal collection and create custom lists
-- Choose and manage alternative posters for each title
-- Check streaming availability for a selected region
-- Filter, sort and pin titles to browse the collection
+- Record multiple viewings of the same title using exact dates, date ranges or none
+- Track series broadly or select the individual episodes watched in each viewing
+- Rate titles, keep notes and assign titles to custom lists
+- Build a personal *Cabinet* of favorite titles and arrange it in your own order
+- Choose, import and manage alternative posters for each title
+- Check subscription, rental and purchase availability for a selected region
+- Browse dedicated *Watchlist*, *History* and *Cabinet* views with adjustable poster layouts
+- Temporarily pin titles in the Watchlist to narrow down what to watch next
 
 ## Under the hood
 
@@ -28,13 +33,13 @@ At its core, this is a Python desktop application built with PySide6 and backed 
 
 The desktop/local-first approach is deliberate. The application is currently designed as a single-user tool, so keeping the interface, application logic and database on the same machine avoids introducing a client/server architecture that the current requirements do not need. It also keeps the project entirely within the Python ecosystem, which fits naturally with the data, recommendation and machine-learning experiments I want to explore later.
 
-Movie and TV metadata comes primarily from the TMDB API, while LLMs are used selectively where natural language is actually useful: resolving less straightforward title searches and translating natural-language requests into structured library queries.
+Movie and TV metadata comes primarily from the TMDB API, while optional LLM assistance acts as a fallback for more descriptive title searches, such as “the movie where Nicolas Cage plays Nicolas Cage”, which is considerably easier than remembering *The Unbearable Weight of Massive Talent*. Great movie, by the way.
 
 ## Database design
 
-I spent quite a bit of time thinking through the database model, and TV series quickly became one of its more interesting challenges. Movies are relatively straightforward units, while series can be tracked at very different levels of detail. A _Black Mirror_ episode may be worth treating almost like a movie of its own, with an independent watch state, a rating or even a poster. With _Friends_, the series itself may matter more, while episode progress still matters. With _ALF_, on the other hand, "I watched some _ALF_" may honestly be precise enough.
+I spent quite a bit of time thinking through the database model, and TV series quickly became one of its more interesting challenges. Movies are relatively straightforward units, while series can be tracked at very different levels of detail. A *Black Mirror* episode may be worth treating almost like a movie of its own, with an independent watch state, a rating or even a poster. With *Friends*, the series itself may matter more, while episode progress still matters. With *ALF*, on the other hand, "I watched some *ALF*" may honestly be precise enough.
 
-My solution to this central challenge was to let movies, series and episodes share the same core `media` model. Episodes remain linked to their parent series, but both the series and its individual episodes can be tracked independently, each with their own state, watch history, rating, notes, lists and poster. At the same time, episode-level information can still be brought together to track progress through the series. Detailed episode tracking is possible, but never required.
+My solution to this design problem was to let movies, series and episodes share the same core `media` model. Episodes remain linked to their parent series, but both the series and its individual episodes can be tracked independently, each with their own state, watch history, rating, notes, lists and poster. At the same time, episode-level information can still be brought together to track progress through the series. Detailed episode tracking is possible, but never required.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/database-schema-dark.png">
@@ -55,13 +60,14 @@ Coding agents, mainly OpenAI Codex, have become a major part of how I build this
 
 ## What's next
 
-The current version is already functional, but there are several directions I want to take it next:
+With the core library, history and Cabinet workflows in place, some of the directions I would like to explore next include:
 
-- Build richer and playful statistics and visualizations around the library and watch history
-- Add new metadata sources for awards, festivals and other information not readily available through TMDB
-- Experiment with personalized recommendation systems using machine learning, web scraping and public datasets
-- Develop a chatbot that adds a more personal layer to recommendations and offers an alternative way to interact with the library
-- Keep refining the existing application with smaller features, UI improvements and ongoing work on the codebase
+- Add richer filtering and sorting, including natural-language requests translated into structured library queries
+- Create playful statistics and visualizations around the library and watch history
+- Bring in new metadata sources for awards, festivals and information beyond TMDB
+- Experiment with personalized recommendations using machine learning and public datasets
+Develop a conversational, chatbot-like interface for discovering titles and interacting with the library
+- Keep refining the application with smaller features, UI improvements and ongoing work on the codebase
 
 ## Running locally
 
@@ -92,7 +98,7 @@ You can also adjust the watch region in `settings.toml`.
 python main.py
 ```
 
-The SQLite database is created automatically at `data/media.db`, while downloaded posters are stored in `data/media_posters/`. Both remain local and are excluded from version control.
+The SQLite database is created automatically at `data/media.db`, while downloaded and imported posters are stored in `data/media_posters/`. Both remain local and are excluded from version control.
 
 The application has been developed and tested on macOS 26 with Python 3.13. Other platforms may work, but have not yet been formally tested.
 
@@ -101,29 +107,33 @@ The application has been developed and tested on macOS 26 with Python 3.13. Othe
 The codebase is organized around a small set of responsibilities:
 
 ```text
-app/                       # application source code
-├── assets/                # bundled UI icons and images
-├── find_media/            # media search and title resolution
-├── history/               # watch history interface and queries
-├── media_details/         # media details and editing workflows
-├── media_draft/           # media draft building and saving
-├── media_repository/      # persistence and data access
-├── media_user_data/       # domain logic for lists, notes and watch data
-├── metadata_refresh/      # background metadata refresh workflows
-├── tmdb/                  # TMDB integration
-├── ui/                    # shared UI components
-└── watchlist/             # main watchlist interface
+app/                           # application source code
+├── assets/                    # bundled UI icons and images
+├── cabinet/                   # curated Cabinet view and custom ordering
+├── find_media/                # title search, matching and AI-assisted lookup
+├── history/                   # watch history views and queries
+├── media_details/             # media details and editing workflows
+├── media_draft/               # media draft building and save orchestration
+├── media_repository/          # persistence and data access
+├── media_user_data/           # domain logic for states, history, notes and lists
+├── metadata_refresh/          # background TMDB metadata refresh
+├── tmdb/                      # TMDB API integration
+├── ui/                        # shared interface components
+├── watch_provider_refresh/    # background streaming-availability refresh
+├── watchlist/                 # main Watchlist view and poster board
+├── config.py                  # environment variables and application settings
+└── paths.py                   # shared project and data paths
 
-db/                        # database connection, schema, migrations and seed data
-data/                      # local SQLite database and downloaded posters
-docs/                      # project documentation
-scripts/                   # import and maintenance utilities
-tests/                     # automated test suite
+db/                            # SQLite connection, schema, migrations and seed data
+data/                          # local database and downloaded or imported poster artwork
+docs/                          # documentation images and diagrams
+scripts/                       # import, export and maintenance utilities
+tests/                         # automated unit and interface tests
 
-main.py                    # application entry point
-settings.toml              # application settings
-.env.example               # environment variable template
-requirements.txt           # Python dependencies
+main.py                        # application entry point
+settings.toml                  # TMDB and watch-provider settings
+.env.example                   # environment variable template
+requirements.txt               # Python dependencies
 ```
 
 ## Data sources and attribution
