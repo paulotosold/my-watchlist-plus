@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.paths import ASSETS_DIR
+from app.paths import ICONS_DIR
 from app.ui.posters_per_row_control import (
     ICON_BUTTON_STYLE,
     PostersPerRowControl,
@@ -42,6 +42,7 @@ PINNED_PILL_ACTIVE_BACKGROUND = "#8fc4ff"
 PINNED_PILL_INACTIVE_BORDER = "#929292"
 PINNED_PILL_ACTIVE_BORDER = "#4f93cc"
 PINNED_PILL_TEXT_COLOR = "#202020"
+STATUS_BAR_ICON_DIR = ICONS_DIR / "status_bar"
 
 PINNED_PILL_STYLE = f"""
 QFrame#pinnedStatusPill {{
@@ -100,7 +101,7 @@ class WatchlistStatusControl(QWidget):
         self._pinned_only = False
 
         self.reload_button = self._make_icon_button(
-            "status_bar_reload.png",
+            "reload.png",
             object_name="reloadWatchlistButton",
             accessible_name="Reload watchlist",
             tooltip="Reload the watchlist",
@@ -140,7 +141,7 @@ class WatchlistStatusControl(QWidget):
         self.clear_pins_button = QToolButton(self.pinned_pill)
         self.clear_pins_button.setObjectName("clearPinnedButton")
         self.clear_pins_button.setIcon(
-            QIcon(str(ASSETS_DIR / "status_bar_close.png"))
+            QIcon(str(STATUS_BAR_ICON_DIR / "clear_pins.png"))
         )
         self.clear_pins_button.setIconSize(
             QSize(
@@ -342,7 +343,7 @@ class WatchlistStatusControl(QWidget):
         button = QToolButton(self)
         button.setObjectName(object_name)
         button.setIcon(
-            QIcon(str(ASSETS_DIR / icon_filename))
+            QIcon(str(STATUS_BAR_ICON_DIR / icon_filename))
         )
         button.setIconSize(
             QSize(STATUS_ICON_SIZE, STATUS_ICON_SIZE)

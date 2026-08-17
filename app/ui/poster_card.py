@@ -15,12 +15,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.paths import ASSETS_DIR, MEDIA_POSTERS_DIR
+from app.paths import ICONS_DIR, MEDIA_POSTERS_DIR
 
 
 MEDIA_CARD_ICON_HEIGHT = 32
 MEDIA_CARD_BUTTON_MARGIN = 6
-MEDIA_CARD_ICON_DIR = ASSETS_DIR / "media_card_icons"
+MEDIA_CARD_ICON_DIR = ICONS_DIR / "poster_card"
 POSTER_DIR = MEDIA_POSTERS_DIR
 
 

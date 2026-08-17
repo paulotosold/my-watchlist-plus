@@ -7,7 +7,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app.paths import ASSETS_DIR
+from app.paths import ICONS_DIR
 from app.ui.clickable_entry_label import ClickableEntryLabel
 from app.ui.media_state_controls import (
     CABINET_WORTHY_LABEL,
@@ -49,7 +49,7 @@ class MediaStateControlsTests(unittest.TestCase):
         self.assertEqual(CABINET_WORTHY_LABEL, "Cabinet Worthy?")
 
     def test_combo_style_uses_cwd_independent_dropdown_path(self):
-        dropdown_path = ASSETS_DIR / "dropdown_arrow.svg"
+        dropdown_path = ICONS_DIR / "controls" / "dropdown_arrow.svg"
 
         self.assertTrue(dropdown_path.is_absolute())
         self.assertTrue(dropdown_path.is_file())

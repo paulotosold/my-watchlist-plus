@@ -19,7 +19,7 @@ from app.watchlist.card import (
 )
 
 
-ICON_DIRECTORY = Path("app/assets/media_card_icons")
+ICON_DIRECTORY = Path("app/assets/icons/poster_card")
 
 
 def expected_icon_size(filename):
@@ -165,7 +165,7 @@ class MediaCardResizingTests(unittest.TestCase):
     def test_invalid_icon_dimensions_fall_back_to_a_square(self):
         self.assertEqual(
             _icon_dimensions_for_height(
-                "app/assets/media_card_icons/missing.png",
+                "app/assets/icons/poster_card/missing.png",
                 MEDIA_CARD_ICON_HEIGHT,
             ),
             (MEDIA_CARD_ICON_HEIGHT, MEDIA_CARD_ICON_HEIGHT),

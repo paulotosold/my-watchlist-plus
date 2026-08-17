@@ -4,12 +4,13 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
 
-from app.paths import ASSETS_DIR
+from app.paths import ICONS_DIR
 
 STATUS_ICON_SIZE = 20
 STATUS_BUTTON_SIZE = 24
 STATUS_BUTTON_RADIUS = STATUS_BUTTON_SIZE // 2
 STATUS_BUTTON_HOVER_BACKGROUND = "rgba(0, 0, 0, 18)"
+STATUS_BAR_ICON_DIR = ICONS_DIR / "status_bar"
 ICON_BUTTON_STYLE = f"""
 QToolButton {{
     background: transparent;
@@ -55,13 +56,13 @@ class PostersPerRowControl(QWidget):
         self.title_label.setObjectName("posterSizeLabel")
 
         self.minus_button = self._make_button(
-            "status_bar_minus.png",
+            "poster_smaller.png",
             object_name="decreasePosterSizeButton",
             accessible_name="Decrease poster size",
             tooltip="Decrease poster size (show more posters per row)",
         )
         self.plus_button = self._make_button(
-            "status_bar_plus.png",
+            "poster_larger.png",
             object_name="increasePosterSizeButton",
             accessible_name="Increase poster size",
             tooltip="Increase poster size (show fewer posters per row)",
@@ -133,7 +134,7 @@ class PostersPerRowControl(QWidget):
         button = QToolButton(self)
         button.setObjectName(object_name)
         button.setIcon(
-            QIcon(str(ASSETS_DIR / icon_filename))
+            QIcon(str(STATUS_BAR_ICON_DIR / icon_filename))
         )
         button.setIconSize(
             QSize(STATUS_ICON_SIZE, STATUS_ICON_SIZE)

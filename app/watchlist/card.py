@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QLabel
 
-from app.paths import ASSETS_DIR
+from app.paths import OVERLAYS_DIR
 from app.ui.poster_card import (
     MEDIA_CARD_BUTTON_MARGIN,
     MEDIA_CARD_ICON_DIR,
@@ -29,7 +29,9 @@ class MediaCard(PosterCard):
     def __init__(self, parent=None):
         super().__init__(parent, initial_poster_mode="random")
         self.is_pinned = False
-        self.pin_pixmap = QPixmap(str(ASSETS_DIR / "pinned_overlay.png"))
+        self.pin_pixmap = QPixmap(
+            str(OVERLAYS_DIR / "watchlist_pinned.png")
+        )
         self.pin_layer = QLabel(self)
         self.pin_layer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.pin_layer.setScaledContents(False)

@@ -21,7 +21,6 @@ from .calendar_picker import CleanCalendarPopup
 from .constants import (
     DETAIL_BUTTON_WIDTH,
     DETAILS_BACKGROUND_COLOR,
-    DETAIL_ICON_DIR,
     WATCH_ENTRY_DATE_INPUT_WIDTH,
     WATCH_ENTRY_EPISODE_BUTTON_BORDER_RADIUS,
     WATCH_ENTRY_EPISODE_BUTTON_FONT_SIZE,
@@ -33,6 +32,7 @@ from .constants import (
     WATCH_ENTRY_EPISODES_TO_BUTTONS_SPACING,
     WATCH_ENTRY_HEADER_TO_BUTTONS_SPACING,
     WATCH_ENTRY_HEADER_TO_EPISODES_SPACING,
+    WATCH_HISTORY_ICON_DIR,
     WATCH_ENTRY_SEASON_ROW_SPACING,
 )
 from app.media_user_data.watch_history import (
@@ -189,7 +189,7 @@ class WatchEntryDetailsDialog(QDialog):
         self.date_input = self.date_earliest_input
         self.date_latest_input = self._make_date_input()
         self.date_earliest_picker_button = self._make_inline_icon_button(
-            "watch_history_calendar_picker.png",
+            "calendar.png",
             "Choose earliest date",
             lambda: self._open_date_picker(
                 self.date_earliest_input,
@@ -199,7 +199,7 @@ class WatchEntryDetailsDialog(QDialog):
         self.date_latest_label = QLabel("Latest Date:", self)
         self.date_latest_label.setObjectName("watchEntryDateLabel")
         self.date_latest_picker_button = self._make_inline_icon_button(
-            "watch_history_calendar_picker.png",
+            "calendar.png",
             "Choose latest date",
             lambda: self._open_date_picker(
                 self.date_latest_input,
@@ -298,7 +298,7 @@ class WatchEntryDetailsDialog(QDialog):
             WATCH_ENTRY_INLINE_BUTTON_SIZE,
             WATCH_ENTRY_INLINE_BUTTON_SIZE,
         )
-        button.setIcon(QIcon(str(DETAIL_ICON_DIR / icon_name)))
+        button.setIcon(QIcon(str(WATCH_HISTORY_ICON_DIR / icon_name)))
         button.setIconSize(
             QSize(
                 WATCH_ENTRY_INLINE_ICON_SIZE,

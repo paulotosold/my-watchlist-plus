@@ -13,12 +13,12 @@ from PySide6.QtWidgets import (
 
 from app.ui.posters_per_row_control import PostersPerRowControl
 from .constants import (
-    ASSETS_DIRECTORY,
     DEFAULT_HISTORY_POSTERS_PER_ROW,
     HISTORY_VIEW_GRID,
     HISTORY_VIEW_LIST,
     MAX_HISTORY_POSTERS_PER_ROW,
     MIN_HISTORY_POSTERS_PER_ROW,
+    STATUS_BAR_ICON_DIR,
 )
 
 
@@ -94,13 +94,13 @@ class HistoryStatusControl(QWidget):
         self.view_label.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.grid_view_button = self._make_view_button(
-            "status_bar_view_grid.png",
+            "view_grid.png",
             object_name="historyGridViewButton",
             accessible_name="Grid view",
             tooltip="Show history as a grid",
         )
         self.list_view_button = self._make_view_button(
-            "status_bar_view_list.png",
+            "view_list.png",
             object_name="historyListViewButton",
             accessible_name="List view",
             tooltip="Show history as a list",
@@ -272,7 +272,7 @@ class HistoryStatusControl(QWidget):
         button.setObjectName(object_name)
         button.setCheckable(True)
         button.setIcon(
-            QIcon(str(ASSETS_DIRECTORY / icon_filename))
+            QIcon(str(STATUS_BAR_ICON_DIR / icon_filename))
         )
         button.setIconSize(
             QSize(STATUS_ICON_SIZE, STATUS_ICON_SIZE)

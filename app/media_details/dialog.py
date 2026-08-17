@@ -224,7 +224,7 @@ class MediaDetailsDialog(QDialog):
     def _build_metadata_block(self):
         block = DetailBlock(
             "Metadata (via TMDB API)",
-            "details_reload.png",
+            "reload.png",
             self,
             action_tooltip="Refresh metadata",
         )
@@ -268,7 +268,7 @@ class MediaDetailsDialog(QDialog):
 
         self.providers_block = DetailBlock(
             "Watch Providers (via TMDB API / JustWatch)",
-            "details_reload.png",
+            "reload.png",
             self,
             action_tooltip="Refresh watch providers",
         )
@@ -321,7 +321,7 @@ class MediaDetailsDialog(QDialog):
 
         self.posters_block = DetailBlock(
             "Posters",
-            "details_edit.png",
+            "edit.png",
             self,
             action_tooltip="Edit posters",
         )
@@ -630,7 +630,7 @@ class MediaDetailsDialog(QDialog):
 
         self.watch_history_layout.addWidget(
             make_icon_button(
-                "details_add.png",
+                "add.png",
                 self,
                 self.add_watch_history,
                 tooltip="Add watch history entry",
@@ -652,7 +652,7 @@ class MediaDetailsDialog(QDialog):
 
         self.notes_layout.addWidget(
             make_icon_button(
-                "details_add.png",
+                "add.png",
                 self,
                 self.add_note,
                 tooltip="Add note",
@@ -682,7 +682,7 @@ class MediaDetailsDialog(QDialog):
 
         self.lists_layout.addWidget(
             make_icon_button(
-                "details_add.png",
+                "add.png",
                 self,
                 self.add_list,
                 tooltip="Create list",

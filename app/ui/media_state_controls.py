@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.media_user_data.watch_states import VALID_WATCH_STATES_BY_MEDIA_TYPE
-from app.paths import ASSETS_DIR
+from app.paths import ICONS_DIR
 
 
 COMBO_POPUP_ITEM_HEIGHT = 28
@@ -19,7 +19,9 @@ MEDIA_STATE_FIELD_WIDTH = 190
 MEDIA_STATE_FIELD_SPACING = 4
 MEDIA_STATE_COMBO_MIN_HEIGHT = 30
 
-_DROPDOWN_ARROW_PATH = (ASSETS_DIR / "dropdown_arrow.svg").as_posix()
+_DROPDOWN_ARROW_PATH = (
+    ICONS_DIR / "controls" / "dropdown_arrow.svg"
+).as_posix()
 
 MEDIA_STATE_COMBO_STYLE = """
 QComboBox {
