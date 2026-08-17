@@ -31,8 +31,10 @@ class CabinetBoardTests(unittest.TestCase):
         self.board.deleteLater()
         self.application.processEvents()
 
-    def test_density_limits_default_and_spacing(self):
+    def test_density_limits_default_and_edge_to_edge_spacing(self):
         self.assertEqual(self.board.posters_per_row, 10)
+        self.assertEqual(BOARD_HORIZONTAL_SPACING, 0)
+        self.assertEqual(BOARD_VERTICAL_SPACING, 0)
         first, second = self.board.cards[:2]
         self.assertEqual(second.x() - first.geometry().right() - 1, BOARD_HORIZONTAL_SPACING)
         self.board.set_posters_per_row(4)
