@@ -219,12 +219,12 @@ class WatchlistStatusControl(QWidget):
         layout.setSpacing(8)
         layout.addWidget(self.reload_button)
         layout.addWidget(self.filtered_label)
+        layout.addStretch(1)
         layout.addWidget(
             self.pinned_pill,
             0,
             Qt.AlignmentFlag.AlignVCenter,
         )
-        layout.addStretch(1)
         layout.addWidget(self.poster_size_control)
 
         self.reload_button.clicked.connect(

@@ -44,7 +44,7 @@ class WatchlistStatusControlTests(unittest.TestCase):
         self.control.close()
         self.application.processEvents()
 
-    def test_composite_has_label_pill_stretch_and_poster_size(self):
+    def test_composite_has_label_stretch_pill_and_poster_size(self):
         layout = self.control.layout()
 
         self.assertFalse(self.control.reload_button.icon().isNull())
@@ -135,7 +135,11 @@ class WatchlistStatusControlTests(unittest.TestCase):
             f"padding-top: {PINNED_CLEAR_CONTENT_TOP_PADDING}px",
             self.control.pinned_pill.styleSheet(),
         )
-        self.assertGreater(layout.stretch(3), 0)
+        self.assertEqual(layout.indexOf(self.control.reload_button), 0)
+        self.assertEqual(layout.indexOf(self.control.filtered_label), 1)
+        self.assertGreater(layout.stretch(2), 0)
+        self.assertEqual(layout.indexOf(self.control.pinned_pill), 3)
+        self.assertEqual(layout.indexOf(self.control.poster_size_control), 4)
         self.assertEqual(
             layout.contentsMargins().left(),
             STATUS_LEFT_MARGIN,
