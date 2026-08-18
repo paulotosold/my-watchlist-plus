@@ -33,11 +33,11 @@ At its core, this is a Python desktop application built with PySide6 and backed 
 
 The desktop/local-first approach is deliberate. The application is currently designed as a single-user tool, so keeping the interface, application logic and database on the same machine avoids introducing a client/server architecture that the current requirements do not need. It also keeps the project entirely within the Python ecosystem, which fits naturally with the data, recommendation and machine-learning experiments I want to explore later.
 
-Movie and TV metadata comes primarily from the TMDB API, while optional LLM assistance acts as a fallback for more descriptive title searches, such as “the movie where Nicolas Cage plays Nicolas Cage”, which is considerably easier than remembering *The Unbearable Weight of Massive Talent*. Great movie, by the way.
+Movie and TV metadata comes primarily from the TMDB API, while optional LLM assistance acts as a fallback for more descriptive title searches, such as "the movie where Nicolas Cage plays Nicolas Cage", to identify *The Unbearable Weight of Massive Talent*. Great movie, by the way.
 
 ## Database design
 
-I spent quite a bit of time thinking through the database model, and TV series quickly became one of its more interesting challenges. Movies are relatively straightforward units, while series can be tracked at very different levels of detail. A *Black Mirror* episode may be worth treating almost like a movie of its own, with an independent watch state, a rating or even a poster. With *Friends*, the series itself may matter more, while episode progress still matters. With *ALF*, on the other hand, "I watched some *ALF*" may honestly be precise enough.
+I spent quite a bit of time thinking through the database model, and TV series quickly became one of its more interesting challenges. Movies are relatively straightforward units, while series can be tracked at very different levels of detail. A *Black Mirror* episode may be worth treating almost like a movie of its own, with an independent watch state, a rating or even a poster. With *Friends*, the series itself may matter more, while episode progress still matters. With *ALF*, on the other hand, "I watched some *ALF*" may be precise enough.
 
 My solution to this design problem was to let movies, series and episodes share the same core `media` model. Episodes remain linked to their parent series, but both the series and its individual episodes can be tracked independently, each with their own state, watch history, rating, notes, lists and poster. At the same time, episode-level information can still be brought together to track progress through the series. Detailed episode tracking is possible, but never required.
 
@@ -66,7 +66,7 @@ With the core library, history and Cabinet workflows in place, some of the direc
 - Create playful statistics and visualizations around the library and watch history
 - Bring in new metadata sources for awards, festivals and information beyond TMDB
 - Experiment with personalized recommendations using machine learning and public datasets
-Develop a conversational, chatbot-like interface for discovering titles and interacting with the library
+- Develop a conversational, chatbot-like interface for discovering titles and interacting with the library
 - Keep refining the application with smaller features, UI improvements and ongoing work on the codebase
 
 ## Running locally
