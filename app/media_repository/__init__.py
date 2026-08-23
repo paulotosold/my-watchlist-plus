@@ -14,6 +14,7 @@ from .catalog import (
 )
 from .errors import ConcurrentEditError, MetadataRefreshConflict
 from .queries import (
+    get_country_name,
     get_db_actors,
     get_db_creators,
     get_db_directors,
@@ -62,6 +63,7 @@ __all__ = [
     "create_list",
     "delete_list",
     "delete_media",
+    "get_country_name",
     "get_all_lists",
     "get_db_actors",
     "get_db_creators",

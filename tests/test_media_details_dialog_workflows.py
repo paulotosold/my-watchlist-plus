@@ -75,7 +75,10 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         self.load_lists_patch = patch.object(
             MediaDetailsDialog,
             "_load_all_lists",
-            lambda dialog: setattr(dialog, "all_lists", []),
+            lambda dialog: (
+                setattr(dialog, "all_lists", []),
+                setattr(dialog, "watch_region_name", "Austria"),
+            ),
         )
         self.load_lists_patch.start()
 
@@ -541,6 +544,60 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(
             dialog.providers_scroll.horizontalScrollBarPolicy(),
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        dialog.close()
+
+    def test_watch_provider_header_includes_configured_region_name(self):
+        dialog = self._dialog()
+
+        self.assertEqual(
+            dialog.providers_block.title_label.text(),
+            "Watch Providers – Austria (via TMDB API / JustWatch)",
+        )
+        dialog.close()
+
+    def test_watch_provider_header_falls_back_to_normalized_region_code(self):
+        with patch(
+            "app.media_details.dialog.TMDB_WATCH_REGION",
+            " zz ",
+        ), patch.object(
+            MediaDetailsDialog,
+            "_load_all_lists",
+            lambda dialog: setattr(dialog, "all_lists", []),
+        ):
+            dialog = self._dialog()
+
+        self.assertEqual(
+            dialog.providers_block.title_label.text(),
+            "Watch Providers – ZZ (via TMDB API / JustWatch)",
+        )
+        dialog.close()
+
+    def test_flatrate_subscriptions_are_prioritized_and_rendered_as_rich_text(self):
+        providers = [
+            self._provider(1, "HBO Max Amazon Channel"),
+            self._provider(2, "disney plus"),
+            self._provider(3, "Netflix"),
+        ]
+
+        with patch(
+            "app.media_details.dialog.SUBSCRIBED_FLATRATE_PROVIDER_NAMES",
+            ["Netflix", "Disney Plus"],
+        ):
+            dialog = self._dialog(providers=providers)
+
+        flatrate_label = dialog.providers_layout.itemAt(0).widget()
+
+        self.assertEqual(
+            flatrate_label.textFormat(),
+            Qt.TextFormat.RichText,
+        )
+        self.assertEqual(
+            flatrate_label.text(),
+            'Flatrate: <span style="color: #007a3d; font-weight: 700;">'
+            'Netflix</span>, '
+            '<span style="color: #007a3d; font-weight: 700;">'
+            'disney plus</span>, HBO Max Amazon Channel',
         )
         dialog.close()
 

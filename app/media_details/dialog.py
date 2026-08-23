@@ -26,6 +26,10 @@ import app.media_draft.saver as draft_saver
 import app.media_draft.poster_storage as poster_storage
 import app.media_repository as media_repo
 import app.tmdb as tmdb
+from app.config import (
+    SUBSCRIBED_FLATRATE_PROVIDER_NAMES,
+    TMDB_WATCH_REGION,
+)
 from .constants import (
     DETAIL_BUTTON_WIDTH,
     DETAIL_ICON_BUTTON_SIZE,
@@ -53,6 +57,7 @@ from .formatters import (
     WATCH_PROVIDER_GROUPS,
     build_metadata_display_rows,
     build_tmdb_match_from_metadata,
+    format_watch_provider_display_row,
     format_watch_provider_checked_at,
     get_poster_curation_status,
     group_watch_providers,
@@ -121,6 +126,8 @@ class MediaDetailsDialog(QDialog):
         self.media_draft = deepcopy(media_draft)
         self.result_payload = {"status": "cancelled"}
         self.all_lists = []
+        self.watch_region_code = str(TMDB_WATCH_REGION).strip().upper()
+        self.watch_region_name = self.watch_region_code
         self.list_checkboxes = []
         self._is_dirty = False
         self._is_populating = False
@@ -267,7 +274,10 @@ class MediaDetailsDialog(QDialog):
         right_column.setSpacing(DETAIL_BLOCK_SPACING)
 
         self.providers_block = DetailBlock(
-            "Watch Providers (via TMDB API / JustWatch)",
+            (
+                f"Watch Providers – {self.watch_region_name} "
+                "(via TMDB API / JustWatch)"
+            ),
             "reload.png",
             self,
             action_tooltip="Refresh watch providers",
@@ -485,6 +495,10 @@ class MediaDetailsDialog(QDialog):
     def _load_all_lists(self):
         with get_connection() as conn:
             self.all_lists = media_repo.get_all_lists(conn)
+            self.watch_region_name = (
+                media_repo.get_country_name(conn, self.watch_region_code)
+                or self.watch_region_code
+            )
 
     def set_media_draft(self, media_draft):
         self._cancel_active_watch_provider_refresh(reset_state=True)
@@ -541,12 +555,24 @@ class MediaDetailsDialog(QDialog):
 
     def render_watch_providers(self):
         clear_layout(self.providers_layout)
-        grouped = group_watch_providers(self.media_draft.get("watch_providers", []))
+        grouped = group_watch_providers(
+            self.media_draft.get("watch_providers", []),
+            SUBSCRIBED_FLATRATE_PROVIDER_NAMES,
+        )
 
         for access_type, label in WATCH_PROVIDER_GROUPS:
-            value = ", ".join(grouped.get(access_type, [])) or "None"
-            provider_label = QLabel(f"{label}: {value}", self.providers_content)
+            row_text = format_watch_provider_display_row(
+                label,
+                grouped.get(access_type, []),
+                access_type=access_type,
+                subscribed_flatrate_provider_names=(
+                    SUBSCRIBED_FLATRATE_PROVIDER_NAMES
+                ),
+            )
+            provider_label = QLabel(self.providers_content)
             provider_label.setWordWrap(False)
+            provider_label.setTextFormat(Qt.TextFormat.RichText)
+            provider_label.setText(row_text)
             provider_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             self.providers_layout.addWidget(provider_label)
 

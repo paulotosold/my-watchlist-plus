@@ -10,6 +10,7 @@ from app.media_details.formatters import (
     format_metadata_date,
     format_people_with_jobs,
     format_runtime_minutes,
+    format_watch_provider_display_row,
     format_watch_provider_checked_at,
     group_watch_providers,
 )
@@ -392,6 +393,78 @@ class MediaDetailsHelperTests(unittest.TestCase):
                 "buy": [],
                 "rent": ["Apple TV"],
             },
+        )
+
+    def test_group_watch_providers_prioritizes_subscriptions_in_settings_order(self):
+        grouped = group_watch_providers(
+            [
+                {
+                    "provider_name": "HBO Max Amazon Channel",
+                    "access_type": "flatrate",
+                },
+                {
+                    "provider_name": " disney plus ",
+                    "access_type": "flatrate",
+                },
+                {
+                    "provider_name": "NETFLIX",
+                    "access_type": "flatrate",
+                },
+                {
+                    "provider_name": "Apple TV",
+                    "access_type": "rent",
+                },
+            ],
+            ["Netflix", "Netflix", "Disney Plus", "Unavailable"],
+        )
+
+        self.assertEqual(
+            grouped,
+            {
+                "flatrate": [
+                    "NETFLIX",
+                    " disney plus ",
+                    "HBO Max Amazon Channel",
+                ],
+                "buy": [],
+                "rent": ["Apple TV"],
+            },
+        )
+
+    def test_format_watch_provider_row_highlights_only_flatrate_subscriptions(self):
+        subscriptions = ["Disney Plus", "Service & More"]
+
+        flatrate_row = format_watch_provider_display_row(
+            "Flatrate",
+            ["Disney Plus", "Service & More", "Other <Channel>"],
+            access_type="flatrate",
+            subscribed_flatrate_provider_names=subscriptions,
+        )
+        rent_row = format_watch_provider_display_row(
+            "Rent",
+            ["Disney Plus"],
+            access_type="rent",
+            subscribed_flatrate_provider_names=subscriptions,
+        )
+
+        self.assertEqual(
+            flatrate_row,
+            'Flatrate: <span style="color: #007a3d; font-weight: 700;">'
+            'Disney Plus</span>, '
+            '<span style="color: #007a3d; font-weight: 700;">'
+            'Service &amp; More</span>, Other &lt;Channel&gt;',
+        )
+        self.assertEqual(rent_row, "Rent: Disney Plus")
+
+    def test_format_watch_provider_row_uses_none_when_empty(self):
+        self.assertEqual(
+            format_watch_provider_display_row(
+                "Flatrate",
+                [],
+                access_type="flatrate",
+                subscribed_flatrate_provider_names=["Netflix"],
+            ),
+            "Flatrate: None",
         )
 
     def test_format_watch_history_date_ranges(self):

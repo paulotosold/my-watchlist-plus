@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from html import escape
 from typing import Any
 
 from app.media_user_data.watch_history_formatters import (
@@ -14,6 +15,7 @@ WATCH_PROVIDER_GROUPS = (
     ("buy", "Buy"),
     ("rent", "Rent"),
 )
+SUBSCRIBED_WATCH_PROVIDER_COLOR = "#007a3d"
 
 
 def build_metadata_display_rows(media_draft):
@@ -284,7 +286,10 @@ def format_people_with_jobs(items):
     return ", ".join(formatted) or None
 
 
-def group_watch_providers(providers):
+def group_watch_providers(
+    providers,
+    subscribed_flatrate_provider_names=None,
+):
     grouped = {access_type: [] for access_type, _ in WATCH_PROVIDER_GROUPS}
     seen = set()
 
@@ -303,7 +308,82 @@ def group_watch_providers(providers):
         seen.add(key)
         grouped[access_type].append(provider_name)
 
+    subscription_priority = _build_subscription_priority(
+        subscribed_flatrate_provider_names
+    )
+
+    if subscription_priority:
+        flatrate_names = grouped["flatrate"]
+        subscribed_names = []
+        other_names = []
+
+        for position, provider_name in enumerate(flatrate_names):
+            normalized_name = _normalize_provider_name(provider_name)
+
+            if normalized_name in subscription_priority:
+                subscribed_names.append((
+                    subscription_priority[normalized_name],
+                    position,
+                    provider_name,
+                ))
+            else:
+                other_names.append(provider_name)
+
+        subscribed_names.sort(key=lambda item: (item[0], item[1]))
+        grouped["flatrate"] = [
+            provider_name
+            for _priority, _position, provider_name in subscribed_names
+        ] + other_names
+
     return grouped
+
+
+def format_watch_provider_display_row(
+    label,
+    provider_names,
+    *,
+    access_type,
+    subscribed_flatrate_provider_names=None,
+):
+    subscribed_names = set(
+        _build_subscription_priority(
+            subscribed_flatrate_provider_names
+        )
+    )
+    formatted_names = []
+
+    for provider_name in provider_names or []:
+        escaped_name = escape(str(provider_name))
+
+        if (
+            access_type == "flatrate"
+            and _normalize_provider_name(provider_name) in subscribed_names
+        ):
+            formatted_names.append(
+                f'<span style="color: {SUBSCRIBED_WATCH_PROVIDER_COLOR}; '
+                f'font-weight: 700;">{escaped_name}</span>'
+            )
+        else:
+            formatted_names.append(escaped_name)
+
+    value = ", ".join(formatted_names) or "None"
+    return f"{escape(str(label))}: {value}"
+
+
+def _build_subscription_priority(provider_names):
+    priority = {}
+
+    for provider_name in provider_names or []:
+        normalized_name = _normalize_provider_name(provider_name)
+
+        if normalized_name and normalized_name not in priority:
+            priority[normalized_name] = len(priority)
+
+    return priority
+
+
+def _normalize_provider_name(provider_name):
+    return str(provider_name).strip().casefold()
 
 
 def format_watch_provider_checked_at(checked_at=None):

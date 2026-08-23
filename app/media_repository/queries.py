@@ -1,5 +1,30 @@
 """Read media catalog and user-facing metadata from SQLite."""
 
+
+def get_country_name(conn, code):
+    if code is None:
+        return None
+
+    normalized_code = str(code).strip().upper()
+
+    if not normalized_code:
+        return None
+
+    cursor = conn.execute(
+        """
+        SELECT name
+        FROM countries
+        WHERE code = ?
+        """,
+        (normalized_code,),
+    )
+    row = cursor.fetchone()
+
+    if row is None:
+        return None
+
+    return row["name"]
+
 def get_media_by_id(conn, media_id):
     if media_id is None:
         return None
