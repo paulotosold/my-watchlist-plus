@@ -790,15 +790,13 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         self.assertEqual(control.pinned_button.text(), "0 pinned")
         self.assertTrue(control.pinned_pill.isHidden())
 
-    def test_reload_restores_closed_cards_and_forces_filtered_scope(self):
+    def test_reload_promotes_pins_and_restores_filtered_scope(self):
         board = self.window.watchlist_page.media_board
         control = self.window.watchlist_status_control
         pinned_card = board.cards[3]
         pinned_card.on_pin_clicked()
         board.cards[0].btn_close.click()
         self._process_events()
-        pinned_index_before_reload = board.cards.index(pinned_card)
-
         control.pinned_button.click()
         self._process_events()
         self.assertTrue(board.pinned_only)
@@ -812,10 +810,8 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
 
         self.assertFalse(board.pinned_only)
         self.assertEqual(len(board.cards), 8)
-        self.assertEqual(
-            board.cards.index(pinned_card),
-            pinned_index_before_reload,
-        )
+        self.assertEqual(board.media_ids, [3, 0, 1, 2, 4, 5, 6, 7])
+        self.assertEqual(board.cards.index(pinned_card), 0)
         self.assertTrue(pinned_card.is_pinned)
         self.assertEqual(
             control.filtered_label.text(),

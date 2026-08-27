@@ -46,9 +46,12 @@ class FakeMediaBoard(QWidget):
         self.reconciled_media = []
         self.reflow_count = 0
         self.layout_width = None
+        self.scroll_area = None
+        self.reset_order_values = []
 
-    def load_media(self, filtered_media):
+    def load_media(self, filtered_media, *, reset_order=False):
         self.loaded_media.append(filtered_media)
+        self.reset_order_values.append(reset_order)
         target_count = len(filtered_media.media_list)
         cards = list(self.cards[:target_count])
 
@@ -75,6 +78,9 @@ class FakeMediaBoard(QWidget):
     def set_layout_width(self, value):
         self.layout_width = value
         return True
+
+    def set_scroll_area(self, scroll_area):
+        self.scroll_area = scroll_area
 
     def reflow_cards(self):
         self.reflow_count += 1
@@ -253,6 +259,10 @@ class WatchlistPageTests(unittest.TestCase):
             self.page.media_board.loaded_media,
             [current_filtered_media, current_filtered_media],
         )
+        self.assertEqual(
+            self.page.media_board.reconciled_media,
+            [(current_filtered_media, current_filtered_media.media_list)],
+        )
 
     def test_generic_refresh_preserves_pinned_only_mode(self):
         cards = self.page.media_board.cards
@@ -267,6 +277,10 @@ class WatchlistPageTests(unittest.TestCase):
         self.assertIs(
             self.page.media_board.loaded_media[-1],
             self.page.filtered_media,
+        )
+        self.assertEqual(
+            self.page.media_board.reset_order_values[-1],
+            False,
         )
 
     def test_automatic_refresh_reconciles_against_previous_filter_roster(self):
@@ -312,6 +326,7 @@ class WatchlistPageTests(unittest.TestCase):
             self.page.status_message,
             "2 titles – Showing: To Watch, Released, Random",
         )
+        self.assertTrue(self.page.media_board.reset_order_values[-1])
 
     def test_pinned_only_rejects_zero_pins_without_storing_an_anchor(self):
         self.assertFalse(self.page.set_pinned_only(True))

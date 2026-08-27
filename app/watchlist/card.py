@@ -27,7 +27,11 @@ class MediaCard(PosterCard):
     dismiss_requested = Signal()
 
     def __init__(self, parent=None):
-        super().__init__(parent, initial_poster_mode="random")
+        super().__init__(
+            parent,
+            initial_poster_mode="random",
+            drag_enabled=True,
+        )
         self.is_pinned = False
         self.pin_pixmap = QPixmap(
             str(OVERLAYS_DIR / "watchlist_pinned.png")

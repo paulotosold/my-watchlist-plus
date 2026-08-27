@@ -11,7 +11,11 @@ from PySide6.QtGui import QImage, QWheelEvent
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
-from app.watchlist.board import BOARD_BOTTOM_MARGIN, MediaBoard
+from app.watchlist.board import (
+    BOARD_BOTTOM_MARGIN,
+    BOARD_SPACING,
+    MediaBoard,
+)
 from app.watchlist.page import WatchlistPage
 
 
@@ -113,7 +117,7 @@ class MediaBoardLayoutTests(unittest.TestCase):
                 )
                 spacing_width = (
                     posters_per_row - 1
-                ) * self.board.grid_layout.horizontalSpacing()
+                ) * BOARD_SPACING
                 unused_width = (
                     self.board.width()
                     - posters_per_row * self.board.card_width
@@ -185,6 +189,158 @@ class MediaBoardLayoutTests(unittest.TestCase):
             round(self.board.card_width * 1.5),
         )
         self.assertFalse(self.board.set_posters_per_row(8))
+
+    def test_cards_enable_cabinet_style_drag_without_changing_clicks(self):
+        self.board.load_media(FakeFilteredMedia(2))
+
+        card = self.board.cards[0]
+
+        self.assertTrue(card.drag_enabled)
+        self.assertTrue(card.overlay_layer.drag_enabled)
+
+    def test_drop_target_uses_visible_slots_across_rows_and_pinned_scope(self):
+        self.board.load_media(FakeFilteredMedia(12))
+
+        self.assertEqual(
+            self.board.target_index_at(self.board.slot_rects()[7].center()),
+            7,
+        )
+        self.assertEqual(
+            self.board.target_index_at(QPoint(5000, 5000)),
+            11,
+        )
+
+        self.board.cards[2].on_pin_clicked()
+        self.board.cards[8].on_pin_clicked()
+        self.board.set_pinned_only(True)
+
+        self.assertEqual(
+            self.board.target_index_at(self.board.slot_rects()[1].center()),
+            1,
+        )
+        self.assertEqual(
+            self.board.target_index_at(QPoint(5000, 5000)),
+            1,
+        )
+
+    def test_normal_preview_commit_and_cancel_update_only_session_order(self):
+        self.board.load_media(FakeFilteredMedia(10))
+        original_ids = self.board.media_ids
+        moved_card = self.board.cards[1]
+        self._begin_preview(moved_card)
+
+        self.assertFalse(self.board.preview_reorder(moved_card, 1))
+        self.assertTrue(self.board.preview_reorder(moved_card, 7))
+        expected_ids = list(original_ids)
+        expected_ids.insert(7, expected_ids.pop(1))
+        self.assertEqual(self.board.preview_media_ids, expected_ids)
+
+        self.assertTrue(self.board.commit_preview())
+        self.assertEqual(self.board.media_ids, expected_ids)
+        self.board._reset_drag_state()
+
+        moved_card = self.board.cards[6]
+        self._begin_preview(moved_card)
+        self.board.preview_reorder(moved_card, 2)
+        self.board.cancel_drag()
+
+        self.assertEqual(self.board.media_ids, expected_ids)
+
+    def test_pinned_preview_anchors_before_next_pin_and_after_last_pin(self):
+        self.board.load_media(FakeFilteredMedia(6))
+        cards_by_id = {
+            card.get_current_media_key(): card
+            for card in self.board.cards
+        }
+        for media_id in (0, 2, 4):
+            cards_by_id[media_id].on_pin_clicked()
+        self.board.set_pinned_only(True)
+
+        moved_card = cards_by_id[4]
+        self._begin_preview(moved_card)
+        self.assertTrue(self.board.preview_reorder(moved_card, 1))
+        self.assertEqual(self.board.preview_media_ids, [0, 1, 4, 2, 3, 5])
+        self.assertEqual(
+            [card.get_current_media_key() for card in self.board.preview_visible_cards],
+            [0, 4, 2],
+        )
+        self.assertTrue(self.board.commit_preview())
+        self.board._reset_drag_state()
+
+        moved_card = cards_by_id[0]
+        self._begin_preview(moved_card)
+        self.assertTrue(self.board.preview_reorder(moved_card, 2))
+        self.assertEqual(self.board.preview_media_ids, [1, 4, 2, 0, 3, 5])
+        self.assertTrue(self.board.commit_preview())
+        self.board._reset_drag_state()
+
+        self.board.set_pinned_only(False)
+        self.assertEqual(self.board.media_ids, [1, 4, 2, 0, 3, 5])
+
+    def test_single_visible_pin_cannot_start_drag(self):
+        self.board.load_media(FakeFilteredMedia(4))
+        card = self.board.cards[2]
+        card.on_pin_clicked()
+        self.board.set_pinned_only(True)
+
+        self.board._start_card_drag(card, QPoint(1, 1))
+
+        self.assertIsNone(self.board._drag_card)
+        self.assertIsNone(self.board._drag_original_cards)
+
+    def test_explicit_reset_promotes_pins_in_their_current_relative_order(self):
+        filtered_media = FakeFilteredMedia(6)
+        self.board.load_media(filtered_media)
+        cards_by_id = {
+            card.get_current_media_key(): card
+            for card in self.board.cards
+        }
+        for media_id in (1, 3, 5):
+            cards_by_id[media_id].on_pin_clicked()
+        self.board.set_pinned_only(True)
+        moved_card = cards_by_id[5]
+        self._begin_preview(moved_card)
+        self.board.preview_reorder(moved_card, 1)
+        self.board.commit_preview()
+        self.board._reset_drag_state()
+        self.board.set_pinned_only(False)
+
+        filtered_media.media_list = [
+            make_media(media_id)
+            for media_id in (5, 4, 3, 2, 1, 0)
+        ]
+        self.board.load_media(filtered_media, reset_order=True)
+
+        self.assertEqual(self.board.media_ids, [1, 5, 3, 4, 2, 0])
+        self.assertEqual(
+            [
+                card.get_current_media_key()
+                for card in self.board.cards
+                if card.is_pinned
+            ],
+            [1, 5, 3],
+        )
+        self.assertIs(self.board.cards[0], cards_by_id[1])
+        self.assertIs(self.board.cards[1], cards_by_id[5])
+        self.assertIs(self.board.cards[2], cards_by_id[3])
+
+    def test_stable_reconcile_preserves_manual_order_and_appends_new_media(self):
+        filtered_media = FakeFilteredMedia(6)
+        self.board.load_media(filtered_media)
+        moved_card = self.board.cards[4]
+        self._begin_preview(moved_card)
+        self.board.preview_reorder(moved_card, 1)
+        self.board.commit_preview()
+        self.board._reset_drag_state()
+        previous_media = list(filtered_media.media_list)
+        filtered_media.media_list = [
+            make_media(media_id)
+            for media_id in (6, 5, 4, 3, 2, 1)
+        ]
+
+        self.board.reconcile_media(filtered_media, previous_media)
+
+        self.assertEqual(self.board.media_ids, [4, 1, 2, 3, 5, 6])
 
     def test_pinned_projection_restores_the_exact_canonical_grid(self):
         self.board.load_media(FakeFilteredMedia(12))
@@ -304,7 +460,7 @@ class MediaBoardLayoutTests(unittest.TestCase):
         self.assertEqual(self.board.visible_cards, [second_pinned])
         self.assertEqual(
             second_pinned.geometry().left(),
-            self.board.grid_layout.contentsMargins().left(),
+            self.board.slot_rects(1)[0].left(),
         )
 
         second_pinned.btn_close.click()
@@ -486,6 +642,13 @@ class MediaBoardLayoutTests(unittest.TestCase):
         self.assertEqual(spy.count(), 1)
         self.assertEqual(spy.at(0), [media_draft])
 
+    def _begin_preview(self, card):
+        self.board._drag_card = card
+        self.board._drag_original_cards = list(self.board.cards)
+        self.board._preview_cards = list(self.board.cards)
+        self.board._preview_index = self.board.visible_cards.index(card)
+        card.hide()
+
 
 class WatchlistScrollTests(unittest.TestCase):
     @classmethod
@@ -531,7 +694,7 @@ class WatchlistScrollTests(unittest.TestCase):
         self.assertFalse(vertical_bar.isVisible())
         self.assertEqual(horizontal_bar.maximum(), 0)
         self.assertEqual(board.width(), viewport.width())
-        spacing = board.grid_layout.horizontalSpacing()
+        spacing = BOARD_SPACING
         expected_card_width = (
             viewport.width()
             - (board.posters_per_row - 1) * spacing
@@ -563,6 +726,54 @@ class WatchlistScrollTests(unittest.TestCase):
             self.page.status_message,
             "19 titles – Showing: To Watch, Released, Random",
         )
+
+    def test_drag_auto_scrolls_near_the_viewport_bottom(self):
+        board = self.page.media_board
+        viewport = self.page.scroll_area.viewport()
+        scroll_bar = self.page.scroll_area.verticalScrollBar()
+        self.assertGreater(scroll_bar.maximum(), 0)
+        scroll_bar.setValue(0)
+        board._drag_card = board.cards[0]
+        board._last_drag_global_position = viewport.mapToGlobal(
+            viewport.rect().bottomLeft()
+        )
+
+        board._auto_scroll()
+
+        self.assertGreater(scroll_bar.value(), 0)
+        board._reset_drag_state()
+
+    def test_manual_order_survives_stable_refresh_and_reload_resets_it(self):
+        board = self.page.media_board
+        moved_card = board.cards[4]
+        board._drag_card = moved_card
+        board._drag_original_cards = list(board.cards)
+        board._preview_cards = list(board.cards)
+        board._preview_index = 4
+        moved_card.hide()
+        board.preview_reorder(moved_card, 1)
+        board.commit_preview()
+        board._reset_drag_state()
+        session_order = board.media_ids
+
+        self.filtered_media.next_media_list = [
+            make_media(media_id)
+            for media_id in reversed(range(20))
+        ]
+        self.page.refresh_preserving_grid()
+        self._process_layout_events()
+
+        self.assertEqual(board.media_ids, session_order)
+
+        reloaded_order = list(reversed(range(20)))
+        self.filtered_media.next_media_list = [
+            make_media(media_id)
+            for media_id in reloaded_order
+        ]
+        self.page.reload_default_filter()
+        self._process_layout_events()
+
+        self.assertEqual(board.media_ids, reloaded_order)
 
     def test_reflow_keeps_the_anchor_card_at_the_same_vertical_offset(self):
         self.page.resize(900, 300)

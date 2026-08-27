@@ -75,6 +75,7 @@ class WatchlistPage(QWidget):
             """
         )
         self.scroll_area.setWidget(self.media_board)
+        self.media_board.set_scroll_area(self.scroll_area)
         self.scroll_area.viewport().installEventFilter(self)
         self.media_board.set_layout_width(self._stable_board_width())
 
@@ -135,8 +136,10 @@ class WatchlistPage(QWidget):
         return self.media_board.pinned_only
 
     def ensure_loaded(self):
-        if not self._is_loaded or self._is_invalidated:
+        if not self._is_loaded:
             self.refresh_media_view()
+        elif self._is_invalidated:
+            self.refresh_preserving_grid()
 
         return self.filtered_media.media_list
 
@@ -197,7 +200,7 @@ class WatchlistPage(QWidget):
 
         self.filtered_media = FilteredMedia()
         self._is_invalidated = True
-        self.refresh_media_view()
+        self.refresh_media_view(reset_order=True)
 
     def on_filter_input(self, filter_text):
         if filter_text != DEFAULT_FILTER_TEXT:
@@ -206,9 +209,15 @@ class WatchlistPage(QWidget):
 
         return self.reload_default_filter()
 
-    def refresh_media_view(self):
+    def refresh_media_view(self, *, reset_order=False):
+        if self._is_loaded and not reset_order:
+            return self.refresh_preserving_grid()
+
         self.filtered_media.refresh()
-        self.media_board.load_media(self.filtered_media)
+        self.media_board.load_media(
+            self.filtered_media,
+            reset_order=reset_order,
+        )
         self._is_loaded = True
         self._is_invalidated = False
 
