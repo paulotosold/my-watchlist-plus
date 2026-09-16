@@ -13,6 +13,7 @@ from .catalog import (
     update_media_tmdb_watch_providers_checked_at,
 )
 from .errors import ConcurrentEditError, MetadataRefreshConflict
+from .history import load_history_entries, apply_history_delta, sync_history
 from .queries import (
     get_country_name,
     get_db_actors,
@@ -27,7 +28,6 @@ from .queries import (
     get_db_origin_language,
     get_db_production_companies,
     get_db_production_countries,
-    get_db_series_episode_watch_history,
     get_db_series_episodes,
     get_db_series_summary,
     get_db_series_view,
@@ -48,7 +48,6 @@ from .user_data import (
     get_empty_media_user_data,
     get_media_state,
     set_media_watch_state,
-    sync_series_episode_watch_history,
     update_list,
 )
 
@@ -57,6 +56,9 @@ __all__ = [
     "ConcurrentEditError",
     "MetadataRefreshConflict",
     "add_media",
+    "load_history_entries",
+    "apply_history_delta",
+    "sync_history",
     "apply_media_state_patch",
     "apply_media_user_changes",
     "apply_metadata_refresh",
@@ -78,7 +80,6 @@ __all__ = [
     "get_db_origin_language",
     "get_db_production_companies",
     "get_db_production_countries",
-    "get_db_series_episode_watch_history",
     "get_db_series_episodes",
     "get_db_series_summary",
     "get_db_series_view",
@@ -96,7 +97,6 @@ __all__ = [
     "save_media_catalog_draft",
     "save_media_draft",
     "set_media_watch_state",
-    "sync_series_episode_watch_history",
     "update_list",
     "update_media_tmdb_posters_checked_at",
     "update_media_tmdb_watch_providers_checked_at",

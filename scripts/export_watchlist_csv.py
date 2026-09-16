@@ -165,25 +165,10 @@ def _get_notes_by_media_id(conn):
 
 def _get_watch_history_by_media_id(conn):
     history_by_media_id = defaultdict(list)
-    rows = conn.execute(
-        """
-        SELECT
-            wh.media_id,
-            wh.date_earliest,
-            wh.date_latest
-        FROM watch_history wh
-        JOIN media_state ms
-            ON ms.media_id = wh.media_id
-        ORDER BY wh.media_id, wh.created_at, wh.id
-        """
-    ).fetchall()
-
-    for row in rows:
-        earliest = row["date_earliest"] or ""
-        latest = row["date_latest"] or ""
-        history_by_media_id[row["media_id"]].append(
-            f"{earliest}:{latest}"
-        )
+    from app.media_repository.history import load_history_entries
+    for entry in load_history_entries(conn):
+        for item in entry["items"]:
+            history_by_media_id[item["media_id"]].append(entry)
 
     return history_by_media_id
 

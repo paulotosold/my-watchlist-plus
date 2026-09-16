@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.media_user_data.watch_history_formatters import (
-    earliest_created_at,
     format_episode_ranges,
     format_watch_history_entry,
     watch_history_sort_key,
@@ -18,7 +17,7 @@ HISTORY_DEFAULT_FILTER_TEXT = "All watch history entries, in chronological order
 class HistoryEntry:
     key: tuple[Any, ...]
     kind: str
-    watch_history_ids: tuple[int, ...]
+    entry_id: int
     owner_media_ids: tuple[int, ...]
     state_media_id: int
     details_media_id: int
@@ -35,6 +34,7 @@ class HistoryEntry:
     impression: str | None
     is_cabinet_worthy: bool | None
     episodes: tuple[dict[str, Any], ...] = ()
+    updated_at: str | None = None
 
 
 def load_default_history_entries(conn) -> list[HistoryEntry]:
@@ -66,28 +66,11 @@ def choose_history_poster(
 
 
 def _project_history_entries(rows) -> list[HistoryEntry]:
-    direct_entries = []
-    episode_groups = {}
-
+    by_entry = {}
     for row in rows:
-        if (
-            row["owner_media_type"] == "episode"
-            and row.get("series_id") is not None
-        ):
-            key = (
-                row["series_id"],
-                row["date_earliest"],
-                row["date_latest"],
-            )
-            episode_groups.setdefault(key, []).append(row)
-        else:
-            direct_entries.append(_build_direct_entry(row))
-
-    grouped_entries = [
-        _build_episode_group_entry(group)
-        for group in episode_groups.values()
-    ]
-    return direct_entries + grouped_entries
+        by_entry.setdefault(row["entry_id"], []).append(row)
+    return [_build_episode_group_entry(group) if group[0]["owner_media_type"] == "episode"
+            else _build_direct_entry(group[0]) for group in by_entry.values()]
 
 
 def _build_direct_entry(row) -> HistoryEntry:
@@ -97,12 +80,12 @@ def _build_direct_entry(row) -> HistoryEntry:
         if row["owner_media_type"] == "series"
         else None
     ) or row.get("owner_release_date")
-    history_id = row["watch_history_id"]
+    history_id = row["entry_id"]
 
     return HistoryEntry(
-        key=("media_event", history_id),
+        key=("watch_history_entry", history_id),
         kind="media_event",
-        watch_history_ids=(history_id,),
+        entry_id=history_id,
         owner_media_ids=(row["owner_media_id"],),
         state_media_id=row["display_media_id"],
         details_media_id=row["display_media_id"],
@@ -110,6 +93,7 @@ def _build_direct_entry(row) -> HistoryEntry:
         date_earliest=row.get("date_earliest"),
         date_latest=row.get("date_latest"),
         created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
         release_date=release_date,
         formatted_date=format_watch_history_entry(
             event,
@@ -132,11 +116,10 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         key=lambda row: (
             row.get("season_num") or 0,
             row.get("episode_num") or 0,
-            row["watch_history_id"],
+            row["entry_id"],
         ),
     )
     representative = rows[0]
-    history_ids = tuple(row["watch_history_id"] for row in rows)
     owner_media_ids = tuple(dict.fromkeys(
         row["owner_media_id"]
         for row in rows
@@ -152,17 +135,17 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         representative.get("series_first_air_date")
         or representative.get("display_release_date")
     )
-    created_at = earliest_created_at(rows)
+    created_at = representative.get("created_at")
     event = {
         "date_earliest": representative.get("date_earliest"),
         "date_latest": representative.get("date_latest"),
         "created_at": created_at,
-        "watch_history_ids": history_ids,
+        "id": representative["entry_id"],
     }
     episodes = tuple(
         {
             "media_id": row["owner_media_id"],
-            "watch_history_id": row["watch_history_id"],
+            "id": row["item_id"],
             "season_num": row.get("season_num"),
             "episode_num": row.get("episode_num"),
         }
@@ -185,13 +168,9 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         )
 
     return HistoryEntry(
-        key=(
-            "episode_group",
-            representative["series_id"],
-            history_ids,
-        ),
+        key=("watch_history_entry", representative["entry_id"]),
         kind="episode_group",
-        watch_history_ids=history_ids,
+        entry_id=representative["entry_id"],
         owner_media_ids=owner_media_ids,
         state_media_id=representative["display_media_id"],
         details_media_id=representative["display_media_id"],
@@ -199,6 +178,7 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         date_earliest=representative.get("date_earliest"),
         date_latest=representative.get("date_latest"),
         created_at=created_at,
+        updated_at=representative.get("updated_at"),
         release_date=release_date,
         formatted_date=format_watch_history_entry(
             event,
@@ -218,18 +198,17 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
 
 def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
     representative = rows[0]
-    history_ids = tuple(row["watch_history_id"] for row in rows)
-    created_at = earliest_created_at(rows)
+    created_at = representative.get("created_at")
     event = {
         "date_earliest": representative.get("date_earliest"),
         "date_latest": representative.get("date_latest"),
         "created_at": created_at,
-        "watch_history_ids": history_ids,
+        "id": representative["entry_id"],
     }
     episodes = tuple(
         {
             "media_id": row["owner_media_id"],
-            "watch_history_id": row["watch_history_id"],
+            "id": row["item_id"],
             "season_num": row.get("season_num"),
             "episode_num": row.get("episode_num"),
         }
@@ -252,9 +231,9 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
     release_date = representative.get("owner_release_date")
 
     return HistoryEntry(
-        key=("episode_event", episode_media_id, history_ids),
+        key=("watch_history_entry", representative["entry_id"]),
         kind="episode_event",
-        watch_history_ids=history_ids,
+        entry_id=representative["entry_id"],
         owner_media_ids=(episode_media_id,),
         state_media_id=episode_media_id,
         details_media_id=episode_media_id,
@@ -262,6 +241,7 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
         date_earliest=representative.get("date_earliest"),
         date_latest=representative.get("date_latest"),
         created_at=created_at,
+        updated_at=representative.get("updated_at"),
         release_date=release_date,
         formatted_date=format_watch_history_entry(
             event,
@@ -281,7 +261,7 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
 
 def _watch_event(row):
     return {
-        "id": row["watch_history_id"],
+        "id": row["entry_id"],
         "date_earliest": row.get("date_earliest"),
         "date_latest": row.get("date_latest"),
         "created_at": row.get("created_at"),
@@ -345,11 +325,13 @@ _DEFAULT_HISTORY_QUERY = """
         WHERE sp.curation_status IN ('selected', 'pending')
     )
     SELECT
-        wh.id AS watch_history_id,
-        wh.media_id AS owner_media_id,
+        wh.id AS entry_id,
+        wi.id AS item_id,
+        wi.media_id AS owner_media_id,
         wh.date_earliest,
         wh.date_latest,
         wh.created_at,
+        wh.updated_at,
         owner.media_type AS owner_media_type,
         owner.title AS owner_title,
         owner.release_date AS owner_release_date,
@@ -395,9 +377,10 @@ _DEFAULT_HISTORY_QUERY = """
         poster.source AS poster_source,
         poster.curation_status AS poster_curation_status,
         poster.is_default AS poster_is_default
-    FROM watch_history wh
+    FROM watch_history_entry wh
+    JOIN watch_history_item wi ON wi.entry_id = wh.id
     JOIN media owner
-        ON owner.id = wh.media_id
+        ON owner.id = wi.media_id
     LEFT JOIN media_state owner_state
         ON owner_state.media_id = owner.id
     LEFT JOIN episode_details ed

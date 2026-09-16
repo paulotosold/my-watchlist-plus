@@ -357,76 +357,125 @@ END;
 -- ----------------------------------------------------------
 
 -- ----------------------------------------------------------
--- watch_history table
-CREATE TABLE IF NOT EXISTS watch_history (
+-- Logical history records and their media associations.
+CREATE TABLE IF NOT EXISTS watch_history_entry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    media_id INTEGER NOT NULL,
     date_earliest TEXT,
     date_latest TEXT,
-
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT,
-
-    FOREIGN KEY (media_id)
-        REFERENCES media(id)
-        ON DELETE CASCADE,
-
-    CHECK (
-        date_earliest IS NULL
-        OR (
-            date_earliest = date(date_earliest)
-            AND date_earliest GLOB '????-??-??'
-        )
-    ),
-
-    CHECK (
-        date_latest IS NULL
-        OR (
-            date_latest = date(date_latest)
-            AND date_latest GLOB '????-??-??'
-        )
-    ),
-
-    CHECK (
-        date_earliest IS NULL
-        OR date_latest IS NULL
-        OR date_latest >= date_earliest
-    )
+    CHECK (date_earliest IS NULL OR (
+        date(date_earliest, '+0 days') IS NOT NULL
+        AND date_earliest = date(date_earliest, '+0 days')
+        AND date_earliest GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+    )),
+    CHECK (date_latest IS NULL OR (
+        date(date_latest, '+0 days') IS NOT NULL
+        AND date_latest = date(date_latest, '+0 days')
+        AND date_latest GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+    )),
+    CHECK (date_earliest IS NULL OR date_latest IS NULL
+           OR date_latest >= date_earliest)
 );
 
-CREATE INDEX IF NOT EXISTS idx_watch_history_media_id
-ON watch_history (media_id);
+CREATE TABLE IF NOT EXISTS watch_history_item (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES watch_history_entry(id) ON DELETE CASCADE,
+    media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    UNIQUE (entry_id, media_id)
+);
+CREATE INDEX IF NOT EXISTS idx_watch_history_item_media_id
+ON watch_history_item(media_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_watch_history_item_validate_insert
+BEFORE INSERT ON watch_history_item
+BEGIN
+    SELECT RAISE(ABORT, 'invalid watch history composition')
+    WHERE NOT EXISTS (
+        SELECT 1 FROM media m
+        LEFT JOIN episode_details ed ON ed.media_id = m.id
+        JOIN media parent ON parent.id = COALESCE(ed.series_id, m.id)
+        WHERE m.id = NEW.media_id
+          AND (m.media_type != 'episode' OR
+               (ed.media_id IS NOT NULL AND parent.media_type = 'series'))
+    ) OR EXISTS (
+        SELECT 1 FROM watch_history_item i
+        JOIN media old_media ON old_media.id = i.media_id
+        JOIN media new_media ON new_media.id = NEW.media_id
+        LEFT JOIN episode_details old_ed ON old_ed.media_id = i.media_id
+        LEFT JOIN episode_details new_ed ON new_ed.media_id = NEW.media_id
+        WHERE i.entry_id = NEW.entry_id
+
+          AND (old_media.media_type != 'episode' OR new_media.media_type != 'episode'
+               OR old_ed.series_id IS NOT new_ed.series_id)
+    );
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_watch_history_item_validate_update
+BEFORE UPDATE ON watch_history_item
+BEGIN
+    SELECT RAISE(ABORT, 'invalid watch history composition')
+    WHERE NOT EXISTS (
+        SELECT 1 FROM media m
+        LEFT JOIN episode_details ed ON ed.media_id = m.id
+        JOIN media parent ON parent.id = COALESCE(ed.series_id, m.id)
+        WHERE m.id = NEW.media_id
+          AND (m.media_type != 'episode' OR
+               (ed.media_id IS NOT NULL AND parent.media_type = 'series'))
+    ) OR EXISTS (
+        SELECT 1 FROM watch_history_item i
+        JOIN media old_media ON old_media.id = i.media_id
+        JOIN media new_media ON new_media.id = NEW.media_id
+        LEFT JOIN episode_details old_ed ON old_ed.media_id = i.media_id
+        LEFT JOIN episode_details new_ed ON new_ed.media_id = NEW.media_id
+        WHERE i.entry_id = NEW.entry_id
+          AND i.id != OLD.id
+          AND (old_media.media_type != 'episode' OR new_media.media_type != 'episode'
+               OR old_ed.series_id IS NOT new_ed.series_id)
+    );
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_watch_history_item_cleanup_delete
+AFTER DELETE ON watch_history_item
+BEGIN
+    DELETE FROM watch_history_entry WHERE id = OLD.entry_id
+    AND NOT EXISTS (SELECT 1 FROM watch_history_item WHERE entry_id = OLD.entry_id);
+    UPDATE watch_history_entry SET updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
+    WHERE id = OLD.entry_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_watch_history_item_cleanup_move
+AFTER UPDATE OF entry_id ON watch_history_item
+WHEN OLD.entry_id != NEW.entry_id
+BEGIN
+    DELETE FROM watch_history_entry WHERE id = OLD.entry_id
+    AND NOT EXISTS (SELECT 1 FROM watch_history_item WHERE entry_id = OLD.entry_id);
+END;
 -- ----------------------------------------------------------
 
 -- ----------------------------------------------------------
--- series_episode_watch_history view
-CREATE VIEW IF NOT EXISTS series_episode_watch_history AS
-SELECT
-    ed.series_id AS series_id,
-    e.id AS episode_id,
-    ed.season_num AS season_num,
-    ed.episode_num AS episode_num,
-    wh.id AS watch_history_id,
-    wh.date_earliest AS date_earliest,
-    wh.date_latest AS date_latest,
-    wh.created_at AS created_at
+-- Deleting a series removes its episode catalogue and all affected memberships.
+CREATE TRIGGER IF NOT EXISTS trg_media_delete_series_episodes
+BEFORE DELETE ON media WHEN OLD.media_type = 'series'
+BEGIN
+    DELETE FROM media WHERE id IN (
+        SELECT media_id FROM episode_details WHERE series_id = OLD.id
+    );
+END;
 
-FROM watch_history wh
+CREATE TRIGGER IF NOT EXISTS trg_episode_details_validate_history_move
+BEFORE UPDATE OF series_id ON episode_details
+WHEN NEW.series_id != OLD.series_id
+BEGIN
+    SELECT RAISE(ABORT, 'cannot move an episode out of its history group')
+    WHERE EXISTS (
+        SELECT 1 FROM watch_history_item own
+        JOIN watch_history_item sibling ON sibling.entry_id = own.entry_id AND sibling.id != own.id
+        JOIN episode_details ed ON ed.media_id = sibling.media_id
+        WHERE own.media_id = OLD.media_id AND ed.series_id != NEW.series_id
+    );
+END;
 
-JOIN media e
-    ON e.id = wh.media_id
-    AND e.media_type = 'episode'
-
-JOIN episode_details ed
-    ON ed.media_id = e.id
-
-JOIN media s
-    ON s.id = ed.series_id
-    AND s.media_type = 'series';
--- ----------------------------------------------------------
-
--- ----------------------------------------------------------
 -- media_watch_providers table
 CREATE TABLE IF NOT EXISTS media_watch_providers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -366,31 +366,6 @@ def get_db_series_summary(conn, media_id):
 
     return dict(row)
 
-def get_db_series_episode_watch_history(conn, media_id):
-    cursor = conn.execute(
-        """
-        SELECT
-            series_id,
-            episode_id,
-            season_num,
-            episode_num,
-            watch_history_id,
-            date_earliest,
-            date_latest,
-            created_at
-        FROM series_episode_watch_history
-        WHERE series_id = ?
-        ORDER BY
-            created_at,
-            watch_history_id,
-            season_num,
-            episode_num
-        """,
-        (media_id,),
-    )
-
-    return [dict(row) for row in cursor.fetchall()]
-
 def get_db_series_episodes(conn, media_id):
     cursor = conn.execute(
         """
@@ -401,7 +376,8 @@ def get_db_series_episodes(conn, media_id):
             ed.season_num AS season_num,
             ed.episode_num AS episode_num,
             e.title AS title,
-            e.release_date AS release_date
+            e.release_date AS release_date,
+            (SELECT COUNT(*) FROM watch_history_item i WHERE i.media_id = e.id) AS history_count
         FROM episode_details ed
         JOIN media e
             ON e.id = ed.media_id
@@ -416,16 +392,19 @@ def get_db_series_episodes(conn, media_id):
     return [dict(row) for row in cursor.fetchall()]
 
 def get_db_series_view(conn, media_id, media_type):
-    if media_type != "series":
+    if media_type == "episode":
+        row = conn.execute('SELECT series_id FROM episode_details WHERE media_id = ?', (media_id,)).fetchone()
+        if row is None:
+            return None
+        media_id = row['series_id']
+    elif media_type != "series":
         return None
 
     return {
+        "series_id": media_id,
+        "metadata": dict(conn.execute('SELECT * FROM media WHERE id = ?', (media_id,)).fetchone()),
         "summary": get_db_series_summary(conn, media_id),
         "episodes": get_db_series_episodes(conn, media_id),
-        "episode_watch_history": get_db_series_episode_watch_history(
-            conn,
-            media_id,
-        ),
     }
 
 def get_db_episode_details(conn, media_id):

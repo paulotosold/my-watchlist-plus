@@ -108,7 +108,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             with self.subTest(case=name):
                 entry = {
                     "kind": "media_event",
-                    "watch_history_id": 50,
+                    "id": 50,
                     "date_earliest": earliest,
                     "date_latest": latest,
                 }
@@ -151,7 +151,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         )
         entry = {
             "kind": "media_event",
-            "watch_history_id": 50,
+            "id": 50,
             "date_earliest": None,
             "date_latest": None,
             "created_at": created_date.toString("yyyy-MM-dd"),
@@ -209,7 +209,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
     def test_unchanged_edited_entry_stays_disabled_until_valid_change(self):
         entry = {
             "kind": "media_event",
-            "watch_history_id": 50,
+            "id": 50,
             "date_earliest": "2026-05-01",
             "date_latest": "2026-05-01",
         }
@@ -349,7 +349,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
     def test_exact_range_round_trip_restores_unchanged_entry_signature(self):
         entry = {
             "kind": "media_event",
-            "watch_history_id": 50,
+            "id": 50,
             "date_earliest": "2026-05-01",
             "date_latest": "2026-05-01",
         }
@@ -475,12 +475,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             **self._episode(21, 1, "Next season", today),
             "season_num": 2,
         }
-        watched_row = {
-            **deepcopy(season_1_episode_1),
-            "watch_history_id": 90,
-            "date_earliest": "2026-05-01",
-            "date_latest": "2026-05-01",
-        }
+        watched_row = {"id": 90, "date_earliest": "2026-05-01", "date_latest": "2026-05-01", "items": [deepcopy(season_1_episode_1)]}
         dialog = self._dialog(
             self._series_draft(
                 [
@@ -488,7 +483,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
                     season_1_episode_2,
                     season_2_episode_1,
                 ],
-                episode_watch_history=[watched_row],
+                watch_history=[watched_row],
             )
         )
         dialog.show()
@@ -616,24 +611,12 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         future = date.today() + timedelta(days=30)
         released = self._episode(11, 1, "Released", date.today())
         selected_unavailable = self._episode(13, 3, "Coming Soon", future)
-        selected_row = {
-            **deepcopy(selected_unavailable),
-            "watch_history_id": 77,
-            "date_earliest": "2026-05-01",
-            "date_latest": "2026-05-01",
-        }
+        selected_row = {"id": 77, "date_earliest": "2026-05-01", "date_latest": "2026-05-01", "items": [deepcopy(selected_unavailable)]}
         media_draft = self._series_draft(
             [released, selected_unavailable],
-            episode_watch_history=[selected_row],
+            watch_history=[selected_row],
         )
-        entry = {
-            "kind": "episode_group",
-            "watch_history_ids": [77],
-            "draft_ids": [],
-            "date_earliest": "2026-05-01",
-            "date_latest": "2026-05-01",
-            "episodes": [deepcopy(selected_row)],
-        }
+        entry = deepcopy(selected_row)
         dialog = self._dialog(media_draft, entry)
         dialog.show()
         self.application.processEvents()
@@ -672,7 +655,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         locked_only_dialog = self._dialog(
             self._series_draft(
                 [selected_unavailable],
-                episode_watch_history=[selected_row],
+                watch_history=[selected_row],
             ),
             entry,
         )
@@ -687,30 +670,13 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         released = self._episode(11, 1, "Released", date.today())
         selected_unavailable = self._episode(13, 3, "Coming Soon", future)
         other_unavailable = self._episode(14, 4, "Later", future)
-        selected_row = {
-            **deepcopy(selected_unavailable),
-            "watch_history_id": 77,
-            "date_earliest": "2026-05-01",
-            "date_latest": "2026-05-01",
-        }
-        other_row = {
-            **deepcopy(other_unavailable),
-            "watch_history_id": 78,
-            "date_earliest": "2026-05-02",
-            "date_latest": "2026-05-02",
-        }
+        selected_row = {"id": 77, "date_earliest": "2026-05-01", "date_latest": "2026-05-01", "items": [deepcopy(selected_unavailable)]}
+        other_row = {"id": 78, "date_earliest": "2026-05-02", "date_latest": "2026-05-02", "items": [deepcopy(other_unavailable)]}
         media_draft = self._series_draft(
             [released, selected_unavailable, other_unavailable],
-            episode_watch_history=[selected_row, other_row],
+            watch_history=[selected_row, other_row],
         )
-        entry = {
-            "kind": "episode_group",
-            "watch_history_ids": [77],
-            "draft_ids": [],
-            "date_earliest": "2026-05-01",
-            "date_latest": "2026-05-01",
-            "episodes": [deepcopy(selected_row)],
-        }
+        entry = deepcopy(selected_row)
         dialog = self._dialog(media_draft, entry)
 
         self.assertEqual(set(dialog.episode_buttons), {(1, 1), (1, 3)})
@@ -728,12 +694,12 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         apply_watch_entry_result(media_draft, entry, dialog.result_payload)
 
         rows_by_id = {
-            row.get("watch_history_id"): row
-            for row in media_draft["series_view"]["episode_watch_history"]
+            row.get("id"): row
+            for row in media_draft["user_data"]["watch_history"]
         }
         self.assertEqual(set(rows_by_id), {77, 78})
-        self.assertEqual(rows_by_id[77]["season_num"], 1)
-        self.assertEqual(rows_by_id[77]["episode_num"], 3)
+        self.assertEqual(rows_by_id[77]["items"][0]["season_num"], 1)
+        self.assertEqual(rows_by_id[77]["items"][0]["episode_num"], 3)
         self.assertEqual(rows_by_id[77]["date_earliest"], "2026-05-03")
 
     def test_episode_selector_height_tracks_rows_from_the_first_season(self):
@@ -776,7 +742,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             with self.subTest(key=key):
                 entry = {
                     "kind": "media_event",
-                    "watch_history_id": 50,
+                    "id": 50,
                     "date_earliest": "2026-05-01",
                     "date_latest": "2026-05-01",
                 }
@@ -813,7 +779,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
                 with self.subTest(case=name, key=key):
                     entry = {
                         "kind": "media_event",
-                        "watch_history_id": 50,
+                        "id": 50,
                         "date_earliest": "2026-05-01",
                         "date_latest": "2026-05-01",
                     }
@@ -838,7 +804,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
     def test_explicit_save_and_delete_buttons_keep_their_actions(self):
         entry = {
             "kind": "media_event",
-            "watch_history_id": 50,
+            "id": 50,
             "date_earliest": "2026-05-01",
             "date_latest": "2026-05-01",
         }
@@ -889,6 +855,29 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         self.assertEqual(label.text(), f"Season {season_num}:")
         return label
 
+    def test_episode_context_edits_whole_group_and_can_convert_to_series(self):
+        episodes = [self._episode(11, 1, "Pilot", date.today()),
+                    self._episode(12, 2, "Second", date.today())]
+        entry = {"id": 77, "date_earliest": "2026-05-01", "date_latest": "2026-05-01",
+                 "created_at": "2026-05-02 10:00:00", "items": deepcopy(episodes)}
+        draft = self._series_draft(episodes, watch_history=[entry])
+        draft["series_view"].update(series_id=10, metadata=deepcopy(draft["metadata"]))
+        draft["media_id"] = 11
+        draft["metadata"] = {"media_type": "episode", "tmdb_id": 1011, "title": "Pilot"}
+        dialog = self._dialog(draft, entry)
+        self.assertEqual(set(dialog.episode_buttons), {(1, 1), (1, 2)})
+        self.assertTrue(all(button.isChecked() for button, _ in dialog.episode_buttons.values()))
+        self.assertIn("S1:E1-2", dialog.preview_label.text())
+        for button, _ in dialog.episode_buttons.values():
+            button.click()
+        dialog.save_entry_button.click()
+        apply_watch_entry_result(draft, entry, dialog.result_payload)
+        saved = draft["user_data"]["watch_history"][0]
+        self.assertEqual(saved["id"], 77)
+        self.assertEqual(saved["created_at"], entry["created_at"])
+        self.assertEqual(saved["items"][0]["media_id"], 10)
+        self.assertEqual(saved["items"][0]["media_type"], "series")
+
     def _movie_draft(self):
         return {
             "media_id": 1,
@@ -900,7 +889,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             "user_data": {"watch_history": []},
         }
 
-    def _series_draft(self, episodes, episode_watch_history=None):
+    def _series_draft(self, episodes, watch_history=None):
         return {
             "media_id": 10,
             "metadata": {
@@ -911,13 +900,14 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             "series_view": {
                 "summary": {"first_air_date": "2020-01-01"},
                 "episodes": episodes,
-                "episode_watch_history": episode_watch_history or [],
             },
-            "user_data": {"watch_history": []},
+            "user_data": {"watch_history": watch_history or []},
         }
 
     def _episode(self, episode_id, episode_num, title, release_date):
         return {
+            "media_id": episode_id,
+            "media_type": "episode",
             "series_id": 10,
             "episode_id": episode_id,
             "tmdb_id": 1000 + episode_id,

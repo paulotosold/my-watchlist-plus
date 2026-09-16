@@ -9,23 +9,18 @@ def apply_inserted_ids_to_draft(media_draft, save_result):
     """Apply post-commit IDs without ever exposing rolled-back IDs to a draft."""
     _ensure_cabinet_order(media_draft)
     mappings = save_result.get("inserted_ids_by_draft_id") or {}
-    _apply_event_ids(
-        (media_draft.get("user_data") or {}).get("watch_history", []),
-        mappings.get("media_watch_history", {}),
-        id_key="id",
-    )
+    history = (media_draft.get("user_data") or {}).get("watch_history", [])
+    _apply_event_ids(history, mappings.get("watch_history_entries", {}), id_key="id")
+    persisted = save_result.get("persisted_watch_history") or {}
+    for entry in history:
+        _apply_event_ids(entry.get("items", []), mappings.get("watch_history_items", {}), id_key="id")
+        saved = persisted.get(entry.get("id"))
+        if saved is not None:
+            entry.clear()
+            entry.update(deepcopy(saved))
     _apply_event_ids(
         (media_draft.get("user_data") or {}).get("notes", []),
-        mappings.get("notes", {}),
-        id_key="id",
-    )
-    _apply_event_ids(
-        ((media_draft.get("series_view") or {}).get(
-            "episode_watch_history",
-            [],
-        )),
-        mappings.get("series_episode_watch_history", {}),
-        id_key="watch_history_id",
+        mappings.get("notes", {}), id_key="id",
     )
     return media_draft
 
@@ -47,7 +42,15 @@ def merge_metadata_refresh(media_draft, refresh_payload):
     if merged.get("media_id") is None and snapshot:
         merged["_metadata_refresh_snapshot"] = deepcopy(snapshot)
 
-    if (merged.get("metadata") or {}).get("media_type") != "series":
+    media_type = (merged.get("metadata") or {}).get("media_type")
+    if media_type == "movie":
+        for entry in (merged.get("user_data") or {}).get("watch_history", []):
+            for item in entry.get("items", []):
+                for key in ("title", "release_date"):
+                    if key in merged["metadata"]:
+                        item[key] = merged["metadata"][key]
+        return merged
+    if media_type == "episode" and not refresh_result.get("series_catalog"):
         return merged
 
     catalog = refresh_result.get("series_catalog")
@@ -57,20 +60,20 @@ def merge_metadata_refresh(media_draft, refresh_payload):
 
     current_series_view = merged.get("series_view") or {}
     episodes = deepcopy((catalog or {}).get("episodes") or [])
-    episode_history = deepcopy(
-        current_series_view.get("episode_watch_history") or []
-    )
-    unresolved_history = _normalize_episode_history(episode_history, episodes)
-
-    if merged.get("media_id") is None and unresolved_history:
-        raise ValueError(
-            "Metadata refresh would orphan an unsaved episode watch entry."
-        )
+    history_items = [item for entry in (merged.get("user_data") or {}).get("watch_history", [])
+                     for item in entry.get("items", []) if item.get("media_type") == "episode"]
+    unresolved_history = _normalize_episode_history(history_items, episodes)
+    if unresolved_history:
+        raise ValueError("Metadata refresh would orphan an episode watch entry.")
+    old_episodes = {e.get("tmdb_id"): e for e in current_series_view.get("episodes", [])}
+    for episode in episodes:
+        old = old_episodes.get(episode.get("tmdb_id"), {})
+        episode["external_history_count"] = old.get("external_history_count", 0)
     merged["series_view"] = {
         **current_series_view,
+        **{key: deepcopy(catalog[key]) for key in ("series_id", "metadata") if key in (catalog or {})},
         "summary": deepcopy((catalog or {}).get("summary") or {}),
         "episodes": episodes,
-        "episode_watch_history": episode_history,
     }
     return merged
 
@@ -145,7 +148,7 @@ def _normalize_episode_history(history, episodes):
     unresolved = []
 
     for event in history:
-        episode = by_episode_id.get(event.get("episode_id"))
+        episode = by_episode_id.get(event.get("media_id"))
 
         if episode is None:
             episode = by_tmdb_id.get(event.get("tmdb_id"))
@@ -154,12 +157,15 @@ def _normalize_episode_history(history, episodes):
             unresolved.append(event)
             continue
 
+        if episode.get("episode_id") is not None:
+            event["media_id"] = episode["episode_id"]
         for key in (
             "series_id",
-            "episode_id",
             "tmdb_id",
             "season_num",
             "episode_num",
+            "title",
+            "release_date",
         ):
             if key in episode:
                 event[key] = episode.get(key)

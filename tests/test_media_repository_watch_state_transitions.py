@@ -1,3 +1,5 @@
+from copy import deepcopy
+from history_fixtures import entry
 import sqlite3
 import unittest
 
@@ -85,6 +87,7 @@ class MediaRepositoryWatchStateTests(unittest.TestCase):
             {
                 "date_earliest": "2026-01-01",
                 "date_latest": "2026-01-01",
+                "items": [{"media_id": episode_id}],
             },
         ]
         media_repository.save_media_draft(self.conn, draft)
@@ -98,6 +101,7 @@ class MediaRepositoryWatchStateTests(unittest.TestCase):
         draft["user_data"]["watch_history"] = [
             {
                 "id": history_id,
+                "items": [{"media_id": episode_id}],
                 "date_earliest": "2026-02-01",
                 "date_latest": "2026-02-02",
             },
@@ -248,86 +252,28 @@ class MediaRepositoryWatchStateTests(unittest.TestCase):
     def test_series_episode_history_uses_id_deltas_for_state_transitions(self):
         series_id = self._insert_media(30, "series", "Series")
         episode_id = self._insert_episode(series_id, 31, 1, 1)
-
-        first = {
-            "episode_id": episode_id,
-            "season_num": 1,
-            "episode_num": 1,
-            "date_earliest": "2026-04-01",
-            "date_latest": "2026-04-01",
-        }
-        media_repository.sync_series_episode_watch_history(
-            self.conn,
-            series_id,
-            [first],
-        )
+        media_repository.apply_history_delta(self.conn, series_id, [], [entry(episode_id)])
         self.assertEqual(self._state(episode_id)["watch_state"], "watched")
-
         media_repository.set_media_watch_state(self.conn, episode_id, "to_watch")
-        first["date_earliest"] = "2026-04-02"
-        first["date_latest"] = "2026-04-02"
-        media_repository.sync_series_episode_watch_history(
-            self.conn,
-            series_id,
-            [first],
-        )
+        baseline = media_repository.load_history_entries(self.conn, series_id)
+        current = deepcopy(baseline)
+        current[0]["date_earliest"] = "2026-04-02"
+        media_repository.apply_history_delta(self.conn, series_id, baseline, current)
         self.assertEqual(self._state(episode_id)["watch_state"], "to_watch")
-
-        second = {
-            "episode_id": episode_id,
-            "season_num": 1,
-            "episode_num": 1,
-            "date_earliest": "2026-04-03",
-            "date_latest": "2026-04-03",
-        }
-        media_repository.sync_series_episode_watch_history(
-            self.conn,
-            series_id,
-            [first, second],
-        )
+        baseline = media_repository.load_history_entries(self.conn, series_id)
+        media_repository.apply_history_delta(self.conn, series_id, baseline, baseline + [entry(episode_id)])
         self.assertEqual(self._state(episode_id)["watch_state"], "watched")
-
-        media_repository.sync_series_episode_watch_history(
-            self.conn,
-            series_id,
-            [second],
-        )
+        baseline = media_repository.load_history_entries(self.conn, series_id)
+        media_repository.apply_history_delta(self.conn, series_id, baseline, baseline[1:])
         self.assertEqual(len(self._history(episode_id)), 1)
         self.assertEqual(self._state(episode_id)["watch_state"], "watched")
-
-        media_repository.sync_series_episode_watch_history(
-            self.conn,
-            series_id,
-            [],
-        )
-        self.assertEqual(self._history(episode_id), [])
+        baseline = media_repository.load_history_entries(self.conn, series_id)
+        media_repository.apply_history_delta(self.conn, series_id, baseline, [])
         self.assertIsNone(self._state(episode_id))
-
-        third = {
-            "episode_id": episode_id,
-            "season_num": 1,
-            "episode_num": 1,
-            "date_earliest": "2026-04-04",
-            "date_latest": "2026-04-04",
-        }
-        media_repository.sync_series_episode_watch_history(
-            self.conn,
-            series_id,
-            [third],
-        )
+        media_repository.apply_history_delta(self.conn, series_id, [], [entry(episode_id)])
         media_repository.set_media_watch_state(self.conn, episode_id, "to_watch")
-        third["date_earliest"] = "2026-04-05"
-        third["date_latest"] = "2026-04-05"
-        media_repository.sync_series_episode_watch_history(
-            self.conn,
-            series_id,
-            [third],
-        )
-        media_repository.sync_series_episode_watch_history(
-            self.conn,
-            series_id,
-            [],
-        )
+        baseline = media_repository.load_history_entries(self.conn, series_id)
+        media_repository.apply_history_delta(self.conn, series_id, baseline, [])
         self.assertEqual(self._state(episode_id)["watch_state"], "to_watch")
 
     def _movie_draft(self, tmdb_id, user_data):
@@ -355,6 +301,8 @@ class MediaRepositoryWatchStateTests(unittest.TestCase):
             "SELECT tmdb_id, title FROM media WHERE id = ?",
             (series_id,),
         ).fetchone()
+        for event in user_data.get("watch_history", []):
+            event["items"] = [{"tmdb_id": tmdb_id, "media_type": "episode"}]
         return {
             "media_id": None,
             "metadata": {
@@ -437,18 +385,7 @@ class MediaRepositoryWatchStateTests(unittest.TestCase):
         return None if row is None else dict(row)
 
     def _history(self, media_id):
-        return [
-            dict(row)
-            for row in self.conn.execute(
-                """
-                SELECT id, date_earliest, date_latest
-                FROM watch_history
-                WHERE media_id = ?
-                ORDER BY id
-                """,
-                (media_id,),
-            ).fetchall()
-        ]
+        return media_repository.load_history_entries(self.conn, media_id)
 
 
 if __name__ == "__main__":

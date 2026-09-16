@@ -1,3 +1,4 @@
+from history_fixtures import insert_entry
 import sqlite3
 import unittest
 
@@ -88,20 +89,8 @@ class HistoryRepositoryTests(unittest.TestCase):
             "episode-one.jpg",
             "selected",
         )
-        first_session_ids = (
-            self._insert_history(
-                episode_1,
-                "2026-07-03",
-                "2026-07-03",
-                created_at="2026-07-03 19:00:00",
-            ),
-            self._insert_history(
-                episode_2,
-                "2026-07-03",
-                "2026-07-03",
-                created_at="2026-07-03 20:00:00",
-            ),
-        )
+        first_session_id = insert_entry(self.conn, [episode_1, episode_2],
+                                        "2026-07-03", "2026-07-03", "2026-07-03 19:00:00")
         rewatch_id = self._insert_history(
             episode_1,
             "2026-07-10",
@@ -144,20 +133,20 @@ class HistoryRepositoryTests(unittest.TestCase):
 
         history_only, to_watch, rewatch, movie, first_session = entries
         self.assertEqual(
-            history_only.watch_history_ids,
-            (history_only_history_id,),
+            history_only.entry_id,
+            history_only_history_id,
         )
         self.assertEqual(history_only.title, "History Only")
         self.assertIsNone(history_only.watch_state)
 
         self.assertEqual(
-            to_watch.watch_history_ids,
-            (to_watch_history_id,),
+            to_watch.entry_id,
+            to_watch_history_id,
         )
         self.assertEqual(to_watch.title, "Watch Again")
         self.assertEqual(to_watch.watch_state, "to_watch")
 
-        self.assertEqual(rewatch.watch_history_ids, (rewatch_id,))
+        self.assertEqual(rewatch.entry_id, rewatch_id)
         self.assertEqual(
             rewatch.title,
             "Fallout (S1:E1) – Episode 1",
@@ -174,7 +163,7 @@ class HistoryRepositoryTests(unittest.TestCase):
             "episode-one.jpg",
         )
 
-        self.assertEqual(movie.watch_history_ids, (movie_history_id,))
+        self.assertEqual(movie.entry_id, movie_history_id)
         self.assertEqual(movie.details_media_id, movie_id)
         self.assertEqual(movie.media_type, "movie")
         self.assertEqual(movie.watch_state, "watched")
@@ -182,8 +171,8 @@ class HistoryRepositoryTests(unittest.TestCase):
         self.assertEqual(movie.poster["filename"], "default.jpg")
 
         self.assertEqual(
-            first_session.watch_history_ids,
-            first_session_ids,
+            first_session.entry_id,
+            first_session_id,
         )
         self.assertEqual(first_session.owner_media_ids, (episode_1, episode_2))
         self.assertEqual(first_session.title, "Fallout (S1:E1-2)")
@@ -229,7 +218,7 @@ class HistoryRepositoryTests(unittest.TestCase):
         entries = history_repository.load_default_history_entries(self.conn)
 
         self.assertEqual(
-            [entry.watch_history_ids[0] for entry in entries],
+            [entry.entry_id for entry in entries],
             [third_id, second_id, first_id],
         )
         self.assertEqual(entries[-1].formatted_date, "Jun 2026")
@@ -288,6 +277,7 @@ class HistoryRepositoryTests(unittest.TestCase):
             "selected",
         )
 
+        episode_ids = []
         for tmdb_id, season_num, episode_num in (
             (51, 1, 1),
             (52, 1, 2),
@@ -301,11 +291,8 @@ class HistoryRepositoryTests(unittest.TestCase):
                 release_date="2020-01-01",
             )
             self._set_state(episode_id, watch_state="watched")
-            self._insert_history(
-                episode_id,
-                "2026-07-01",
-                "2026-07-01",
-            )
+            episode_ids.append(episode_id)
+        insert_entry(self.conn, episode_ids, "2026-07-01", "2026-07-01")
 
         entries = history_repository.load_default_history_entries(self.conn)
 
@@ -314,7 +301,7 @@ class HistoryRepositoryTests(unittest.TestCase):
             entries[0].title,
             "Long Series (S1:E1-2, S2:E1)",
         )
-        self.assertEqual(len(entries[0].watch_history_ids), 3)
+        self.assertEqual(len(entries[0].episodes), 3)
         self.assertEqual(
             entries[0].poster["filename"],
             "long-series.jpg",
@@ -408,39 +395,11 @@ class HistoryRepositoryTests(unittest.TestCase):
             "anthology.jpg",
         )
 
-    def test_orphan_episodes_remain_independent_direct_entries(self):
-        orphan_ids = []
+    def test_orphan_episode_cannot_receive_history(self):
+        episode = self._insert_media(999, "episode", "Missing parent")
+        with self.assertRaises(sqlite3.IntegrityError):
+            insert_entry(self.conn, [episode])
 
-        for tmdb_id, title in (
-            (60, "Orphan One"),
-            (61, "Orphan Two"),
-        ):
-            media_id = self._insert_media(
-                tmdb_id,
-                "episode",
-                title,
-                release_date="2025-01-01",
-            )
-            orphan_ids.append(media_id)
-            self._set_state(media_id, watch_state="watched")
-            self._insert_history(
-                media_id,
-                "2026-07-01",
-                "2026-07-01",
-            )
-
-        entries = history_repository.load_default_history_entries(self.conn)
-
-        self.assertEqual(len(entries), 2)
-        self.assertEqual(
-            {entry.title for entry in entries},
-            {"Orphan One", "Orphan Two"},
-        )
-        self.assertEqual(
-            {entry.details_media_id for entry in entries},
-            set(orphan_ids),
-        )
-        self.assertTrue(all(entry.kind == "media_event" for entry in entries))
 
     def _insert_media(
         self,
@@ -521,31 +480,7 @@ class HistoryRepositoryTests(unittest.TestCase):
         date_latest,
         created_at=None,
     ):
-        if created_at is None:
-            return self.conn.execute(
-                """
-                INSERT INTO watch_history (
-                    media_id,
-                    date_earliest,
-                    date_latest
-                )
-                VALUES (?, ?, ?)
-                """,
-                (media_id, date_earliest, date_latest),
-            ).lastrowid
-
-        return self.conn.execute(
-            """
-            INSERT INTO watch_history (
-                media_id,
-                date_earliest,
-                date_latest,
-                created_at
-            )
-            VALUES (?, ?, ?, ?)
-            """,
-            (media_id, date_earliest, date_latest, created_at),
-        ).lastrowid
+        return insert_entry(self.conn, [media_id], date_earliest, date_latest, created_at)
 
     def _insert_poster(
         self,

@@ -405,7 +405,7 @@ def _save_series_draft_with_episode_context(
     media_draft.setdefault("metadata", {})[
         "last_tmdb_posters_checked_at"
     ] = None
-    series_save_result = _save_single_media_draft_with_posters(
+    series_save_result = _save_catalog_media_draft_with_posters(
         conn,
         media_draft,
         poster_dir=poster_dir,
@@ -467,11 +467,8 @@ def _save_series_draft_with_episode_context(
         poster_downloads,
         episode_seed_result["poster_downloads"],
     )
-    _sync_series_episode_watch_history_for_draft(
-        conn,
-        series_save_result["media_id"],
-        media_draft,
-    )
+    from app.media_repository.user_data import _save_media_user_data
+    _save_media_user_data(conn, series_save_result["media_id"], media_draft.get("user_data") or {})
 
     if poster_storage._poster_downloads_succeeded(parent_poster_downloads):
         checked_at = current_freshness_timestamp()
@@ -502,18 +499,6 @@ def _save_series_draft_with_episode_context(
         "episode_seed_skip_count": episode_seed_result["skipped_existing_count"],
     }
 
-
-def _sync_series_episode_watch_history_for_draft(conn, series_id, media_draft):
-    series_view = media_draft.get("series_view") or {}
-
-    if "episode_watch_history" not in series_view:
-        return
-
-    media_repository.sync_series_episode_watch_history(
-        conn,
-        series_id,
-        series_view.get("episode_watch_history", []),
-    )
 
 
 def _save_series_episode_seeds(

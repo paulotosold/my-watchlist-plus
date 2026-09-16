@@ -66,6 +66,7 @@ from app.find_media import resolve_media_draft_from_query
 from app.media_user_data.notes import apply_note_result
 from app.media_user_data.watch_history import (
     apply_watch_entry_result,
+    media_item,
     make_draft_id,
 )
 from app.media_user_data.watch_history_formatters import (
@@ -1395,13 +1396,13 @@ class MediaDetailsDialog(QDialog):
 
         if self._is_episode():
             user_data = self.media_draft.setdefault("user_data", {})
-            watch_history = user_data.get("watch_history") or []
+            watch_history = build_watch_history_display_entries(self.media_draft)
             action = dialog.result_payload.get("action")
 
             if entry is None and action == "save" and watch_history:
                 user_data["watch_state"] = "watched"
                 set_combo_value(self.status_combo, "watched")
-            elif action == "delete" and not watch_history:
+            elif entry is not None and not watch_history:
                 current_watch_state = self.status_combo.currentData()
 
                 if current_watch_state == "watched":
@@ -1647,11 +1648,12 @@ class MediaDetailsDialog(QDialog):
         if self._is_episode() and user_data["watch_state"] == "watched":
             watch_history = user_data.setdefault("watch_history", [])
 
-            if not watch_history:
+            if not build_watch_history_display_entries(self.media_draft):
                 watch_history.append({
                     "draft_id": make_draft_id(),
                     "date_earliest": None,
                     "date_latest": None,
+                    "items": [media_item(self.media_draft)],
                 })
 
         user_data["impression"] = self.impression_combo.currentData()

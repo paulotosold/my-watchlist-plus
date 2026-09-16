@@ -548,6 +548,25 @@ class DraftSaverCatalogContextTests(unittest.TestCase):
         build_parent.assert_not_called()
         self.assertEqual(result["media_id"], media_id)
 
+    def test_new_series_saves_one_group_after_materializing_episode_ids(self):
+        series_draft = self._series_draft(1700, "to_watch")
+        episodes = [self._episode_metadata(1700, 1, n) for n in (1, 2)]
+        series_draft["user_data"]["watch_history"] = [{
+            "draft_id": "group", "date_earliest": "2026-01-01", "date_latest": None,
+            "items": [{"draft_id": f"item-{n}", "tmdb_id": e["tmdb_id"], "media_type": "episode"}
+                      for n, e in enumerate(episodes)],
+        }]
+        with self._mock_downloads(), patch.object(draft_saver.tmdb,
+                "get_tmdb_series_episode_metadata_list", return_value=episodes):
+            with self.conn:
+                result = draft_saver.save_media_draft_with_posters(self.conn, series_draft)
+        history = media_repository.load_history_entries(self.conn, result["media_id"])
+        self.assertEqual(len(history), 1)
+        self.assertEqual(len(history[0]["items"]), 2)
+        self.assertTrue(all(i["media_id"] for i in history[0]["items"]))
+        self.assertEqual(series_draft["user_data"]["watch_history"], history)
+        self.assertEqual([self._watch_state(i["media_id"]) for i in history[0]["items"]], ["watched", "watched"])
+
     def _series_draft(self, tmdb_id, watch_state):
         return {
             "media_id": None,

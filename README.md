@@ -41,18 +41,34 @@ I spent quite a bit of time thinking through the database model, and TV series q
 
 My solution to this design problem was to let movies, series and episodes share the same core `media` model. Episodes remain linked to their parent series, but both the series and its individual episodes can be tracked independently, each with their own state, watch history, rating, notes, lists and poster. At the same time, episode-level information can still be brought together to track progress through the series. Detailed episode tracking is possible, but never required.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/database-schema-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/database-schema-light.png">
-  <img alt="Database schema" src="docs/images/database-schema-light.png">
-</picture>
+```mermaid
+erDiagram
+    media ||--o{ watch_history_item : participates_in
+    watch_history_entry ||--|{ watch_history_item : contains
+    watch_history_entry {
+        INTEGER id PK
+        TEXT date_earliest
+        TEXT date_latest
+        TEXT created_at
+        TEXT updated_at
+    }
+    watch_history_item {
+        INTEGER id PK
+        INTEGER entry_id FK
+        INTEGER media_id FK
+    }
+```
+
+Each viewing action creates one entry with its own dates and one or more media
+items. Episodes saved together share an entry; separate saves remain separate,
+even with identical dates. See the [complete SQLite schema](db/schema.sql).
 
 A few other decisions that shaped the model:
 
 - **State and history are separate concerns.** A title can have a current watch state while preserving any number of individual viewing sessions.
 - **Precision is optional.** Watch dates can be exact, expressed as a range or left unknown instead of forcing information the user may not have.
 - **TMDB is a source, not the schema.** Relevant metadata is selectively imported and normalized into reusable local entities rather than mirroring the API response.
-- **Derived information does not need to be duplicated.** Views provide series-level summaries and episode history where the application needs them.
+- **Derived information does not need to be duplicated.** Views provide series-level summaries, while history queries load complete entries and their media associations.
 
 ## AI-assisted development
 

@@ -1,3 +1,4 @@
+from history_fixtures import insert_entry, entry
 import copy
 import sqlite3
 import unittest
@@ -83,14 +84,11 @@ class MediaRepositoryIncrementalSaveTests(unittest.TestCase):
         media_id = self._insert_media(3, "movie", "Movie")
         baseline_id = self._insert_history(media_id, "2026-01-01")
         baseline = self._draft(media_id, 3, "movie")
-        baseline["user_data"]["watch_history"] = [{
-            "id": baseline_id,
-            "date_earliest": "2026-01-01",
-            "date_latest": "2026-01-01",
-        }]
+        baseline["user_data"]["watch_history"] = media_repository.load_history_entries(self.conn, media_id)
         current = copy.deepcopy(baseline)
         current["user_data"]["watch_history"] = [{
             "draft_id": "new-event",
+            "items": [{"media_id": media_id}],
             "date_earliest": "2026-01-02",
             "date_latest": "2026-01-02",
         }]
@@ -104,11 +102,11 @@ class MediaRepositoryIncrementalSaveTests(unittest.TestCase):
         )
 
         rows = self.conn.execute(
-            "SELECT id, date_earliest FROM watch_history WHERE media_id = ?",
+            "SELECT e.id, e.date_earliest FROM watch_history_entry e JOIN watch_history_item i ON i.entry_id = e.id WHERE i.media_id = ?",
             (media_id,),
         ).fetchall()
         rows_by_id = {row["id"]: row["date_earliest"] for row in rows}
-        new_id = result["inserted_ids_by_draft_id"]["media_watch_history"][
+        new_id = result["inserted_ids_by_draft_id"]["watch_history_entries"][
             "new-event"
         ]
         self.assertNotIn(baseline_id, rows_by_id)
@@ -126,14 +124,7 @@ class MediaRepositoryIncrementalSaveTests(unittest.TestCase):
         )
         baseline = self._draft(series_id, 10, "series")
         current = copy.deepcopy(baseline)
-        current["series_view"] = {"episode_watch_history": [{
-            "draft_id": "episode-event",
-            "episode_id": episode_1,
-            "season_num": 1,
-            "episode_num": 1,
-            "date_earliest": None,
-            "date_latest": None,
-        }]}
+        current["user_data"]["watch_history"] = [entry(episode_1)]
 
         media_repository.apply_media_user_changes(
             self.conn,
@@ -156,14 +147,7 @@ class MediaRepositoryIncrementalSaveTests(unittest.TestCase):
         episode_id = self._insert_episode(series_id, 21, 1, 1)
         history_id = self._insert_history(episode_id, "2026-01-01")
         baseline = self._draft(series_id, 20, "series")
-        baseline["series_view"]["episode_watch_history"] = [{
-            "watch_history_id": history_id,
-            "episode_id": episode_id,
-            "season_num": 1,
-            "episode_num": 1,
-            "date_earliest": "2026-01-01",
-            "date_latest": "2026-01-01",
-        }]
+        baseline["user_data"]["watch_history"] = media_repository.load_history_entries(self.conn, series_id)
         current = copy.deepcopy(baseline)
         current["user_data"]["impression"] = "very_good"
 
@@ -173,8 +157,8 @@ class MediaRepositoryIncrementalSaveTests(unittest.TestCase):
             wraps=media_user_data_repository._apply_owned_row_delta,
         ) as direct_delta, patch.object(
             media_user_data_repository,
-            "_apply_series_episode_history_delta",
-            wraps=media_user_data_repository._apply_series_episode_history_delta,
+            "apply_history_delta",
+            wraps=media_user_data_repository.apply_history_delta,
         ) as episode_delta:
             result = media_repository.apply_media_user_changes(
                 self.conn,
@@ -184,7 +168,7 @@ class MediaRepositoryIncrementalSaveTests(unittest.TestCase):
             )
 
         direct_delta.assert_not_called()
-        episode_delta.assert_not_called()
+        self.assertTrue(all(result["counts"][k] == 0 for k in result["counts"] if k.startswith("watch_history_")))
         self.assertEqual(result["counts"]["state_fields_updated"], 1)
         self.assertEqual(
             self.conn.execute(
@@ -201,7 +185,7 @@ class MediaRepositoryIncrementalSaveTests(unittest.TestCase):
                 "tmdb_id": tmdb_id,
                 "media_type": media_type,
             },
-            "series_view": ({"episode_watch_history": []}
+            "series_view": ({}
                             if media_type == "series" else None),
             "user_data": media_repository.get_empty_media_user_data(),
         }
@@ -225,13 +209,7 @@ class MediaRepositoryIncrementalSaveTests(unittest.TestCase):
         return episode_id
 
     def _insert_history(self, media_id, date):
-        return self.conn.execute(
-            """
-            INSERT INTO watch_history (media_id, date_earliest, date_latest)
-            VALUES (?, ?, ?)
-            """,
-            (media_id, date, date),
-        ).lastrowid
+        return insert_entry(self.conn, [media_id], date, date)
 
 
 class MediaRepositoryMetadataRefreshTests(unittest.TestCase):
@@ -249,10 +227,7 @@ class MediaRepositoryMetadataRefreshTests(unittest.TestCase):
         first_id = self._insert_episode(series_id, 101, 1, 1, "Old One", "tt101")
         second_id = self._insert_episode(series_id, 102, 1, 2, "Old Two", "tt102")
         absent_id = self._insert_episode(series_id, 103, 1, 3, "Local Only", "tt103")
-        history_id = self.conn.execute(
-            "INSERT INTO watch_history (media_id) VALUES (?)",
-            (first_id,),
-        ).lastrowid
+        history_id = insert_entry(self.conn, [first_id])
         self.conn.execute(
             "INSERT INTO media_state (media_id, impression) VALUES (?, 'good')",
             (first_id,),
@@ -319,7 +294,7 @@ class MediaRepositoryMetadataRefreshTests(unittest.TestCase):
             "SELECT 1 FROM media_directors WHERE media_id = ?", (first_id,)
         ).fetchone())
         self.assertIsNotNone(self.conn.execute(
-            "SELECT 1 FROM watch_history WHERE id = ?", (history_id,)
+            "SELECT 1 FROM watch_history_entry WHERE id = ?", (history_id,)
         ).fetchone())
         self.assertEqual(self.conn.execute(
             "SELECT impression FROM media_state WHERE media_id = ?", (first_id,)

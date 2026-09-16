@@ -219,8 +219,8 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
             "saved_media_type": "series",
             "saved_title": "Series",
             "inserted_ids_by_draft_id": {
-                "media_watch_history": {},
-                "series_episode_watch_history": {},
+                "watch_history_entries": {},
+                "watch_history_items": {},
                 "notes": {},
             },
             "counts": {},
@@ -1186,7 +1186,6 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
             "series_view": {
                 "summary": {"season_count": 1, "episode_count": 1},
                 "episodes": [self._episode(11, 101, 1)],
-                "episode_watch_history": [],
             },
             "watch_providers": [],
             "posters": [],

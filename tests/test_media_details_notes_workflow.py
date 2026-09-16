@@ -175,7 +175,7 @@ class MediaDetailsNotesWorkflowTests(unittest.TestCase):
 
         watch_entry = watch_dialog.call_args.args[2]
         note_entry = note_dialog.call_args.args[1]
-        self.assertEqual(watch_entry["watch_history_id"], 10)
+        self.assertEqual(watch_entry["id"], 10)
         self.assertEqual(note_entry["id"], 20)
         self.assertEqual(note_entry["note_index"], 0)
 

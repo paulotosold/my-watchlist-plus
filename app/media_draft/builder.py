@@ -16,6 +16,17 @@ def build_media_draft_from_db(conn, media_from_db):
     posters = media_repo.get_db_media_posters(conn, metadata)
     user_data = media_repo.get_db_media_user_data(conn, metadata)
 
+    if series_view is not None:
+        included_counts = {}
+        for entry in user_data.get("watch_history", []):
+            for item in entry["items"]:
+                mid = item["media_id"]
+                included_counts[mid] = included_counts.get(mid, 0) + 1
+        for episode in series_view.get("episodes", []):
+            episode["external_history_count"] = max(
+                0, episode.pop("history_count", 0) - included_counts.get(episode["episode_id"], 0)
+            )
+
     return {
         "media_id": media_from_db["id"],
         "metadata": metadata,
@@ -47,9 +58,6 @@ def build_media_draft_from_tmdb_match(tmdb_match):
     metadata["last_tmdb_metadata_checked_at"] = checked_at
     metadata["last_tmdb_watch_providers_checked_at"] = checked_at
     series_view = tmdb.get_tmdb_media_series_view(tmdb_match)
-
-    if series_view is not None:
-        series_view["episode_watch_history"] = []
 
     watch_providers = tmdb.get_tmdb_media_watch_providers(tmdb_match)
     posters = tmdb.get_tmdb_media_posters(tmdb_match)[:1]

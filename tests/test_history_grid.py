@@ -38,7 +38,7 @@ def make_entry(
     return HistoryEntry(
         key=("media_event", key),
         kind="media_event",
-        watch_history_ids=(key,),
+        entry_id=key,
         owner_media_ids=(details_media_id,),
         state_media_id=details_media_id,
         details_media_id=details_media_id,

@@ -174,8 +174,7 @@ class WatchHistoryEditorTests(unittest.TestCase):
         }
 
         newest_entry = build_watch_history_display_entries(media_draft)[0]
-        self.assertEqual(newest_entry["watch_history_id"], 2)
-        self.assertEqual(newest_entry["watch_history_index"], 1)
+        self.assertEqual(newest_entry["id"], 2)
 
         apply_watch_entry_result(media_draft, newest_entry, {
             "action": "save",
@@ -208,7 +207,6 @@ class WatchHistoryEditorTests(unittest.TestCase):
                     _episode(10, 102, 1, 2),
                     _episode(10, 103, 1, 3),
                 ],
-                "episode_watch_history": [],
             },
         }
 
@@ -221,12 +219,13 @@ class WatchHistoryEditorTests(unittest.TestCase):
                 _episode(10, 102, 1, 2),
             ],
         })
-        self.assertEqual(media_draft["user_data"]["watch_history"], [])
+        self.assertEqual(len(media_draft["user_data"]["watch_history"]), 1)
         self.assertEqual(
-            _episode_keys(media_draft["series_view"]["episode_watch_history"]),
+            _episode_keys(media_draft["user_data"]["watch_history"][0]["items"]),
             [(1, 1), (1, 2)],
         )
 
+        identity = media_draft["user_data"]["watch_history"][0]["draft_id"]
         entry = build_watch_history_display_entries(media_draft)[0]
         apply_watch_entry_result(media_draft, entry, {
             "action": "save",
@@ -237,9 +236,9 @@ class WatchHistoryEditorTests(unittest.TestCase):
                 _episode(10, 103, 1, 3),
             ],
         })
-        rows = media_draft["series_view"]["episode_watch_history"]
+        rows = media_draft["user_data"]["watch_history"][0]["items"]
         self.assertEqual(_episode_keys(rows), [(1, 2), (1, 3)])
-        self.assertEqual({row["date_earliest"] for row in rows}, {"2026-05-02"})
+        self.assertEqual(media_draft["user_data"]["watch_history"][0]["date_earliest"], "2026-05-02")
 
         entry = build_watch_history_display_entries(media_draft)[0]
         apply_watch_entry_result(media_draft, entry, {
@@ -248,7 +247,7 @@ class WatchHistoryEditorTests(unittest.TestCase):
             "date_latest": "2026-05-03",
             "selected_episodes": [],
         })
-        self.assertEqual(media_draft["series_view"]["episode_watch_history"], [])
+        self.assertEqual(media_draft["user_data"]["watch_history"][0]["items"][0]["media_type"], "series")
         self.assertEqual(len(media_draft["user_data"]["watch_history"]), 1)
 
         entry = build_watch_history_display_entries(media_draft)[0]
@@ -258,50 +257,25 @@ class WatchHistoryEditorTests(unittest.TestCase):
             "date_latest": "2026-05-04",
             "selected_episodes": [_episode(10, 101, 1, 1)],
         })
-        self.assertEqual(media_draft["user_data"]["watch_history"], [])
+        self.assertEqual(len(media_draft["user_data"]["watch_history"]), 1)
         self.assertEqual(
-            _episode_keys(media_draft["series_view"]["episode_watch_history"]),
+            _episode_keys(media_draft["user_data"]["watch_history"][0]["items"]),
             [(1, 1)],
         )
 
         entry = build_watch_history_display_entries(media_draft)[0]
+        self.assertEqual(entry["draft_id"], identity)
         apply_watch_entry_result(media_draft, entry, {"action": "delete"})
-        self.assertEqual(media_draft["series_view"]["episode_watch_history"], [])
+        self.assertEqual(media_draft["user_data"]["watch_history"], [])
 
     def test_watched_episode_keys_can_exclude_current_entry(self):
-        media_draft = {
-            "series_view": {
-                "episode_watch_history": [
-                    {
-                        "watch_history_id": 1,
-                        "season_num": 1,
-                        "episode_num": 1,
-                        "date_earliest": "2026-05-01",
-                        "date_latest": "2026-05-01",
-                    },
-                    {
-                        "watch_history_id": 2,
-                        "season_num": 1,
-                        "episode_num": 2,
-                        "date_earliest": "2026-05-02",
-                        "date_latest": "2026-05-02",
-                    },
-                ],
-            },
-        }
-        entry = {
-            "watch_history_ids": [1],
-            "date_earliest": "2026-05-01",
-            "date_latest": "2026-05-01",
-            "episodes": [
-                {
-                    "season_num": 1,
-                    "episode_num": 1,
-                },
-            ],
-        }
-
-        self.assertEqual(watched_episode_keys(media_draft, entry), {(1, 2)})
+        entries = [{"id": n, "items": [{"media_type": "episode", "season_num": 1, "episode_num": n}]}
+                   for n in (1, 2)]
+        media_draft = {"user_data": {"watch_history": entries}}
+        self.assertEqual(watched_episode_keys(media_draft), {(1, 1), (1, 2)})
+        self.assertEqual(watched_episode_keys(media_draft, entries[0]), {(1, 2)})
+        media_draft["user_data"]["watch_history"].append({"id": 3, "items": entries[0]["items"]})
+        self.assertEqual(watched_episode_keys(media_draft, entries[0]), {(1, 1), (1, 2)})
 
 
 def _episode(series_id, episode_id, season_num, episode_num):

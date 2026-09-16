@@ -76,10 +76,7 @@ class MediaDraftBuilderShapeTests(unittest.TestCase):
                 )
 
             if media_type == "series":
-                self.assertEqual(
-                    draft["series_view"]["episode_watch_history"],
-                    [],
-                )
+                self.assertNotIn("episode_watch_history", draft["series_view"])
 
     def test_db_builder_keeps_the_six_canonical_top_level_keys(self):
         media_from_db = {"id": 7}

@@ -175,7 +175,13 @@ class WatchEntryDetailsDialog(QDialog):
 
         self.preview_label = QLabel(self)
         self.preview_label.setWordWrap(False)
+        self.preview_label.setToolTip("Dates, selection and deletion apply to this entire watch history entry.")
         main_layout.addWidget(self.preview_label)
+        if ((self.media_draft.get("metadata") or {}).get("media_type") == "episode"
+                and self.entry is not None and self._is_series()):
+            scope_label = QLabel("Editing the entire entry: dates, episode selection and deletion apply to all its items.", self)
+            scope_label.setWordWrap(True)
+            main_layout.addWidget(scope_label)
         main_layout.addSpacing(WATCH_ENTRY_PREVIEW_TO_DATE_SPACING)
 
         date_layout = QHBoxLayout()
@@ -579,7 +585,7 @@ class WatchEntryDetailsDialog(QDialog):
             for episode in catalog_episodes
             if episode_key(episode) != (None, None)
         }
-        selected_episodes = (self.entry or {}).get("episodes", [])
+        selected_episodes = (self.entry or {}).get("items", [])
         episodes_by_key = {}
 
         for episode in catalog_episodes:
@@ -593,7 +599,7 @@ class WatchEntryDetailsDialog(QDialog):
 
         for selected_episode in selected_episodes:
             episode = None
-            episode_id = selected_episode.get("episode_id")
+            episode_id = selected_episode.get("media_id")
             tmdb_id = selected_episode.get("tmdb_id")
 
             if episode_id is not None:
@@ -624,8 +630,8 @@ class WatchEntryDetailsDialog(QDialog):
         tmdb_id = episode.get("tmdb_id")
         key = episode_key(episode)
 
-        for selected_episode in (self.entry or {}).get("episodes", []):
-            selected_episode_id = selected_episode.get("episode_id")
+        for selected_episode in (self.entry or {}).get("items", []):
+            selected_episode_id = selected_episode.get("media_id")
             selected_tmdb_id = selected_episode.get("tmdb_id")
 
             if (
@@ -806,15 +812,19 @@ class WatchEntryDetailsDialog(QDialog):
     def _watch_history_release_date(self):
         metadata = self.media_draft.get("metadata") or {}
 
-        if metadata.get("media_type") == "series":
+        if metadata.get("media_type") == "series" or (self._is_series() and len(self._selected_episodes()) != 1):
             series_view = self.media_draft.get("series_view") or {}
             summary = series_view.get("summary") or {}
-            return summary.get("first_air_date") or metadata.get("release_date")
+            return (summary.get("first_air_date") or (series_view.get("metadata") or {}).get("release_date")
+                    or metadata.get("release_date"))
 
         return metadata.get("release_date")
 
     def _is_series(self):
-        return (self.media_draft.get("metadata") or {}).get("media_type") == "series"
+        media_type = (self.media_draft.get("metadata") or {}).get("media_type")
+        return media_type == "series" or (
+            media_type == "episode" and self.entry is not None and bool(self.media_draft.get("series_view"))
+        )
 
     def _save_entry(self):
         validation = self._validated_dates()

@@ -16,6 +16,7 @@ from .queries import (
     get_db_media_metadata,
     get_db_series_episodes,
     get_db_series_summary,
+    get_db_series_view,
 )
 
 def apply_metadata_refresh(conn, media_id, snapshot):
@@ -117,11 +118,7 @@ def apply_metadata_refresh(conn, media_id, snapshot):
             if root["media_type"] == "series"
             else None
         ),
-        "series_catalog": (
-            {"summary": summary, "episodes": episodes}
-            if root["media_type"] == "series"
-            else None
-        ),
+        "series_catalog": get_db_series_view(conn, media_id, root["media_type"]),
         "stats": stats,
     }
 

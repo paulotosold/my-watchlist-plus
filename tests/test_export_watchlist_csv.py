@@ -1,3 +1,4 @@
+from history_fixtures import insert_entry
 import csv
 from datetime import date
 from io import StringIO
@@ -85,21 +86,9 @@ class ExportWatchlistCsvTests(unittest.TestCase):
             """,
             (media_id, media_id, 'first, "quoted"\nnext line'),
         )
-        self.conn.execute(
-            """
-            INSERT INTO watch_history (
-                media_id,
-                date_earliest,
-                date_latest,
-                created_at
-            )
-            VALUES
-                (?, NULL, '2026-02-02', '2026-01-02 00:00:00'),
-                (?, '2025-01-01', NULL, '2026-01-01 00:00:00'),
-                (?, NULL, NULL, '2026-01-03 00:00:00')
-            """,
-            (media_id, media_id, media_id),
-        )
+        insert_entry(self.conn, [media_id], None, "2026-02-02", "2026-01-02 00:00:00")
+        first_id = insert_entry(self.conn, [media_id], "2025-01-01", None, "2026-01-01 00:00:00")
+        insert_entry(self.conn, [media_id], None, None, "2026-01-03 00:00:00")
         upper_list_id = self._insert_list("Zulu")
         lower_list_id = self._insert_list('alpha, "group"')
         self.conn.executemany(
@@ -118,9 +107,13 @@ class ExportWatchlistCsvTests(unittest.TestCase):
             ['first, "quoted"\nnext line', "second"],
         )
         self.assertEqual(
-            json.loads(row["watch_history"]),
-            ["2025-01-01:", ":2026-02-02", ":"],
+            [(e["date_earliest"], e["date_latest"]) for e in json.loads(row["watch_history"])],
+            [("2025-01-01", None), (None, "2026-02-02"), (None, None)],
         )
+        history = json.loads(row["watch_history"])
+        self.assertEqual(history[0]["id"], first_id)
+        self.assertEqual(history[0]["items"][0]["media_id"], media_id)
+        self.assertIn("updated_at", history[0])
         self.assertEqual(
             json.loads(row["lists"]),
             ['alpha, "group"', "Zulu"],

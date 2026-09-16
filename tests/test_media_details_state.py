@@ -10,32 +10,30 @@ class MediaDetailsStateTests(unittest.TestCase):
     def test_applies_inserted_ids_only_after_save_result(self):
         draft = {
             "user_data": {
-                "watch_history": [{"draft_id": "media-new"}],
+                "watch_history": [{"draft_id": "media-new", "items": [{"draft_id": "episode-new"}]}],
                 "notes": [{"draft_id": "note-new", "note": "hello"}],
             },
-            "series_view": {
-                "episode_watch_history": [{"draft_id": "episode-new"}],
-            },
+            "series_view": {},
         }
         result = {
             "inserted_ids_by_draft_id": {
-                "media_watch_history": {"media-new": 10},
+                "watch_history_entries": {"media-new": 10},
                 "notes": {"note-new": 20},
-                "series_episode_watch_history": {"episode-new": 30},
+                "watch_history_items": {"episode-new": 30},
             },
         }
 
         apply_inserted_ids_to_draft(draft, result)
 
         self.assertIsNone(draft["user_data"]["cabinet_order"])
-        self.assertEqual(draft["user_data"]["watch_history"][0], {"id": 10})
+        self.assertEqual(draft["user_data"]["watch_history"][0], {"id": 10, "items": [{"id": 30}]})
         self.assertEqual(
             draft["user_data"]["notes"][0],
             {"id": 20, "note": "hello"},
         )
         self.assertEqual(
-            draft["series_view"]["episode_watch_history"][0],
-            {"watch_history_id": 30},
+            draft["user_data"]["watch_history"][0]["items"][0],
+            {"id": 30},
         )
 
     def test_refresh_merge_preserves_user_edits_and_renumbers_history(self):
@@ -49,19 +47,19 @@ class MediaDetailsStateTests(unittest.TestCase):
             },
             "user_data": {
                 "impression": "very_good",
-                "watch_history": [{"draft_id": "series-watch"}],
-            },
-            "series_view": {
-                "summary": {"episode_count": 1},
-                "episodes": [{"episode_id": 11, "tmdb_id": 101}],
-                "episode_watch_history": [{
-                    "episode_id": 11,
+                "watch_history": [{"draft_id": "entry-1", "items": [{"media_type": "episode",
+                    "media_id": 11,
                     "tmdb_id": 101,
                     "season_num": 1,
                     "episode_num": 1,
                     "draft_id": "episode-watch",
                     "date_earliest": "2026-01-01",
-                }],
+                }]}],
+            },
+            "series_view": {
+                "summary": {"episode_count": 1},
+                "episodes": [{"episode_id": 11, "tmdb_id": 101}],
+
             },
         }
         payload = {
@@ -103,12 +101,10 @@ class MediaDetailsStateTests(unittest.TestCase):
             merged["metadata"]["last_tmdb_posters_checked_at"],
             "poster-time",
         )
-        self.assertEqual(
-            merged["user_data"],
-            {**draft["user_data"], "cabinet_order": None},
-        )
+        self.assertEqual(merged["user_data"]["impression"], "very_good")
+        self.assertEqual(draft["user_data"]["watch_history"][0]["items"][0]["season_num"], 1)
         self.assertEqual(len(merged["series_view"]["episodes"]), 2)
-        history = merged["series_view"]["episode_watch_history"][0]
+        history = merged["user_data"]["watch_history"][0]["items"][0]
         self.assertEqual((history["season_num"], history["episode_num"]), (2, 3))
         self.assertEqual(history["draft_id"], "episode-watch")
 
@@ -117,7 +113,7 @@ class MediaDetailsStateTests(unittest.TestCase):
             "media_id": None,
             "metadata": {"media_type": "series"},
             "user_data": {"impression": "good"},
-            "series_view": {"episode_watch_history": []},
+            "series_view": {},
         }
         payload = {
             "snapshot": {
@@ -149,6 +145,7 @@ class MediaDetailsStateTests(unittest.TestCase):
                 "episode_num": 1,
                 "title": "Pilot",
                 "release_date": "2026-01-01",
+                "external_history_count": 0,
             },
         )
 
@@ -156,19 +153,21 @@ class MediaDetailsStateTests(unittest.TestCase):
         draft = {
             "media_id": None,
             "metadata": {"media_type": "series"},
-            "user_data": {},
+            "user_data": {
+                "watch_history": [{"draft_id": "entry-700", "items": [{"media_type": "episode",
+                    "draft_id": "watch-700",
+                    "tmdb_id": 700,
+                    "season_num": 1,
+                    "episode_num": 1,
+                }]}],
+            },
             "series_view": {
                 "episodes": [{
                     "tmdb_id": 700,
                     "season_num": 1,
                     "episode_num": 1,
                 }],
-                "episode_watch_history": [{
-                    "draft_id": "watch-700",
-                    "tmdb_id": 700,
-                    "season_num": 1,
-                    "episode_num": 1,
-                }],
+
             },
         }
         payload = {
