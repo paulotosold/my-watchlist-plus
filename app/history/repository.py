@@ -5,8 +5,9 @@ from typing import Any
 
 from app.media_user_data.watch_history_formatters import (
     format_episode_ranges,
-    format_watch_history_entry,
+    resolve_watch_interval,
     watch_history_sort_key,
+    watch_history_release_date,
 )
 
 
@@ -80,6 +81,7 @@ def _build_direct_entry(row) -> HistoryEntry:
         if row["owner_media_type"] == "series"
         else None
     ) or row.get("owner_release_date")
+    interval = resolve_watch_interval(event, release_date)
     history_id = row["entry_id"]
 
     return HistoryEntry(
@@ -95,11 +97,8 @@ def _build_direct_entry(row) -> HistoryEntry:
         created_at=row.get("created_at"),
         updated_at=row.get("updated_at"),
         release_date=release_date,
-        formatted_date=format_watch_history_entry(
-            event,
-            release_date=release_date,
-        ),
-        sort_key=watch_history_sort_key(event, release_date),
+        formatted_date=interval.label,
+        sort_key=watch_history_sort_key(event, interval=interval),
         poster=choose_history_poster(row),
         media_type=row["display_media_type"],
         watch_state=row.get("display_watch_state"),
@@ -131,17 +130,9 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
             owner_media_ids[0],
         )
 
-    release_date = (
-        representative.get("series_first_air_date")
-        or representative.get("display_release_date")
-    )
     created_at = representative.get("created_at")
-    event = {
-        "date_earliest": representative.get("date_earliest"),
-        "date_latest": representative.get("date_latest"),
-        "created_at": created_at,
-        "id": representative["entry_id"],
-    }
+    event = _episode_watch_event(rows)
+    release_date = watch_history_release_date(event)
     episodes = tuple(
         {
             "media_id": row["owner_media_id"],
@@ -151,6 +142,7 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         }
         for row in rows
     )
+    interval = resolve_watch_interval(event, release_date)
     episode_ranges = format_episode_ranges(episodes)
     season_numbers = {
         row.get("season_num")
@@ -180,11 +172,8 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         created_at=created_at,
         updated_at=representative.get("updated_at"),
         release_date=release_date,
-        formatted_date=format_watch_history_entry(
-            event,
-            release_date=release_date,
-        ),
-        sort_key=watch_history_sort_key(event, release_date),
+        formatted_date=interval.label,
+        sort_key=watch_history_sort_key(event, interval=interval),
         poster=poster,
         media_type=representative["display_media_type"],
         watch_state=representative.get("display_watch_state"),
@@ -199,12 +188,8 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
 def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
     representative = rows[0]
     created_at = representative.get("created_at")
-    event = {
-        "date_earliest": representative.get("date_earliest"),
-        "date_latest": representative.get("date_latest"),
-        "created_at": created_at,
-        "id": representative["entry_id"],
-    }
+    event = _episode_watch_event(rows)
+    release_date = watch_history_release_date(event)
     episodes = tuple(
         {
             "media_id": row["owner_media_id"],
@@ -228,7 +213,7 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
         )
         or choose_history_poster(representative)
     )
-    release_date = representative.get("owner_release_date")
+    interval = resolve_watch_interval(event, release_date)
 
     return HistoryEntry(
         key=("watch_history_entry", representative["entry_id"]),
@@ -243,11 +228,8 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
         created_at=created_at,
         updated_at=representative.get("updated_at"),
         release_date=release_date,
-        formatted_date=format_watch_history_entry(
-            event,
-            release_date=release_date,
-        ),
-        sort_key=watch_history_sort_key(event, release_date),
+        formatted_date=interval.label,
+        sort_key=watch_history_sort_key(event, interval=interval),
         poster=poster,
         media_type=representative["owner_media_type"],
         watch_state=representative.get("owner_watch_state"),
@@ -266,6 +248,16 @@ def _watch_event(row):
         "date_latest": row.get("date_latest"),
         "created_at": row.get("created_at"),
     }
+
+
+def _episode_watch_event(rows):
+    event = _watch_event(rows[0])
+    event["items"] = [
+        {"media_type": "episode", "season_num": row.get("season_num"),
+         "episode_num": row.get("episode_num"), "release_date": row.get("owner_release_date")}
+        for row in rows
+    ]
+    return event
 
 
 def _optional_bool(value):

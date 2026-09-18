@@ -1,4 +1,5 @@
 from copy import deepcopy
+from datetime import date
 import sqlite3
 import unittest
 
@@ -58,6 +59,32 @@ class MediaRepositoryWatchHistoryTests(unittest.TestCase):
         self.assertEqual(sorted(len(e['items']) for e in saved), [1, 1, 1, 2])
         self.assertEqual(len(load_default_history_entries(self.conn)), 4)
         self.assert_no_orphans()
+
+    def test_temporal_projection_matches_details_in_series_and_episode_contexts(self):
+        a, b = self.episodes[:2]
+        self.conn.execute("UPDATE media SET release_date = '2000-01-01' WHERE id = ?", (self.series,))
+        self.conn.execute("UPDATE media SET release_date = '2024-01-01' WHERE id = ?", (a,))
+        self.conn.execute("UPDATE media SET release_date = '2023-01-01' WHERE id = ?", (b,))
+        ids = [insert_entry(self.conn, [b, a], lo, hi, "2026-01-01 12:00:00")
+               for lo, hi in [(None, None), ("2025-01-01", None),
+                              (None, "2025-01-01"), ("2025-01-01", "2025-01-01")]]
+        # A distinct viewing with the same members and date pair stays distinct.
+        ids.append(insert_entry(self.conn, [a, b], created_at="2026-01-01 12:00:00"))
+        for release in ("2024-01-01", "2022-01-01", None):
+            self.conn.execute("UPDATE media SET release_date = ? WHERE id = ?", (release, a))
+            history = load_default_history_entries(self.conn)
+            self.assertEqual(len(history), len(ids))
+            undated = next(e for e in history if e.entry_id == ids[0])
+            self.assertEqual(undated.sort_key[0], date.fromisoformat(release or "2026-01-01").toordinal())
+            self.assertEqual(undated.release_date, release)
+            for media_id in (self.series, a, b):
+                with self.subTest(release=release, media_id=media_id):
+                    draft = build_media_draft_from_db(self.conn, repo.get_media_by_id(self.conn, media_id))
+                    details = build_watch_history_display_entries(draft)
+                    self.assertEqual([e.entry_id for e in history], [e['id'] for e in details])
+                    for card, row in zip(history, details):
+                        self.assertEqual(card.formatted_date, row['text'].split(' · ')[0])
+                        self.assertEqual(card.sort_key, row['sort_key'])
 
     def test_edit_dates_membership_and_conversion_preserve_identity(self):
         self.save(self.series, [], [entry(self.series)])

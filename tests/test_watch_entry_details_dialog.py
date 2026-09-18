@@ -1,7 +1,9 @@
 import os
 import unittest
 from copy import deepcopy
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+from unittest.mock import patch
+import sqlite3
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
@@ -18,6 +20,10 @@ from PySide6.QtWidgets import (
 
 from app.media_details.watch_entry_dialog import WatchEntryDetailsDialog
 from app.media_user_data.watch_history import apply_watch_entry_result
+from app.media_user_data.watch_history_formatters import build_watch_history_display_entries
+from app.media_repository.history import sync_history, load_history_entries
+from app.history.repository import load_default_history_entries
+from db.connection import apply_database_schema
 
 
 class WatchEntryDetailsDialogTests(unittest.TestCase):
@@ -163,6 +169,52 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
             dialog.preview_label.text(),
             f"Preview: ~{release_date.year()}-{created_date.year()}",
         )
+
+    def test_preview_draft_and_persistence_share_utc_day(self):
+        utc_now = datetime(2025, 12, 31, 22, 30, tzinfo=timezone.utc)
+        draft = self._movie_draft()
+        draft["metadata"]["release_date"] = "2025-12-30"
+        with patch("app.media_user_data.watch_history.datetime", wraps=datetime) as clock, \
+                patch("app.media_details.watch_entry_dialog.QDate", wraps=QDate) as local_clock:
+            clock.now.return_value = utc_now
+            local_clock.currentDate.return_value = QDate(2026, 1, 1)
+            dialog = self._dialog(draft)
+            self.assertEqual(dialog.preview_label.text(), "Preview: ~Dec 2025")
+            dialog.save_entry_button.click()
+            apply_watch_entry_result(draft, None, dialog.result_payload)
+        self.assertEqual(draft["user_data"]["watch_history"][0]["created_at"], "2025-12-31 22:30:00")
+        self.assertEqual(build_watch_history_display_entries(draft)[0]["text"], "~Dec 2025")
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        conn.row_factory = sqlite3.Row
+        apply_database_schema(conn)
+        conn.create_function("current_timestamp", 0, lambda: "2025-12-31 22:30:00")
+        conn.execute("INSERT INTO media(id, tmdb_id, media_type, title, release_date) "
+                     "VALUES (1, 1, 'movie', 'Movie', '2025-12-30')")
+        sync_history(conn, 1, draft["user_data"]["watch_history"])
+        draft["user_data"]["watch_history"] = load_history_entries(conn, 1)
+        self.assertEqual(build_watch_history_display_entries(draft)[0]["text"], "~Dec 2025")
+        self.assertEqual(load_default_history_entries(conn)[0].formatted_date, "~Dec 2025")
+
+    def test_episode_preview_uses_selected_first_episode_and_existing_creation(self):
+        episodes = [self._episode(12, 2, "Second", "2023-01-01"),
+                    self._episode(11, 1, "Pilot", "2024-01-01")]
+        entry = dict(id=77, created_at="2025-01-01", items=[
+            {**episode, "media_type": "episode", "media_id": episode["episode_id"]}
+            for episode in episodes])
+        draft = self._series_draft(episodes, watch_history=[entry])
+        draft["series_view"].update(series_id=10, metadata=deepcopy(draft["metadata"]))
+        for in_episode_context in (False, True):
+            with self.subTest(in_episode_context=in_episode_context):
+                if in_episode_context:
+                    draft["media_id"] = 12
+                    draft["metadata"] = dict(media_type="episode", tmdb_id=1012, release_date="2023-01-01")
+                dialog = self._dialog(draft, entry)
+                self.assertEqual(dialog.preview_label.text(), "Preview: ~2024-2025 · S1:E1-2")
+                self.assertEqual(build_watch_history_display_entries(draft)[0]["text"],
+                                 "~2024-2025 · S1:E1-2")
+                dialog.episode_buttons[(1, 1)][0].click()
+                self.assertEqual(dialog.preview_label.text(), "Preview: ~2023-2025 · S1:E2")
 
     def test_date_validation_updates_exact_preview_without_error_line(self):
         dialog = self._dialog(self._movie_draft())
@@ -547,7 +599,7 @@ class WatchEntryDetailsDialogTests(unittest.TestCase):
         self.assertEqual(
             dialog.preview_label.text(),
             (
-                f"Preview: ~2020-{QDate.currentDate().year()}"
+                f"Preview: ~{date.today().strftime('%d %b %Y, %a').lstrip('0')}"
                 " · S1:E1-2"
             ),
         )

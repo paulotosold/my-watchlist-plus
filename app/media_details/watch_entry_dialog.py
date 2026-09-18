@@ -36,6 +36,7 @@ from .constants import (
     WATCH_ENTRY_SEASON_ROW_SPACING,
 )
 from app.media_user_data.watch_history import (
+    current_draft_timestamp,
     episode_key,
     get_series_episodes,
     is_episode_available,
@@ -764,12 +765,14 @@ class WatchEntryDetailsDialog(QDialog):
 
             return "Invalid date — use YYYY-MM-DD"
 
+        selected_episodes = self._selected_episodes()
         event = {
+            "items": [{**episode, "media_type": "episode"} for episode in selected_episodes],
             "date_earliest": validation["date_earliest"],
             "date_latest": validation["date_latest"],
             "created_at": (
                 (self.entry or {}).get("created_at")
-                or QDate.currentDate().toString("yyyy-MM-dd")
+                or current_draft_timestamp()
             ),
         }
         release_date = self._watch_history_release_date()
@@ -777,8 +780,6 @@ class WatchEntryDetailsDialog(QDialog):
 
         if not self._is_series():
             return preview
-
-        selected_episodes = self._selected_episodes()
 
         if selected_episodes:
             return f"{preview} · {format_episode_ranges(selected_episodes)}"

@@ -517,7 +517,7 @@ class MediaDetailsHelperTests(unittest.TestCase):
             "~2000-2025",
         )
 
-    def test_watch_history_entries_sort_by_estimated_watch_date_newest_first(self):
+    def test_watch_history_entries_sort_by_timeline_anchor_newest_first(self):
         media_draft = {
             "metadata": {
                 "media_type": "movie",
@@ -563,7 +563,7 @@ class MediaDetailsHelperTests(unittest.TestCase):
 
         self.assertEqual(
             [entry["id"] for entry in entries],
-            [5, 1, 2, 4, 3],
+            [1, 2, 4, 3, 5],
         )
 
     def test_watch_history_order_tiebreaks_by_created_time_then_id(self):
@@ -634,7 +634,7 @@ class MediaDetailsHelperTests(unittest.TestCase):
             [2, 1],
         )
 
-    def test_series_history_combines_entries_by_estimated_watch_date(self):
+    def test_series_history_combines_entries_by_timeline_anchor(self):
         media_draft = {
             "metadata": {"media_type": "series", "release_date": "2020-01-01"},
             "series_view": {"summary": {"first_air_date": "2020-01-01"}},
@@ -646,12 +646,12 @@ class MediaDetailsHelperTests(unittest.TestCase):
                      {"media_type": "episode", "season_num": 1, "episode_num": n} for n in (1, 2)]},
                 {"id": 70, "date_earliest": None, "date_latest": None,
                  "created_at": "2027-01-01 10:00:00", "items": [
-                     {"media_type": "episode", "season_num": 1, "episode_num": 3}]},
+                     {"media_type": "episode", "season_num": 1, "episode_num": 3, "release_date": "2020-01-01"}]},
             ]},
         }
         entries = build_watch_history_display_entries(media_draft)
-        self.assertEqual([e["id"] for e in entries], [70, 40, 50])
-        self.assertEqual([e["kind"] for e in entries], ["episode_group", "episode_group", "media_event"])
+        self.assertEqual([e["id"] for e in entries], [40, 50, 70])
+        self.assertEqual([e["kind"] for e in entries], ["episode_group", "media_event", "episode_group"])
 
     def test_series_episode_entry_formats_only_its_items(self):
         group = {"id": 1, "date_earliest": "2026-05-01", "date_latest": "2026-05-01",

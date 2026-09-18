@@ -1,6 +1,87 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from typing import Literal
+
+from .watch_history import episode_sort_key, normalize_watch_date
+
+
+BoundarySource = Literal["date_earliest", "date_latest", "release_date", "created_at"]
+
+
+@dataclass(frozen=True)
+class WatchInterval:
+    earliest: date | None
+    latest: date | None
+    earliest_source: BoundarySource | None
+    latest_source: BoundarySource | None
+    specificity: int
+
+    @property
+    def approximate(self):
+        return self.specificity < 2
+
+    @property
+    def anchor(self):
+        if self.earliest is None:
+            return 0.0
+        if self.latest_source == "date_latest":
+            return midpoint_date_ordinal(self.earliest, self.latest)
+        return float(self.earliest.toordinal())
+
+    @property
+    def label(self):
+        label = (format_date_range(self.earliest, self.latest)
+                 if self.earliest is not None else "unknown date")
+        return f"~{label}" if self.approximate else label
+
+
+def watch_history_release_date(event, release_date=None):
+    """Episode entries use their first item's release, never the series release."""
+    episodes = [item for item in (event.get("items") or [])
+                if item.get("media_type") == "episode"]
+    if episodes:
+        return min(episodes, key=episode_sort_key).get("release_date")
+    return release_date
+
+
+def _explicit_date(value):
+    if isinstance(value, date):
+        return parse_date(value)
+    normalized, error = normalize_watch_date(value)
+    if error:
+        raise ValueError(error)
+    return parse_date(normalized)
+
+
+def resolve_watch_interval(event, release_date=None):
+    """Resolve once, retaining actual boundary sources even after collapse."""
+    earliest = _explicit_date(event.get("date_earliest"))
+    latest = _explicit_date(event.get("date_latest"))
+    if earliest is not None and latest is not None and latest < earliest:
+        raise ValueError("Latest date must be on or after earliest date.")
+    if earliest is not None and latest is not None:
+        specificity = 3 if earliest == latest else 2
+    else:
+        specificity = int(earliest is not None or latest is not None)
+    lower = earliest or parse_date(watch_history_release_date(event, release_date))
+    upper = latest or parse_date(event.get("created_at"))
+    lower_source = "date_earliest" if earliest else "release_date"
+    upper_source = "date_latest" if latest else "created_at"
+
+    if earliest and (upper is None or upper < earliest):
+        upper, upper_source = earliest, "date_earliest"
+    elif latest and (lower is None or lower > latest):
+        lower, lower_source = latest, "date_latest"
+    elif not earliest and not latest:
+        if lower is None:
+            lower, lower_source = upper, upper_source
+        if upper is None or (lower is not None and lower > upper):
+            upper, upper_source = lower, lower_source
+
+    return WatchInterval(lower, upper, lower_source if lower else None,
+                         upper_source if upper else None, specificity)
 
 
 def build_watch_history_display_entries(media_draft):
@@ -18,17 +99,17 @@ def build_watch_history_display_entries(media_draft):
         release_date = metadata.get("release_date")
         if metadata.get("media_type") == "series":
             release_date = (context.get("summary") or {}).get("first_air_date") or release_date
-        elif episodic and len(items) > 1:
-            release_date = ((context.get("summary") or {}).get("first_air_date")
-                            or (context.get("metadata") or {}).get("release_date"))
-        text = format_watch_history_entry(event, release_date)
+        release_date = watch_history_release_date(event, release_date)
+        interval = resolve_watch_interval(event, release_date)
+        text = interval.label
         if episodic and (metadata.get("media_type") == "series" or len(items) > 1):
             text += " · " + format_episode_ranges(items)
         elif items and items[0].get("media_type") == "series":
             text += " · no episode info"
         entries.append({**event, "text": text, "release_date": release_date,
+                        "sort_key": watch_history_sort_key(event, interval=interval),
                         "kind": "episode_group" if episodic else "media_event"})
-    return sorted(entries, key=lambda e: watch_history_sort_key(e, e.get("release_date")), reverse=True)
+    return sorted(entries, key=lambda e: e["sort_key"], reverse=True)
 
 
 def build_watch_history_display_lines(media_draft):
@@ -102,56 +183,20 @@ def sort_watch_history_entries(entries, release_date=None):
     )
 
 
-def watch_history_sort_key(event, release_date=None):
-    estimated_date, confidence = estimate_watch_history_sort_date(
-        event,
-        release_date,
-    )
-
+def watch_history_sort_key(event, release_date=None, *, interval=None):
+    interval = interval or resolve_watch_interval(event, release_date)
     return (
-        estimated_date,
-        confidence,
+        interval.anchor,
+        interval.specificity,
         datetime_sort_key(event.get("created_at")),
         watch_history_identity_sort_key(event),
     )
 
 
 def estimate_watch_history_sort_date(event, release_date=None):
-    """Return an estimated date ordinal and its confidence for sorting.
-
-    Confidence levels are exact date (3), explicit range (2), one explicit
-    bound (1), and a created-at proxy or fully unknown date (0).
-    """
-    earliest = parse_date(event.get("date_earliest"))
-    latest = parse_date(event.get("date_latest"))
-    created_date = parse_date(event.get("created_at"))
-    media_release_date = parse_date(release_date)
-
-    if earliest is not None and latest is not None:
-        lower_bound, upper_bound = sorted((earliest, latest))
-        confidence = 3 if lower_bound == upper_bound else 2
-        return midpoint_date_ordinal(lower_bound, upper_bound), confidence
-
-    if earliest is not None:
-        upper_bound = (
-            created_date
-            if created_date is not None and created_date >= earliest
-            else earliest
-        )
-        return midpoint_date_ordinal(earliest, upper_bound), 1
-
-    if latest is not None:
-        lower_bound = (
-            media_release_date
-            if media_release_date is not None and media_release_date <= latest
-            else latest
-        )
-        return midpoint_date_ordinal(lower_bound, latest), 1
-
-    if created_date is not None:
-        return float(created_date.toordinal()), 0
-
-    return 0.0, 0
+    """Compatibility adapter returning the timeline anchor and specificity."""
+    interval = resolve_watch_interval(event, release_date)
+    return interval.anchor, interval.specificity
 
 
 def midpoint_date_ordinal(lower_bound, upper_bound):
@@ -197,33 +242,7 @@ def watch_history_identity_sort_key(event):
 
 
 def format_watch_history_entry(event, release_date=None):
-    earliest = parse_date(event.get("date_earliest"))
-    latest = parse_date(event.get("date_latest"))
-    inferred = False
-
-    if earliest is None or latest is None:
-        inferred = True
-        earliest = earliest or parse_date(release_date) or parse_date(event.get("created_at"))
-        latest = latest or parse_date(event.get("created_at")) or earliest
-
-    if earliest is None and latest is None:
-        label = "unknown date"
-    else:
-        if earliest is None:
-            earliest = latest
-
-        if latest is None:
-            latest = earliest
-
-        if latest < earliest:
-            earliest, latest = latest, earliest
-
-        label = format_date_range(earliest, latest)
-
-    if inferred:
-        return f"~{label}"
-
-    return label
+    return resolve_watch_interval(event, release_date).label
 
 
 def parse_date(value):

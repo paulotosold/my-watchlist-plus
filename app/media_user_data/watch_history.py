@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from uuid import uuid4
 
 
@@ -191,4 +191,4 @@ def make_draft_id():
 
 
 def current_draft_timestamp():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
