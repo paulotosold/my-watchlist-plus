@@ -149,41 +149,21 @@ class FakeWatchlistPage(FakePage):
 
 
 class FakeHistoryPage(FakePage):
-    view_state_changed = Signal(str, int)
+    density_changed = Signal(int)
+    watch_entry_details_requested = Signal(int, int)
 
     def __init__(self, parent=None):
-        super().__init__(
-            "19 history entries – Showing: All Time, Newest First",
-            parent,
-        )
+        super().__init__("19 history entries – Showing: All Time, Newest First", parent)
         self.entries = [object() for _ in range(19)]
-        self.view_mode = "grid"
-        self.posters_per_row = 18
-        self.view_mode_values = []
+        self.posters_per_row = 10
         self.history_posters_per_row_values = []
-
-    def set_view_mode(self, view_mode):
-        if view_mode == self.view_mode:
-            return False
-
-        self.view_mode = view_mode
-        self.view_mode_values.append(view_mode)
-        self.view_state_changed.emit(
-            self.view_mode,
-            self.posters_per_row,
-        )
-        return True
 
     def set_posters_per_row(self, posters_per_row):
         if posters_per_row == self.posters_per_row:
             return False
-
         self.posters_per_row = posters_per_row
         self.history_posters_per_row_values.append(posters_per_row)
-        self.view_state_changed.emit(
-            self.view_mode,
-            self.posters_per_row,
-        )
+        self.density_changed.emit(self.posters_per_row)
         return True
 
 
@@ -387,44 +367,16 @@ class MainWindowShellTests(unittest.TestCase):
         self.assertFalse(control.isHidden())
         self.assertEqual(control.posters_per_row, 5)
 
-    def test_history_view_controls_are_forwarded_and_remembered(self):
+    def test_history_density_is_forwarded_and_remembered(self):
         self.window.section_tabs.setCurrentIndex(1)
         control = self.window.history_status_control
-
-        self.assertEqual(control.view_mode, "grid")
         self.assertFalse(control.poster_size_control.isHidden())
-
-        control.list_view_button.click()
-
-        self.assertEqual(
-            self.window.history_page.view_mode_values,
-            ["list"],
-        )
-        self.assertEqual(control.view_mode, "list")
-        self.assertTrue(control.poster_size_control.isHidden())
-
-        control.grid_view_button.click()
-
-        self.assertEqual(
-            self.window.history_page.view_mode_values,
-            ["list", "grid"],
-        )
-        self.assertEqual(control.view_mode, "grid")
-        self.assertFalse(control.poster_size_control.isHidden())
-
         control.poster_size_control.minus_button.click()
-
-        self.assertEqual(
-            self.window.history_page.history_posters_per_row_values,
-            [19],
-        )
-        self.assertEqual(control.posters_per_row, 19)
-
+        self.assertEqual(self.window.history_page.history_posters_per_row_values, [11])
+        self.assertEqual(control.posters_per_row, 11)
         self.window.section_tabs.setCurrentIndex(0)
         self.window.section_tabs.setCurrentIndex(1)
-
-        self.assertEqual(control.view_mode, "grid")
-        self.assertEqual(control.posters_per_row, 19)
+        self.assertEqual(control.posters_per_row, 11)
 
     def test_cabinet_density_is_independent_and_remembered(self):
         watchlist_value = self.window.posters_per_row_control.posters_per_row
@@ -593,6 +545,18 @@ class MainWindowShellTests(unittest.TestCase):
         build_draft.assert_called_once()
         open_details.assert_called_once_with(self.window, media_draft)
 
+    def test_history_caption_forwards_the_entry_id_and_refreshes_after_save(self):
+        media_draft = {"media_id": 42, "metadata": {"title": "Movie"}}
+        self.window.section_tabs.setCurrentIndex(1)
+        load_count = self.window.history_page.load_count
+        with patch.object(self.window, "_resolve_details_request", return_value=media_draft) as resolve, patch(
+            "app.main_window.open_media_details_dialog", return_value={"status": "saved"}
+        ) as open_details:
+            self.window.history_page.watch_entry_details_requested.emit(42, 777)
+        resolve.assert_called_once_with(42)
+        open_details.assert_called_once_with(self.window, media_draft, initial_watch_entry_id=777)
+        self.assertEqual(self.window.history_page.load_count, load_count + 1)
+
     def test_saved_history_details_uses_stable_watchlist_refresh(self):
         media_draft = {"media_id": 42, "metadata": {"title": "Movie"}}
         self.window.section_tabs.setCurrentIndex(1)
@@ -723,7 +687,7 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         self.assertTrue(self.window.posters_per_row_control.isHidden())
         self.assertEqual(self.window.size().toTuple(), (1000, 650))
         self.assertEqual(
-            self.window.history_page.scroll_area
+            self.window.history_page.grid_scroll_area
             .horizontalScrollBar().maximum(),
             0,
         )
@@ -906,7 +870,7 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             control.width()
-            - control.list_view_button.geometry().right()
+            - control.poster_size_control.geometry().right()
             - 1,
             12,
         )

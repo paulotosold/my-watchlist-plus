@@ -88,6 +88,7 @@ from app.ui.media_state_controls import (
     populate_status_combo,
     set_combo_value,
 )
+from app.ui.styles import ENTRY_LABEL_STYLE, INPUT_BORDER
 from app.ui.top_bar import FIND_MEDIA_INPUT_PLACEHOLDER, INPUT_BOX_STYLE
 from db.connection import get_connection
 
@@ -101,11 +102,12 @@ DETAIL_BLOCK_SPACING = 14
 REFRESH_FEEDBACK_DURATION_MS = 500
 
 
-def open_media_details_dialog(parent, media_draft, media_query=None):
+def open_media_details_dialog(parent, media_draft, media_query=None, *, initial_watch_entry_id=None):
     dialog = MediaDetailsDialog(
         parent=parent,
         media_draft=media_draft,
         media_query=media_query,
+        initial_watch_entry_id=initial_watch_entry_id,
     )
 
     dialog.exec()
@@ -121,6 +123,7 @@ class MediaDetailsDialog(QDialog):
         metadata_refresh_manager=None,
         watch_provider_refresh_manager=None,
         auto_refresh_watch_providers=True,
+        initial_watch_entry_id=None,
     ):
         super().__init__(parent)
 
@@ -144,6 +147,7 @@ class MediaDetailsDialog(QDialog):
         self._auto_refresh_watch_providers = auto_refresh_watch_providers
         self._auto_refreshed_watch_provider_media_ids = set()
         self._is_closing = False
+        self._initial_watch_entry_id = initial_watch_entry_id
         self._watch_entry_dialog_active = False
         self._status_change_generation = 0
         self._scheduled_watch_entry_generation = None
@@ -518,7 +522,26 @@ class MediaDetailsDialog(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
+        if self._initial_watch_entry_id is not None:
+            QTimer.singleShot(0, self._open_initial_watch_entry)
         QTimer.singleShot(0, self._maybe_auto_refresh_watch_providers)
+
+    def _open_initial_watch_entry(self):
+        if self._is_closing or not self.isVisible():
+            return
+        entry_id = self._initial_watch_entry_id
+        self._initial_watch_entry_id = None
+        if entry_id is None:
+            return
+        entry = next((entry for entry in build_watch_history_display_entries(self.media_draft)
+                      if entry.get("id") == entry_id), None)
+        if entry is None:
+            QMessageBox.information(
+                self, "Watch Entry Details",
+                "This watch history entry is no longer available.",
+            )
+            return
+        self.edit_watch_history(entry)
 
     def _render_all(self):
         self._is_populating = True
@@ -1688,11 +1711,7 @@ class MediaDetailsDialog(QDialog):
             }
 
             QLabel {
-                color: black;
-                font-size: 12px;
-                background: transparent;
-                margin: 0px;
-                padding: 1px 0px;
+                """ + ENTRY_LABEL_STYLE + """
             }
 
             QLabel#blockTitle,
@@ -1712,7 +1731,7 @@ class MediaDetailsDialog(QDialog):
 
             QLineEdit,
             QPlainTextEdit {
-                border: 1px solid #bcbcbc;
+                border: """ + INPUT_BORDER + """;
                 border-radius: 6px;
                 padding: 4px 8px;
                 background-color: white;

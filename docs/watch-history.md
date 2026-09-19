@@ -189,7 +189,7 @@ The temporal model is shared by every presentation of watch history. A surface m
 | Media Details watch-history list | Uses the shared label | Uses the shared sort key | Projects each entry’s episode items before sorting |
 | Watch-entry preview | Uses the shared label for the prospective entry | Not applicable | Shows the prospective episode-range representation when episodes are selected |
 
-Each poster or row in History represents one display item and occupies the position determined by that item's sort key. The rows in Media Details use the same ordering rules. A preview does not participate in ordering, but its date label must match the label that the saved entry will receive.
+Each card in History represents one display item and occupies the position determined by that item's sort key. The rows in Media Details use the same ordering rules. A preview does not participate in ordering, but its date label must match the label that the saved entry will receive.
 
 ## Relationship with current watch state
 
@@ -198,6 +198,48 @@ Watch history and current watch state remain separate in the persistence model. 
 Application workflows may connect the two concepts. A user-initiated transition to `watched` may require or create at least one watch-history entry; when the viewing date is unknown, an entry with neither explicit boundary is valid and avoids inventing a date. This is an application-level consistency rule rather than a database relationship.
 
 Because watch state describes the present and watch history preserves past viewing events, an existing history entry may coexist with another current state or with no current state. Changing the current state does not by itself erase history, and editing an existing history entry does not by itself redefine the current state.
+
+## History cards and navigation
+
+History has a single grid view. Its poster-size control allows 6–25 cards per row,
+with 10 as the default; density is retained while switching tabs during the session.
+Each card has a square-cornered 1px `#bcbcbc` border, a 2:3 poster and a white footer.
+The footer uses the same 12px entry typography as Media Details and adds episode
+ranges when present, including individual episodes: `Aug 2026 · S1:E1-5`.
+Series-level entries without episode items show only the viewing-date label.
+At 15–25 posters per row, the entire footer is hidden and reserves no space;
+only the bordered posters remain. Returning to 6–14 restores the footers and
+their edit actions. Keyboard navigation skips hidden footers.
+
+The footer stays on one line. Text that fits is centered; overflow starts at the
+left and can be scrolled with horizontal trackpad gestures, Shift + mouse wheel,
+or dragging, with both scrollbars hidden. Ordinary vertical scrolling continues
+to scroll the History page. Dragging does not activate the footer. Changing the
+text, or widening the card enough to fit it, resets the horizontal offset.
+
+Clicking the poster opens Media Details. Clicking the footer opens Media Details
+and then its existing Watch Entry Details editor for the selected persistent entry
+ID. Both actions also support Enter and Space when focused. Editor changes remain
+in the Media Details draft until that window is saved; cancelling retains the
+existing dialog semantics. If the selected entry has been removed, Media Details
+stays open and reports the missing entry rather than creating a new one.
+
+The footer tooltip says `Edit watch history entry`. Poster tooltips identify
+the work, rather than repeating the viewing date:
+
+- Movies: `Chicken Run: Dawn of the Nugget (2023)`.
+- Series and multiple-episode entries: `Foundation (2021-2025)`.
+- Single episodes: `Black Mirror S3E4: San Junipero (2016)`.
+
+Series year ranges cover all episodes in the local catalog, including future
+release dates, regardless of which episodes were watched. They do not indicate
+whether a series has ended. The series release date is the fallback when the first
+episode date is unavailable. Equal years collapse to one year; unknown years are
+omitted. These release years are independent of the viewing-date timeline.
+
+Card reuse, poster render caching and scroll anchoring survive density changes,
+window resizing and history refreshes. The former list view and its inline state
+controls have been removed; state editing remains available in Media Details.
 
 ## Edge cases
 

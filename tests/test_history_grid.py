@@ -81,9 +81,9 @@ class HistoryGridBoardTests(unittest.TestCase):
             self.board.posters_per_row,
             DEFAULT_HISTORY_POSTERS_PER_ROW,
         )
-        self.assertEqual(DEFAULT_HISTORY_POSTERS_PER_ROW, 18)
+        self.assertEqual(DEFAULT_HISTORY_POSTERS_PER_ROW, 10)
         self.assertEqual(MIN_HISTORY_POSTERS_PER_ROW, 6)
-        self.assertEqual(MAX_HISTORY_POSTERS_PER_ROW, 24)
+        self.assertEqual(MAX_HISTORY_POSTERS_PER_ROW, 25)
         self.assertEqual(
             self.board.grid_layout.horizontalSpacing(),
             GRID_SPACING,
@@ -100,10 +100,10 @@ class HistoryGridBoardTests(unittest.TestCase):
         self.assertEqual(self.board.row_count, 2)
         self.assertEqual(
             self.board.tile_height,
-            round(self.board.tile_width * 1.5),
+            round((self.board.tile_width - 2) * 1.5) + 2 + self.board.tiles[0].caption.caption_height(),
         )
         self.assertEqual(
-            self.board.tiles[18].geometry().left(),
+            self.board.tiles[10].geometry().left(),
             self.board.tiles[0].geometry().left(),
         )
         self.assertEqual(
@@ -117,7 +117,7 @@ class HistoryGridBoardTests(unittest.TestCase):
             GRID_SPACING,
         )
         self.assertEqual(
-            self.board.tiles[18].geometry().top()
+            self.board.tiles[10].geometry().top()
             - self.board.tiles[0].geometry().bottom()
             - 1,
             GRID_SPACING,
@@ -194,6 +194,51 @@ class HistoryGridBoardTests(unittest.TestCase):
             )
         )
 
+    def test_dense_grid_hides_captions_without_reserving_space_and_restores_them(self):
+        self.board.set_entries([make_entry(index) for index in range(30)])
+        original_tiles = list(self.board.tiles)
+        for density in (6, 10, 14, 15, 25, 14):
+            with self.subTest(density=density):
+                self.board.set_posters_per_row(density)
+                self._process_layout_events()
+                self.assertEqual(self.board.tiles, original_tiles)
+                for tile in self.board.tiles:
+                    self.assertEqual(tile.caption.isVisible(), density <= 14)
+                    self.assertEqual(tile.poster_label.height(), round(tile.poster_label.width() * 1.5))
+                    footer_height = tile.caption.caption_height() if density <= 14 else 0
+                    self.assertEqual(tile.height(), tile.poster_label.height() + footer_height + 2)
+                self.assertEqual(self.board.minimumHeight(), self.board.content_height)
+
+    def test_hiding_focused_caption_transfers_focus_to_poster_and_skips_hidden_actions(self):
+        self.board.set_entries([make_entry(1), make_entry(2)])
+        self._process_layout_events()
+        first, second = self.board.tiles
+        first.caption.setFocus()
+        self.assertTrue(first.caption.hasFocus())
+        self.board.set_posters_per_row(15)
+        self._process_layout_events()
+        self.assertTrue(first.poster_label.hasFocus())
+        QTest.keyClick(first.poster_label, Qt.Key.Key_Tab)
+        self.assertTrue(second.poster_label.hasFocus())
+        self.board.set_posters_per_row(14)
+        self._process_layout_events()
+        first.poster_label.setFocus()
+        QTest.keyClick(first.poster_label, Qt.Key.Key_Tab)
+        self.assertTrue(first.caption.hasFocus())
+
+    def test_refresh_and_resize_keep_captions_hidden_at_high_density(self):
+        self.board.set_posters_per_row(25)
+        self.board.set_entries([make_entry(1), make_entry(2)])
+        self._process_layout_events()
+        self.board.resize(760, 400)
+        self.board.set_entries([make_entry(2), make_entry(3)])
+        self._process_layout_events()
+        self.assertTrue(all(tile.caption.isHidden() for tile in self.board.tiles))
+        self.board.set_posters_per_row(14)
+        self._process_layout_events()
+        self.assertTrue(all(tile.caption.isVisible() for tile in self.board.tiles))
+        self.assertEqual(self.board.tiles[1].caption.label.text(), "24 Jul 2026, Fri")
+
     def test_refresh_reuses_surviving_entry_tiles_in_new_order(self):
         original_entries = [make_entry(index) for index in range(6)]
         self.board.set_entries(original_entries)
@@ -214,7 +259,7 @@ class HistoryGridBoardTests(unittest.TestCase):
             self.board.tiles[1],
             original_by_key[original_entries[1].key],
         )
-        self.assertEqual(self.board.tiles[0].toolTip(), "Jul 2026")
+        self.assertEqual(self.board.tiles[0].caption.label.text(), "Jul 2026")
         self.assertEqual(
             [tile.entry for tile in self.board.tiles],
             refreshed_entries,
@@ -247,15 +292,16 @@ class HistoryGridBoardTests(unittest.TestCase):
         board_spy = QSignalSpy(self.board.details_requested)
         tile_spy = QSignalSpy(tile.details_requested)
 
-        self.assertEqual(tile.toolTip(), "Jan 2026")
+        self.assertEqual(tile.toolTip(), "Movie 1")
+        self.assertEqual(tile.caption.label.text(), "Jan 2026")
         QTest.mouseClick(
-            tile,
+            tile.poster_label,
             Qt.MouseButton.LeftButton,
             pos=QPoint(tile.width() // 2, tile.height() // 2),
         )
-        tile.setFocus(Qt.FocusReason.TabFocusReason)
-        QTest.keyClick(tile, Qt.Key.Key_Return)
-        QTest.keyClick(tile, Qt.Key.Key_Space)
+        tile.poster_label.setFocus(Qt.FocusReason.TabFocusReason)
+        QTest.keyClick(tile.poster_label, Qt.Key.Key_Return)
+        QTest.keyClick(tile.poster_label, Qt.Key.Key_Space)
 
         self.assertEqual(tile_spy.count(), 3)
         self.assertEqual(board_spy.count(), 3)
@@ -264,15 +310,37 @@ class HistoryGridBoardTests(unittest.TestCase):
             for index in range(board_spy.count())
         ))
 
+    def test_card_tooltips_caption_action_and_focus_order_after_reordering(self):
+        entries = [replace(make_entry(index), footer_text="Aug 2026 · S1:E1-5", tooltip_text=f"Series {index} (2021-2025)")
+                   for index in (1, 2)]
+        self.board.set_entries(entries)
+        self._process_layout_events()
+        self.board.set_entries(list(reversed(entries)))
+        self._process_layout_events()
+        first, second = self.board.tiles
+        self.assertEqual(first.poster_label.toolTip(), "Series 2 (2021-2025)")
+        self.assertEqual(first.caption.toolTip(), "Edit watch history entry")
+        self.assertEqual(first.caption.label.text(), "Aug 2026 · S1:E1-5")
+        poster_spy = QSignalSpy(self.board.details_requested)
+        entry_spy = QSignalSpy(self.board.watch_entry_details_requested)
+        QTest.mouseClick(first.caption.viewport(), Qt.MouseButton.LeftButton)
+        self.assertEqual(poster_spy.count(), 0)
+        self.assertEqual(entry_spy.at(0), [2, 2])
+        first.poster_label.setFocus()
+        QTest.keyClick(first.poster_label, Qt.Key.Key_Tab)
+        self.assertTrue(first.caption.hasFocus())
+        QTest.keyClick(first.caption, Qt.Key.Key_Tab)
+        self.assertTrue(second.poster_label.hasFocus())
+
     def test_placeholder_is_clickable_and_grid_has_no_buttons_or_overlays(self):
         self.board.set_entries([make_entry(1, details_media_id=77)])
         self._process_layout_events()
         tile = self.board.tiles[0]
         spy = QSignalSpy(self.board.details_requested)
 
-        self.assertEqual(tile.text().replace("\n", " "), "No poster")
+        self.assertEqual(tile.poster_label.text().replace("\n", " "), "No poster")
         self.assertEqual(tile.findChildren(QAbstractButton), [])
-        QTest.mouseClick(tile, Qt.MouseButton.LeftButton)
+        QTest.mouseClick(tile.poster_label, Qt.MouseButton.LeftButton)
 
         self.assertEqual(spy.count(), 1)
         self.assertEqual(spy.at(0), [77])
@@ -280,8 +348,8 @@ class HistoryGridBoardTests(unittest.TestCase):
         self.board.set_posters_per_row(MAX_HISTORY_POSTERS_PER_ROW)
         self._process_layout_events()
         widest_line = max(
-            tile.fontMetrics().horizontalAdvance(line)
-            for line in tile.text().splitlines()
+            tile.poster_label.fontMetrics().horizontalAdvance(line)
+            for line in tile.poster_label.text().splitlines()
         )
         self.assertLessEqual(widest_line, tile.width() - 4)
 
@@ -301,9 +369,9 @@ class HistoryGridBoardTests(unittest.TestCase):
                 self._process_layout_events()
 
             tile = self.board.tiles[0]
-            self.assertEqual(tile.text(), "")
-            self.assertFalse(tile.pixmap().isNull())
-            self.assertEqual(tile.pixmap().size(), tile.size())
+            self.assertEqual(tile.poster_label.text(), "")
+            self.assertFalse(tile.poster_label.pixmap().isNull())
+            self.assertEqual(tile.poster_label.pixmap().size(), tile.poster_label.size())
 
             with patch("app.history.grid._read_scaled_poster") as read:
                 self.board.set_entries([entry])
@@ -322,7 +390,7 @@ class HistoryGridBoardTests(unittest.TestCase):
                 self._process_layout_events()
                 tile = self.board.tiles[0]
                 self.assertEqual(
-                    tile.text().replace("\n", " "),
+                    tile.poster_label.text().replace("\n", " "),
                     "No poster",
                 )
 
@@ -334,8 +402,8 @@ class HistoryGridBoardTests(unittest.TestCase):
                 self.board.set_entries([entry])
                 self._process_layout_events()
 
-            self.assertEqual(tile.text(), "")
-            self.assertFalse(tile.pixmap().isNull())
+            self.assertEqual(tile.poster_label.text(), "")
+            self.assertFalse(tile.poster_label.pixmap().isNull())
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QToolButton, QWidget
 
 from app.paths import ICONS_DIR
+from app.ui.styles import INPUT_BORDER
 
 BUTTON_STYLE = """
 QToolButton {
@@ -19,7 +20,7 @@ QToolButton:hover {
 
 INPUT_BOX_STYLE = """
 QLineEdit {
-    border: 1px solid #bcbcbc;
+    border: """ + INPUT_BORDER + """;
     border-radius: 16px;
     padding: 4px 8px;
     background-color: white;

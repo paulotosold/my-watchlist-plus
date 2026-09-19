@@ -5,6 +5,8 @@ from typing import Any
 
 from app.media_user_data.watch_history_formatters import (
     format_episode_ranges,
+    format_watch_history_caption,
+    parse_date,
     resolve_watch_interval,
     watch_history_sort_key,
     watch_history_release_date,
@@ -36,6 +38,8 @@ class HistoryEntry:
     is_cabinet_worthy: bool | None
     episodes: tuple[dict[str, Any], ...] = ()
     updated_at: str | None = None
+    footer_text: str = ""
+    tooltip_text: str = ""
 
 
 def load_default_history_entries(conn) -> list[HistoryEntry]:
@@ -98,6 +102,8 @@ def _build_direct_entry(row) -> HistoryEntry:
         updated_at=row.get("updated_at"),
         release_date=release_date,
         formatted_date=interval.label,
+        footer_text=interval.label,
+        tooltip_text=_history_tooltip(row),
         sort_key=watch_history_sort_key(event, interval=interval),
         poster=choose_history_poster(row),
         media_type=row["display_media_type"],
@@ -173,6 +179,8 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         updated_at=representative.get("updated_at"),
         release_date=release_date,
         formatted_date=interval.label,
+        footer_text=format_watch_history_caption(interval.label, episodes),
+        tooltip_text=_history_tooltip(representative),
         sort_key=watch_history_sort_key(event, interval=interval),
         poster=poster,
         media_type=representative["display_media_type"],
@@ -229,6 +237,8 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
         updated_at=representative.get("updated_at"),
         release_date=release_date,
         formatted_date=interval.label,
+        footer_text=format_watch_history_caption(interval.label, episodes),
+        tooltip_text=_history_tooltip(representative, single_episode=True),
         sort_key=watch_history_sort_key(event, interval=interval),
         poster=poster,
         media_type=representative["owner_media_type"],
@@ -239,6 +249,28 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
         ),
         episodes=episodes,
     )
+
+
+def _history_tooltip(row, *, single_episode=False):
+    title = row["display_title"]
+    if single_episode:
+        season = row.get("season_num")
+        episode = row.get("episode_num")
+        code = f" S{season}E{episode}" if season is not None and episode is not None else ""
+        title = f"{title}{code}: {row.get('owner_title') or 'Untitled episode'}"
+        dates = (row.get("owner_release_date"),)
+    elif row["display_media_type"] == "series":
+        dates = (
+            row.get("series_first_air_date") or row.get("display_release_date"),
+            row.get("series_last_air_date"),
+        )
+    else:
+        dates = (row.get("owner_release_date"),)
+    years = sorted({parsed.year for value in dates if (parsed := parse_date(value))})
+    if not years:
+        return title
+    year_label = str(years[0]) if len(years) == 1 else f"{years[0]}-{years[-1]}"
+    return f"{title} ({year_label})"
 
 
 def _watch_event(row):
@@ -351,6 +383,7 @@ _DEFAULT_HISTORY_QUERY = """
             ELSE owner.release_date
         END AS display_release_date,
         summary.first_air_date AS series_first_air_date,
+        summary.last_air_date AS series_last_air_date,
         owner_state.watch_state AS owner_watch_state,
         owner_state.impression AS owner_impression,
         owner_state.is_cabinet_worthy AS owner_is_cabinet_worthy,

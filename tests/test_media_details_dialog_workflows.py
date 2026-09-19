@@ -86,6 +86,81 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         self.load_lists_patch.stop()
         self.application.processEvents()
 
+    def test_initial_watch_entry_opens_by_id_after_show_and_only_once(self):
+        history = [
+            {"id": entry_id, "date_earliest": "2026-01-01", "date_latest": "2026-01-01", "items": []}
+            for entry_id in (3, 9)
+        ]
+        dialog = self._dialog(watch_history=history, initial_watch_entry_id=9)
+        with patch.object(dialog, "edit_watch_history") as edit:
+            edit.assert_not_called()
+            dialog.show()
+            self.application.processEvents()
+            self.assertTrue(dialog.isVisible())
+            self.assertEqual(edit.call_args.args[0]["id"], 9)
+            dialog.hide()
+            dialog.show()
+            self.application.processEvents()
+            edit.assert_called_once()
+        dialog.close()
+
+    def test_missing_initial_entry_warns_without_creating_an_entry(self):
+        dialog = self._dialog(initial_watch_entry_id=999)
+        with patch.object(dialog, "edit_watch_history") as edit, patch(
+            "app.media_details.dialog.QMessageBox.information"
+        ) as message:
+            dialog.show()
+            self.application.processEvents()
+            message.assert_called_once()
+            edit.assert_not_called()
+            self.assertTrue(dialog.isVisible())
+            self.assertFalse(dialog._is_dirty)
+        dialog.close()
+
+    def test_initial_entry_cancel_preserves_draft(self):
+        history = [{"id": 3, "date_earliest": "2026-01-01", "date_latest": "2026-01-01", "items": []}]
+        dialog = self._dialog(watch_history=history, initial_watch_entry_id=3)
+        before = deepcopy(dialog.media_draft)
+        with patch("app.media_details.dialog.WatchEntryDetailsDialog") as child:
+            child.return_value.exec.return_value = QDialog.Rejected
+            dialog.show()
+            self.application.processEvents()
+            self.assertIs(child.call_args.args[0], dialog)
+            self.assertEqual(child.call_args.args[2]["id"], 3)
+        self.assertEqual(dialog.media_draft, before)
+        self.assertFalse(dialog._is_dirty)
+        dialog.close()
+
+    def test_initial_entry_edit_and_delete_update_only_the_selected_draft_entry(self):
+        for action in ("save", "delete"):
+            with self.subTest(action=action):
+                history = [
+                    {"id": entry_id, "date_earliest": "2026-01-01", "date_latest": "2026-01-01", "items": []}
+                    for entry_id in (3, 9)
+                ]
+                dialog = self._dialog(media_type="movie", watch_history=history, initial_watch_entry_id=9)
+                with patch("app.media_details.dialog.WatchEntryDetailsDialog") as child:
+                    child.return_value.exec.return_value = QDialog.Accepted
+                    child.return_value.result_payload = {
+                        "action": action,
+                        "date_earliest": "2026-02-01",
+                        "date_latest": "2026-02-01",
+                        "selected_episodes": [],
+                    }
+                    dialog.show()
+                    self.application.processEvents()
+                entries = dialog.media_draft["user_data"]["watch_history"]
+                self.assertEqual(entries[0], history[0])
+                if action == "save":
+                    self.assertEqual(entries[1]["id"], 9)
+                    self.assertEqual(entries[1]["date_earliest"], "2026-02-01")
+                else:
+                    self.assertEqual(len(entries), 1)
+                self.assertEqual(dialog._baseline_media_draft["user_data"]["watch_history"], history)
+                self.assertTrue(dialog._is_dirty)
+                self.assertEqual(dialog.result_payload, {"status": "cancelled"})
+                dialog.close()
+
     def test_cabinet_worthy_uses_presentation_only_labels(self):
         dialog = self._dialog()
 
@@ -1136,6 +1211,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
         media_id=1,
         providers=None,
         auto_refresh_watch_providers=False,
+        initial_watch_entry_id=None,
     ):
         media_draft = self._series_draft(
             media_type=media_type,
@@ -1152,6 +1228,7 @@ class MediaDetailsDialogWorkflowTests(unittest.TestCase):
             metadata_refresh_manager=self.manager,
             watch_provider_refresh_manager=self.provider_manager,
             auto_refresh_watch_providers=auto_refresh_watch_providers,
+            initial_watch_entry_id=initial_watch_entry_id,
         )
 
     def _activate_status(self, dialog, watch_state):

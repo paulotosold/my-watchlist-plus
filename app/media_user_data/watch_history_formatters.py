@@ -101,10 +101,9 @@ def build_watch_history_display_entries(media_draft):
             release_date = (context.get("summary") or {}).get("first_air_date") or release_date
         release_date = watch_history_release_date(event, release_date)
         interval = resolve_watch_interval(event, release_date)
-        text = interval.label
-        if episodic and (metadata.get("media_type") == "series" or len(items) > 1):
-            text += " · " + format_episode_ranges(items)
-        elif items and items[0].get("media_type") == "series":
+        show_episodes = episodic and (metadata.get("media_type") == "series" or len(items) > 1)
+        text = format_watch_history_caption(interval.label, items if show_episodes else ())
+        if items and items[0].get("media_type") == "series":
             text += " · no episode info"
         entries.append({**event, "text": text, "release_date": release_date,
                         "sort_key": watch_history_sort_key(event, interval=interval),
@@ -122,6 +121,13 @@ def build_series_watch_history_entries(media_draft):
 
 def build_series_watch_history_lines(media_draft):
     return build_watch_history_display_lines(media_draft)
+
+
+def format_watch_history_caption(date_label, episodes=()):
+    """Compose a resolved date and optional episode selection without re-sorting."""
+    if episodes:
+        return f"{date_label} · {format_episode_ranges(episodes)}"
+    return date_label
 
 
 def format_episode_ranges(rows):

@@ -6,6 +6,7 @@ from math import ceil
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QFontMetrics, QImageReader, QPixmap
 from PySide6.QtWidgets import (
+    QFrame,
     QGridLayout,
     QLabel,
     QLayout,
@@ -13,9 +14,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.ui.styles import INPUT_BORDER
+from .caption import HistoryCaption
 from .constants import (
     DEFAULT_HISTORY_POSTERS_PER_ROW,
     MAX_HISTORY_POSTERS_PER_ROW,
+    MAX_HISTORY_POSTERS_PER_ROW_WITH_CAPTION,
     MIN_HISTORY_POSTERS_PER_ROW,
     POSTER_DIR,
 )
@@ -28,7 +32,7 @@ POSTER_ASPECT_WIDTH = 2
 POSTER_ASPECT_HEIGHT = 3
 
 
-class HistoryPosterTile(QLabel):
+class HistoryPosterImage(QLabel):
     """A lightweight, focusable poster for one History entry."""
 
     details_requested = Signal(int)
@@ -36,6 +40,7 @@ class HistoryPosterTile(QLabel):
     def __init__(self, entry, parent=None):
         super().__init__(parent)
 
+        self._pressed = False
         self.entry = None
         self._poster_filename = None
         self._poster_path = None
@@ -45,6 +50,7 @@ class HistoryPosterTile(QLabel):
 
         self.setObjectName("historyGridPosterTile")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setTextFormat(Qt.TextFormat.PlainText)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setSizePolicy(
@@ -67,7 +73,7 @@ class HistoryPosterTile(QLabel):
             self._poster_path,
             poster_fingerprint,
         ) = _poster_file_state(self._poster_filename)
-        self.setToolTip(entry.formatted_date)
+        self.setToolTip(entry.tooltip_text or entry.title)
         self.setAccessibleName(
             f"{entry.title} — {entry.formatted_date}"
         )
@@ -84,6 +90,7 @@ class HistoryPosterTile(QLabel):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            self._pressed = True
             self.setFocus(Qt.FocusReason.MouseFocusReason)
 
         super().mousePressEvent(event)
@@ -91,12 +98,15 @@ class HistoryPosterTile(QLabel):
     def mouseReleaseEvent(self, event):
         if (
             event.button() == Qt.MouseButton.LeftButton
+            and self._pressed
             and self.rect().contains(event.position().toPoint())
         ):
+            self._pressed = False
             self.request_details()
             event.accept()
             return
 
+        self._pressed = False
         super().mouseReleaseEvent(event)
 
     def keyPressEvent(self, event):
@@ -181,7 +191,7 @@ class HistoryPosterTile(QLabel):
         self.setStyleSheet(
             "QLabel#historyGridPosterTile {"
             "background-color: #dedede;"
-            "border: 1px solid #c6c6c6;"
+            "border: none;"
             "color: #777777;"
             "}"
             "QLabel#historyGridPosterTile:focus {"
@@ -194,10 +204,64 @@ class HistoryPosterTile(QLabel):
         self._rendered_size = QSize(target_size)
 
 
+class HistoryPosterTile(QFrame):
+    """One watch entry, with separate poster and caption actions."""
+
+    details_requested = Signal(int)
+    watch_entry_details_requested = Signal(int, int)
+
+    def __init__(self, entry, parent=None):
+        super().__init__(parent)
+        self.setObjectName("historyCard")
+        self.setStyleSheet(
+            "QFrame#historyCard { background: white; border: " + INPUT_BORDER + "; }"
+        )
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.poster_label = HistoryPosterImage(entry, self)
+        self.caption = HistoryCaption(self)
+        self.poster_label.details_requested.connect(self.details_requested.emit)
+        self.caption.activated.connect(self.request_watch_entry_details)
+        self.set_entry(entry)
+
+    @property
+    def entry_key(self):
+        return self.entry.key
+
+    def set_entry(self, entry):
+        self.entry = entry
+        self.poster_label.set_entry(entry)
+        self.caption.set_text(entry.footer_text or entry.formatted_date)
+        tooltip = entry.tooltip_text or entry.title
+        self.setToolTip(tooltip)
+        self.caption.setToolTip("Edit watch history entry")
+        self.setAccessibleName(f"{tooltip} — {entry.footer_text or entry.formatted_date}")
+        self.poster_label.setAccessibleName(f"Open Media Details: {tooltip}")
+        self.caption.setAccessibleName(
+            f"Open Watch Entry Details: {entry.footer_text or entry.formatted_date} — {tooltip}"
+        )
+
+    def request_watch_entry_details(self):
+        self.watch_entry_details_requested.emit(self.entry.details_media_id, self.entry.entry_id)
+
+    def set_caption_visible(self, visible):
+        if not visible and self.caption.hasFocus():
+            self.poster_label.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.caption.setVisible(visible)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        width = max(1, self.width() - 2)
+        poster_height = max(1, round(width * POSTER_ASPECT_HEIGHT / POSTER_ASPECT_WIDTH))
+        self.poster_label.setFixedSize(width, poster_height)
+        self.poster_label.move(1, 1)
+        self.caption.setGeometry(1, 1 + poster_height, width, max(1, self.height() - poster_height - 2))
+
+
 class HistoryGridBoard(QWidget):
     """Row-major poster grid for the already loaded History collection."""
 
     details_requested = Signal(int)
+    watch_entry_details_requested = Signal(int, int)
 
     def __init__(
         self,
@@ -338,11 +402,18 @@ class HistoryGridBoard(QWidget):
         self.tile_height = max(
             1,
             round(
-                self.tile_width
+                max(1, self.tile_width - 2)
                 * POSTER_ASPECT_HEIGHT
                 / POSTER_ASPECT_WIDTH
             ),
         )
+
+        show_captions = self.posters_per_row <= MAX_HISTORY_POSTERS_PER_ROW_WITH_CAPTION
+        footer_height = (
+            max((tile.caption.caption_height() for tile in self.tiles), default=24)
+            if show_captions else 0
+        )
+        self.tile_height += footer_height + 2
 
         used_width = (
             self.tile_width * self.posters_per_row + spacing_width
@@ -359,8 +430,17 @@ class HistoryGridBoard(QWidget):
 
         for index, tile in enumerate(self.tiles):
             row, column = divmod(index, self.posters_per_row)
+            tile.set_caption_visible(show_captions)
             tile.setFixedSize(self.tile_width, self.tile_height)
             self.grid_layout.addWidget(tile, row, column)
+            if show_captions:
+                self.setTabOrder(tile.poster_label, tile.caption)
+            if index:
+                previous = self.tiles[index - 1]
+                self.setTabOrder(
+                    previous.caption if show_captions else previous.poster_label,
+                    tile.poster_label,
+                )
             tile.show()
 
         self.row_count = (
@@ -400,6 +480,8 @@ class HistoryGridBoard(QWidget):
     def _create_tile(self, entry):
         tile = HistoryPosterTile(entry, self)
         tile.details_requested.connect(self.details_requested.emit)
+        tile.watch_entry_details_requested.connect(self.watch_entry_details_requested.emit)
+        tile.caption.metrics_changed.connect(self.schedule_reflow)
         return tile
 
     def _dispose_tile(self, tile):

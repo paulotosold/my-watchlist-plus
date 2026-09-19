@@ -119,8 +119,8 @@ class MainWindow(QMainWindow):
         self.posters_per_row_control.value_changed.connect(
             self._on_posters_per_row_changed
         )
-        self.history_status_control.view_mode_requested.connect(
-            self._set_history_view_mode
+        self.history_page.watch_entry_details_requested.connect(
+            self.on_watch_entry_details_requested
         )
         self.history_status_control.posters_per_row_requested.connect(
             self._set_history_posters_per_row
@@ -140,15 +140,15 @@ class MainWindow(QMainWindow):
         self.watchlist_page.watchlist_state_changed.connect(
             self._on_watchlist_state_changed
         )
-        history_view_state_changed = getattr(
+        history_density_changed = getattr(
             self.history_page,
-            "view_state_changed",
+            "density_changed",
             None,
         )
 
-        if history_view_state_changed is not None:
-            history_view_state_changed.connect(
-                self._on_history_view_state_changed
+        if history_density_changed is not None:
+            history_density_changed.connect(
+                self._on_history_density_changed
             )
         cabinet_view_state_changed = getattr(
             self.cabinet_page,
@@ -274,14 +274,6 @@ class MainWindow(QMainWindow):
             self.watchlist_page.pinned_only,
         )
 
-    def _set_history_view_mode(self, view_mode):
-        setter = getattr(self.history_page, "set_view_mode", None)
-
-        if callable(setter):
-            setter(view_mode)
-
-        self._sync_history_status()
-
     def _set_history_posters_per_row(self, posters_per_row):
         setter = getattr(
             self.history_page,
@@ -294,43 +286,14 @@ class MainWindow(QMainWindow):
 
         self._sync_history_status()
 
-    def _on_history_view_state_changed(
-        self,
-        view_mode,
-        posters_per_row,
-    ):
-        self._sync_history_status(
-            view_mode=view_mode,
-            posters_per_row=posters_per_row,
-        )
+    def _on_history_density_changed(self, posters_per_row):
+        self._sync_history_status(posters_per_row=posters_per_row)
 
-    def _sync_history_status(
-        self,
-        *,
-        view_mode=None,
-        posters_per_row=None,
-    ):
-        watched_count = len(getattr(self.history_page, "entries", ()))
-
-        view_mode = view_mode or getattr(
-            self.history_page,
-            "view_mode",
-            "list",
-        )
-        posters_per_row = (
-            posters_per_row
-            if posters_per_row is not None
-            else getattr(
-                self.history_page,
-                "posters_per_row",
-                18,
-            )
-        )
-        self.history_status_control.set_state(
-            watched_count,
-            view_mode,
-            posters_per_row,
-        )
+    def _sync_history_status(self, *, posters_per_row=None):
+        watched_count = len(self.history_page.entries)
+        if posters_per_row is None:
+            posters_per_row = self.history_page.posters_per_row
+        self.history_status_control.set_state(watched_count, posters_per_row)
 
     def _set_cabinet_posters_per_row(self, posters_per_row):
         setter = getattr(self.cabinet_page, "set_posters_per_row", None)
@@ -400,7 +363,10 @@ class MainWindow(QMainWindow):
 
         return result
 
-    def on_details_requested(self, details_request):
+    def on_watch_entry_details_requested(self, media_id, entry_id):
+        return self.on_details_requested(media_id, initial_watch_entry_id=entry_id)
+
+    def on_details_requested(self, details_request, *, initial_watch_entry_id=None):
         try:
             media_draft = self._resolve_details_request(details_request)
         except Exception as exc:
@@ -415,7 +381,10 @@ class MainWindow(QMainWindow):
             )
             return {"status": "cancelled"}
 
-        result = open_media_details_dialog(self, media_draft)
+        options = {}
+        if initial_watch_entry_id is not None:
+            options["initial_watch_entry_id"] = initial_watch_entry_id
+        result = open_media_details_dialog(self, media_draft, **options)
 
         if (
             result
