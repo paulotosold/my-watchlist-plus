@@ -44,7 +44,7 @@ class CabinetBoardTests(unittest.TestCase):
         self.board.set_posters_per_row(1)
         self.assertEqual(self.board.posters_per_row, 4)
         self.board.set_posters_per_row(50)
-        self.assertEqual(self.board.posters_per_row, 20)
+        self.assertEqual(self.board.posters_per_row, 24)
         self.board.set_posters_per_row(10)
         self.assertEqual(self.board.posters_per_row, 10)
 
@@ -53,7 +53,7 @@ class CabinetBoardTests(unittest.TestCase):
         original_cards = list(self.board.cards)
 
         self.board.set_posters_per_row(4)
-        self.board.set_posters_per_row(20)
+        self.board.set_posters_per_row(24)
 
         self.assertEqual(self.board.media_ids, original_ids)
         self.assertEqual(self.board.cards, original_cards)

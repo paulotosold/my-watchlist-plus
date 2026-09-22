@@ -14,13 +14,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.ui.poster_density import normalize_posters_per_row
+
 from app.ui.styles import INPUT_BORDER
 from .caption import HistoryCaption
 from .constants import (
     DEFAULT_HISTORY_POSTERS_PER_ROW,
-    MAX_HISTORY_POSTERS_PER_ROW,
     MAX_HISTORY_POSTERS_PER_ROW_WITH_CAPTION,
-    MIN_HISTORY_POSTERS_PER_ROW,
+    HISTORY_POSTERS_PER_ROW_OPTIONS,
     POSTER_DIR,
 )
 
@@ -507,9 +508,8 @@ class HistoryGridBoard(QWidget):
 
     @staticmethod
     def _clamp_posters_per_row(posters_per_row):
-        return max(
-            MIN_HISTORY_POSTERS_PER_ROW,
-            min(MAX_HISTORY_POSTERS_PER_ROW, int(posters_per_row)),
+        return normalize_posters_per_row(
+            posters_per_row, HISTORY_POSTERS_PER_ROW_OPTIONS
         )
 
 

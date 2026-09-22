@@ -1,161 +1,85 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QStyle, QWidget
 
-from app.paths import ICONS_DIR
+from .poster_density import normalize_posters_per_row
 
-STATUS_ICON_SIZE = 20
-STATUS_BUTTON_SIZE = 24
-STATUS_BUTTON_RADIUS = STATUS_BUTTON_SIZE // 2
-STATUS_BUTTON_HOVER_BACKGROUND = "rgba(0, 0, 0, 18)"
-STATUS_BAR_ICON_DIR = ICONS_DIR / "status_bar"
-ICON_BUTTON_STYLE = f"""
-QToolButton {{
-    background: transparent;
-    border: none;
-    border-radius: {STATUS_BUTTON_RADIUS}px;
-    padding: 0;
-}}
-QToolButton:hover {{
-    background: {STATUS_BUTTON_HOVER_BACKGROUND};
-}}
-QToolButton:disabled {{
-    background: transparent;
-    border: none;
-    color: #8a8a8a;
-}}
-"""
+
+class _DensityComboBox(QComboBox):
+    """Keep real keyboard focus without painting a persistent selection halo."""
+
+    def initStyleOption(self, option):
+        super().initStyleOption(option)
+        # QMacStyle paints the combo's focus ring from State_HasFocus directly,
+        # ignoring WA_MacShowFocusRect. Change only the visual state, not focus.
+        option.state &= ~(
+            QStyle.StateFlag.State_HasFocus | QStyle.StateFlag.State_Selected
+        )
 
 
 class PostersPerRowControl(QWidget):
-    """Status-bar control expressing grid density as poster size."""
+    """Status-bar dropdown for the supported numbers of posters per row."""
 
     value_changed = Signal(int)
 
-    def __init__(
-        self,
-        parent=None,
-        *,
-        value,
-        minimum,
-        maximum,
-    ):
+    def __init__(self, parent=None, *, value, options):
         super().__init__(parent)
-
-        self._minimum = int(minimum)
-        self._maximum = int(maximum)
-        if self._minimum > self._maximum:
-            raise ValueError("minimum cannot be greater than maximum")
+        self._options = tuple(int(option) for option in options)
+        if (
+            not self._options
+            or self._options != tuple(sorted(set(self._options)))
+            or self._options[0] < 1
+        ):
+            raise ValueError("options must be positive, unique and ascending")
 
         self.setObjectName("postersPerRowControl")
-        self._value = self._clamp(value)
-
-        self.title_label = QLabel("Poster size", self)
-        self.title_label.setObjectName("posterSizeLabel")
-
-        self.minus_button = self._make_button(
-            "poster_smaller.png",
-            object_name="decreasePosterSizeButton",
-            accessible_name="Decrease poster size",
-            tooltip="Decrease poster size (show more posters per row)",
-        )
-        self.plus_button = self._make_button(
-            "poster_larger.png",
-            object_name="increasePosterSizeButton",
-            accessible_name="Increase poster size",
-            tooltip="Increase poster size (show fewer posters per row)",
-        )
-
-        # Compatibility aliases use the visual poster-size semantics.
-        self.decrease_button = self.minus_button
-        self.increase_button = self.plus_button
+        self.title_label = QLabel("Posters per row:", self)
+        self.title_label.setObjectName("postersPerRowLabel")
+        self.combo_box = _DensityComboBox(self)
+        self.combo_box.setObjectName("postersPerRowComboBox")
+        self.combo_box.setEditable(False)
+        self.combo_box.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.combo_box.setAccessibleName("Posters per row")
+        self.combo_box.setToolTip("Choose the number of posters per row")
+        self.combo_box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        for option in self._options:
+            self.combo_box.addItem(str(option), option)
+        self.set_value(value)
+        self.title_label.setBuddy(self.combo_box)
+        self.setFocusProxy(self.combo_box)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         layout.addWidget(self.title_label)
-        layout.addWidget(self.minus_button)
-        layout.addWidget(self.plus_button)
+        layout.addWidget(self.combo_box)
 
-        self.minus_button.clicked.connect(self.increment)
-        self.plus_button.clicked.connect(self.decrement)
+        self.combo_box.currentIndexChanged.connect(self._on_selection_changed)
         self._update_accessible_value()
-        self._update_button_states()
 
     def value(self):
-        return self._value
+        return self.combo_box.currentData()
 
     @property
     def posters_per_row(self):
-        return self._value
+        return self.value()
 
     @property
     def minimum(self):
-        return self._minimum
+        return self._options[0]
 
     @property
     def maximum(self):
-        return self._maximum
+        return self._options[-1]
 
     def set_value(self, value):
-        clamped_value = self._clamp(value)
+        normalized = normalize_posters_per_row(value, self._options)
+        self.combo_box.setCurrentIndex(self._options.index(normalized))
 
-        if clamped_value == self._value:
-            self._update_button_states()
-            return
-
-        self._value = clamped_value
+    def _on_selection_changed(self, _index):
         self._update_accessible_value()
-        self._update_button_states()
-        self.value_changed.emit(self._value)
-
-    def decrement(self):
-        self.set_value(self._value - 1)
-
-    def increment(self):
-        self.set_value(self._value + 1)
-
-    def _clamp(self, value):
-        return max(
-            self._minimum,
-            min(self._maximum, int(value)),
-        )
-
-    def _make_button(
-        self,
-        icon_filename,
-        *,
-        object_name,
-        accessible_name,
-        tooltip,
-    ):
-        button = QToolButton(self)
-        button.setObjectName(object_name)
-        button.setIcon(
-            QIcon(str(STATUS_BAR_ICON_DIR / icon_filename))
-        )
-        button.setIconSize(
-            QSize(STATUS_ICON_SIZE, STATUS_ICON_SIZE)
-        )
-        button.setFixedSize(STATUS_BUTTON_SIZE, STATUS_BUTTON_SIZE)
-        button.setStyleSheet(ICON_BUTTON_STYLE)
-        button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.setAccessibleName(accessible_name)
-        button.setToolTip(tooltip)
-        return button
-
-    def _update_button_states(self):
-        self.minus_button.setEnabled(
-            self._value < self._maximum
-        )
-        self.plus_button.setEnabled(
-            self._value > self._minimum
-        )
+        self.value_changed.emit(self.value())
 
     def _update_accessible_value(self):
-        self.setAccessibleName(
-            f"Poster size: {self._value} posters per row"
-        )
+        self.setAccessibleName(f"Posters per row: {self.value()}")

@@ -12,14 +12,10 @@ from PySide6.QtWidgets import (
 )
 
 from app.paths import ICONS_DIR
-from app.ui.posters_per_row_control import (
-    ICON_BUTTON_STYLE,
-    PostersPerRowControl,
-)
+from app.ui.posters_per_row_control import PostersPerRowControl
 from .board import (
     DEFAULT_POSTERS_PER_ROW,
-    MAX_POSTERS_PER_ROW,
-    MIN_POSTERS_PER_ROW,
+    POSTERS_PER_ROW_OPTIONS,
 )
 
 
@@ -43,6 +39,25 @@ PINNED_PILL_INACTIVE_BORDER = "#929292"
 PINNED_PILL_ACTIVE_BORDER = "#4f93cc"
 PINNED_PILL_TEXT_COLOR = "#202020"
 STATUS_BAR_ICON_DIR = ICONS_DIR / "status_bar"
+
+STATUS_BUTTON_RADIUS = STATUS_BUTTON_SIZE // 2
+STATUS_BUTTON_HOVER_BACKGROUND = "rgba(0, 0, 0, 18)"
+ICON_BUTTON_STYLE = f"""
+QToolButton {{
+    background: transparent;
+    border: none;
+    border-radius: {STATUS_BUTTON_RADIUS}px;
+    padding: 0;
+}}
+QToolButton:hover {{
+    background: {STATUS_BUTTON_HOVER_BACKGROUND};
+}}
+QToolButton:disabled {{
+    background: transparent;
+    border: none;
+    color: #8a8a8a;
+}}
+"""
 
 PINNED_PILL_STYLE = f"""
 QFrame#pinnedStatusPill {{
@@ -173,8 +188,7 @@ class WatchlistStatusControl(QWidget):
         self.poster_size_control = PostersPerRowControl(
             self,
             value=DEFAULT_POSTERS_PER_ROW,
-            minimum=MIN_POSTERS_PER_ROW,
-            maximum=MAX_POSTERS_PER_ROW,
+            options=POSTERS_PER_ROW_OPTIONS,
         )
 
         # macOS gives tool buttons a smaller class font. Reapplying the
@@ -248,7 +262,7 @@ class WatchlistStatusControl(QWidget):
         )
         self.setTabOrder(
             self.clear_pins_button,
-            self.poster_size_control.minus_button,
+            self.poster_size_control.combo_box,
         )
 
         self.set_state(

@@ -7,8 +7,7 @@ from app.ui.posters_per_row_control import PostersPerRowControl
 
 from .board import (
     DEFAULT_POSTERS_PER_ROW,
-    MAX_POSTERS_PER_ROW,
-    MIN_POSTERS_PER_ROW,
+    POSTERS_PER_ROW_OPTIONS,
 )
 
 
@@ -31,8 +30,7 @@ class CabinetStatusControl(QWidget):
         self.poster_size_control = PostersPerRowControl(
             self,
             value=DEFAULT_POSTERS_PER_ROW,
-            minimum=MIN_POSTERS_PER_ROW,
-            maximum=MAX_POSTERS_PER_ROW,
+            options=POSTERS_PER_ROW_OPTIONS,
         )
         self.count_label.setFont(self.poster_size_control.title_label.font())
 

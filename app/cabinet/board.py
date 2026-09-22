@@ -16,12 +16,15 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QDrag, QPainter, QPixmap
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
+from app.ui.poster_density import normalize_posters_per_row
+
 from .card import CabinetCard
 
 
-MIN_POSTERS_PER_ROW = 4
+POSTERS_PER_ROW_OPTIONS = (4, 6, 8, 10, 12, 16, 24)
+MIN_POSTERS_PER_ROW = POSTERS_PER_ROW_OPTIONS[0]
 DEFAULT_POSTERS_PER_ROW = 10
-MAX_POSTERS_PER_ROW = 20
+MAX_POSTERS_PER_ROW = POSTERS_PER_ROW_OPTIONS[-1]
 BOARD_TOP_MARGIN = 12
 BOARD_BOTTOM_MARGIN = 12
 BOARD_HORIZONTAL_SPACING = 0
@@ -376,7 +379,4 @@ class CabinetBoard(QWidget):
 
     @staticmethod
     def _clamp_posters_per_row(posters_per_row):
-        return max(
-            MIN_POSTERS_PER_ROW,
-            min(MAX_POSTERS_PER_ROW, int(posters_per_row)),
-        )
+        return normalize_posters_per_row(posters_per_row, POSTERS_PER_ROW_OPTIONS)

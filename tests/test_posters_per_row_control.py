@@ -3,20 +3,14 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtTest import QSignalSpy, QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QComboBox, QStyle, QStyleOptionComboBox
 
-from app.watchlist.board import (
-    DEFAULT_POSTERS_PER_ROW,
-    MAX_POSTERS_PER_ROW,
-    MIN_POSTERS_PER_ROW,
-)
-from app.ui.posters_per_row_control import (
-    STATUS_BUTTON_HOVER_BACKGROUND,
-    STATUS_BUTTON_RADIUS,
-    PostersPerRowControl,
-)
+from app.cabinet.board import POSTERS_PER_ROW_OPTIONS as CABINET_OPTIONS
+from app.history.constants import HISTORY_POSTERS_PER_ROW_OPTIONS
+from app.ui.posters_per_row_control import PostersPerRowControl
+from app.watchlist.board import POSTERS_PER_ROW_OPTIONS
 
 
 class PostersPerRowControlTests(unittest.TestCase):
@@ -25,11 +19,7 @@ class PostersPerRowControlTests(unittest.TestCase):
         cls.application = QApplication.instance() or QApplication([])
 
     def setUp(self):
-        self.control = PostersPerRowControl(
-            value=DEFAULT_POSTERS_PER_ROW,
-            minimum=MIN_POSTERS_PER_ROW,
-            maximum=MAX_POSTERS_PER_ROW,
-        )
+        self.control = PostersPerRowControl(value=6, options=POSTERS_PER_ROW_OPTIONS)
         self.control.show()
         self.application.processEvents()
 
@@ -38,181 +28,93 @@ class PostersPerRowControlTests(unittest.TestCase):
         self.application.processEvents()
 
     def test_default_value_and_accessible_controls(self):
-        self.assertEqual(
-            self.control.posters_per_row,
-            DEFAULT_POSTERS_PER_ROW,
-        )
-        self.assertEqual(self.control.title_label.text(), "Poster size")
-        self.assertFalse(hasattr(self.control, "value_label"))
-        self.assertFalse(self.control.minus_button.icon().isNull())
-        self.assertFalse(self.control.plus_button.icon().isNull())
-        self.assertEqual(
-            self.control.minus_button.iconSize(),
-            QSize(20, 20),
-        )
-        self.assertEqual(
-            self.control.minus_button.size(),
-            QSize(24, 24),
-        )
-        self.assertFalse(self.control.minus_button.autoRaise())
-        self.assertIn(
-            "background: transparent",
-            self.control.minus_button.styleSheet(),
-        )
-        self.assertIn(
-            "QToolButton:disabled",
-            self.control.minus_button.styleSheet(),
-        )
-        self.assertIn(
-            "QToolButton:hover",
-            self.control.minus_button.styleSheet(),
-        )
-        self.assertIn(
-            STATUS_BUTTON_HOVER_BACKGROUND,
-            self.control.minus_button.styleSheet(),
-        )
-        self.assertIn(
-            f"border-radius: {STATUS_BUTTON_RADIUS}px",
-            self.control.minus_button.styleSheet(),
-        )
-        self.assertLess(
-            self.control.minus_button.styleSheet().index(
-                "QToolButton:hover"
-            ),
-            self.control.minus_button.styleSheet().index(
-                "QToolButton:disabled"
-            ),
-        )
-        self.assertEqual(
-            self.control.minus_button.accessibleName(),
-            "Decrease poster size",
-        )
-        self.assertEqual(
-            self.control.plus_button.accessibleName(),
-            "Increase poster size",
-        )
-        self.assertEqual(
-            self.control.accessibleName(),
-            "Poster size: 6 posters per row",
-        )
-        self.assertEqual(
-            self.control.minus_button.focusPolicy(),
-            Qt.FocusPolicy.StrongFocus,
-        )
-        self.assertTrue(self.control.minus_button.toolTip())
-        self.assertTrue(self.control.plus_button.toolTip())
-
-    def test_minus_makes_posters_smaller_and_plus_makes_them_larger(self):
-        spy = QSignalSpy(self.control.value_changed)
-
-        self.control.minus_button.click()
-        self.control.plus_button.click()
-
         self.assertEqual(self.control.posters_per_row, 6)
-        self.assertEqual(
-            [spy.at(index)[0] for index in range(spy.count())],
-            [7, 6],
-        )
+        self.assertEqual(self.control.title_label.text(), "Posters per row:")
+        self.assertEqual(self.control.combo_box.currentText(), "6")
+        self.assertFalse(self.control.combo_box.isEditable())
+        self.assertEqual(self.control.combo_box.accessibleName(), "Posters per row")
+        self.assertEqual(self.control.accessibleName(), "Posters per row: 6")
+        self.assertEqual(self.control.combo_box.focusPolicy(), Qt.FocusPolicy.StrongFocus)
+        self.assertIs(self.control.title_label.buddy(), self.control.combo_box)
 
-    def test_buttons_clamp_at_limits_without_extra_emissions(self):
+    def test_exact_options_for_each_page(self):
+        for options, expected, default in (
+            (POSTERS_PER_ROW_OPTIONS, [2, 3, 4, 5, 6, 7, 8, 9, 10], 6),
+            (HISTORY_POSTERS_PER_ROW_OPTIONS, [4, 6, 8, 10, 12, 16, 24], 10),
+            (CABINET_OPTIONS, [4, 6, 8, 10, 12, 16, 24], 10),
+        ):
+            with self.subTest(options=options):
+                control = PostersPerRowControl(value=default, options=options)
+                self.addCleanup(control.close)
+                combo = control.combo_box
+                self.assertEqual([combo.itemData(i) for i in range(combo.count())], expected)
+                self.assertEqual([combo.itemText(i) for i in range(combo.count())], list(map(str, expected)))
+                self.assertEqual(control.value(), default)
+                self.assertEqual(control.minimum, expected[0])
+                self.assertEqual(control.maximum, expected[-1])
+
+    def test_selection_emits_once_per_change(self):
         spy = QSignalSpy(self.control.value_changed)
+        self.control.combo_box.setCurrentText("10")
+        self.control.combo_box.setCurrentText("2")
+        self.control.combo_box.setCurrentText("2")
+        self.assertEqual(self.control.posters_per_row, 2)
+        self.assertEqual([spy.at(i)[0] for i in range(spy.count())], [10, 2])
+        self.assertEqual(self.control.accessibleName(), "Posters per row: 2")
 
-        for _ in range(10):
-            self.control.minus_button.click()
-
-        self.assertEqual(
-            self.control.posters_per_row,
-            MAX_POSTERS_PER_ROW,
-        )
-        self.assertFalse(self.control.minus_button.isEnabled())
-        self.assertEqual(spy.count(), 2)
-
-        for _ in range(10):
-            self.control.plus_button.click()
-
-        self.assertEqual(
-            self.control.posters_per_row,
-            MIN_POSTERS_PER_ROW,
-        )
-        self.assertFalse(self.control.plus_button.isEnabled())
-        self.assertEqual(
-            self.control.accessibleName(),
-            "Poster size: 2 posters per row",
-        )
-        self.assertEqual(
-            [spy.at(index)[0] for index in range(spy.count())],
-            [7, 8, 7, 6, 5, 4, 3, 2],
-        )
-
-    def test_space_activates_the_focused_tool_button(self):
-        spy = QSignalSpy(self.control.value_changed)
-        self.control.minus_button.setFocus()
-
-        QTest.keyClick(
-            self.control.minus_button,
-            Qt.Key.Key_Space,
-        )
-
-        self.assertEqual(spy.count(), 1)
-        self.assertEqual(spy.at(0), [7])
-
-    def test_custom_history_range_defaults_to_eighteen(self):
-        control = PostersPerRowControl(
-            value=18,
-            minimum=6,
-            maximum=24,
-        )
+    def test_keyboard_selects_only_supported_options_and_stops_at_limits(self):
+        control = PostersPerRowControl(value=12, options=HISTORY_POSTERS_PER_ROW_OPTIONS)
         control.show()
-        self.application.processEvents()
         self.addCleanup(control.close)
+        combo = control.combo_box
+        combo.setFocus()
+        spy = QSignalSpy(control.value_changed)
+        for key in (Qt.Key.Key_Down, Qt.Key.Key_Down, Qt.Key.Key_Down, Qt.Key.Key_Up):
+            QTest.keyClick(combo, key)
+        self.assertEqual([spy.at(i)[0] for i in range(spy.count())], [16, 24, 16])
+        self.assertEqual(control.value(), 16)
 
-        self.assertEqual(control.posters_per_row, 18)
-        self.assertEqual(control.minimum, 6)
-        self.assertEqual(control.maximum, 24)
-        self.assertEqual(
-            control.accessibleName(),
-            "Poster size: 18 posters per row",
-        )
-        self.assertTrue(control.minus_button.isEnabled())
-        self.assertTrue(control.plus_button.isEnabled())
-
-    def test_custom_history_range_clamps_at_six_and_twenty_four(self):
-        control = PostersPerRowControl(
-            value=18,
-            minimum=6,
-            maximum=24,
-        )
-        control.show()
+    def test_focused_control_renders_without_highlight_before_and_after_selection(self):
+        combo = self.control.combo_box
+        combo.setFocus()
         self.application.processEvents()
+
+        for expected in (6, 7):
+            with self.subTest(value=expected):
+                self.assertTrue(combo.hasFocus())
+                self.assertEqual(combo.currentData(), expected)
+                native = QStyleOptionComboBox()
+                QComboBox.initStyleOption(combo, native)
+                self.assertTrue(native.state & QStyle.StateFlag.State_HasFocus)
+
+                painted = QStyleOptionComboBox()
+                combo.initStyleOption(painted)
+                self.assertFalse(painted.state & QStyle.StateFlag.State_HasFocus)
+                self.assertFalse(painted.state & QStyle.StateFlag.State_Selected)
+                self.assertTrue(painted.state & QStyle.StateFlag.State_Enabled)
+                self.assertEqual(painted.currentText, str(expected))
+
+                # Verify the actual paint path, with real focus still held.
+                focused_image = combo.grab().toImage()
+                combo.clearFocus()
+                self.application.processEvents()
+                self.assertEqual(focused_image, combo.grab().toImage())
+                combo.setFocus()
+                QTest.keyClick(combo, Qt.Key.Key_Down)
+
+    def test_programmatic_values_snap_to_supported_options(self):
+        control = PostersPerRowControl(value=10, options=HISTORY_POSTERS_PER_ROW_OPTIONS)
         self.addCleanup(control.close)
         spy = QSignalSpy(control.value_changed)
+        for value in (100, 0, 11, 15, 16):
+            control.set_value(value)
+        self.assertEqual([spy.at(i)[0] for i in range(spy.count())], [24, 4, 10, 16])
+        self.assertEqual(control.combo_box.currentText(), "16")
 
-        control.set_value(25)
-
-        self.assertEqual(control.posters_per_row, 24)
-        self.assertFalse(control.minus_button.isEnabled())
-        self.assertTrue(control.plus_button.isEnabled())
-
-        control.set_value(5)
-
-        self.assertEqual(control.posters_per_row, 6)
-        self.assertTrue(control.minus_button.isEnabled())
-        self.assertFalse(control.plus_button.isEnabled())
-        self.assertEqual(
-            [spy.at(index)[0] for index in range(spy.count())],
-            [24, 6],
-        )
-
-    def test_rejects_a_range_whose_minimum_exceeds_its_maximum(self):
-        with self.assertRaisesRegex(
-            ValueError,
-            "minimum cannot be greater than maximum",
-        ):
-            PostersPerRowControl(
-                value=18,
-                minimum=24,
-                maximum=6,
-            )
+    def test_rejects_invalid_options(self):
+        for options in ((), (6, 4), (4, 4, 6), (0, 4)):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                PostersPerRowControl(value=6, options=options)
 
 
 if __name__ == "__main__":

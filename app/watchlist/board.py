@@ -17,12 +17,15 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QDrag, QPainter, QPixmap
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
+from app.ui.poster_density import normalize_posters_per_row
+
 from .card import MediaCard, get_media_key
 
 
-MIN_POSTERS_PER_ROW = 2
+POSTERS_PER_ROW_OPTIONS = (2, 3, 4, 5, 6, 7, 8, 9, 10)
+MIN_POSTERS_PER_ROW = POSTERS_PER_ROW_OPTIONS[0]
 DEFAULT_POSTERS_PER_ROW = 6
-MAX_POSTERS_PER_ROW = 8
+MAX_POSTERS_PER_ROW = POSTERS_PER_ROW_OPTIONS[-1]
 
 BOARD_TOP_MARGIN = 12
 BOARD_BOTTOM_MARGIN = 12
@@ -808,7 +811,4 @@ class MediaBoard(QWidget):
 
     @staticmethod
     def _clamp_posters_per_row(posters_per_row):
-        return max(
-            MIN_POSTERS_PER_ROW,
-            min(MAX_POSTERS_PER_ROW, int(posters_per_row)),
-        )
+        return normalize_posters_per_row(posters_per_row, POSTERS_PER_ROW_OPTIONS)

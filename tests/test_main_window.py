@@ -348,7 +348,7 @@ class MainWindowShellTests(unittest.TestCase):
             "",
         )
 
-        control.plus_button.click()
+        control.combo_box.setCurrentText("5")
 
         self.assertEqual(control.posters_per_row, 5)
         self.assertEqual(
@@ -371,12 +371,12 @@ class MainWindowShellTests(unittest.TestCase):
         self.window.section_tabs.setCurrentIndex(1)
         control = self.window.history_status_control
         self.assertFalse(control.poster_size_control.isHidden())
-        control.poster_size_control.minus_button.click()
-        self.assertEqual(self.window.history_page.history_posters_per_row_values, [11])
-        self.assertEqual(control.posters_per_row, 11)
+        control.poster_size_control.combo_box.setCurrentText("12")
+        self.assertEqual(self.window.history_page.history_posters_per_row_values, [12])
+        self.assertEqual(control.posters_per_row, 12)
         self.window.section_tabs.setCurrentIndex(0)
         self.window.section_tabs.setCurrentIndex(1)
-        self.assertEqual(control.posters_per_row, 11)
+        self.assertEqual(control.posters_per_row, 12)
 
     def test_cabinet_density_is_independent_and_remembered(self):
         watchlist_value = self.window.posters_per_row_control.posters_per_row
@@ -384,10 +384,10 @@ class MainWindowShellTests(unittest.TestCase):
         self.window.section_tabs.setCurrentIndex(2)
         control = self.window.cabinet_status_control
 
-        control.poster_size_control.minus_button.click()
+        control.poster_size_control.combo_box.setCurrentText("12")
 
-        self.assertEqual(self.window.cabinet_page.posters_per_row_values, [11])
-        self.assertEqual(control.posters_per_row, 11)
+        self.assertEqual(self.window.cabinet_page.posters_per_row_values, [12])
+        self.assertEqual(control.posters_per_row, 12)
         self.assertEqual(
             self.window.posters_per_row_control.posters_per_row,
             watchlist_value,
@@ -399,7 +399,7 @@ class MainWindowShellTests(unittest.TestCase):
 
         self.window.section_tabs.setCurrentIndex(0)
         self.window.section_tabs.setCurrentIndex(2)
-        self.assertEqual(control.posters_per_row, 11)
+        self.assertEqual(control.posters_per_row, 12)
 
     def test_status_messages_from_inactive_pages_are_ignored(self):
         self.window.history_page.status_message_changed.emit("new history")
@@ -665,7 +665,7 @@ class MainWindowWatchlistIntegrationTests(unittest.TestCase):
         original_cards = list(board.cards)
         original_card_width = board.card_width
 
-        self.window.posters_per_row_control.plus_button.click()
+        self.window.posters_per_row_control.combo_box.setCurrentText("5")
         self._process_events()
 
         self.assertEqual(board.posters_per_row, 5)

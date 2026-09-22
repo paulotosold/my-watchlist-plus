@@ -28,7 +28,7 @@ class CabinetStatusControlTests(unittest.TestCase):
         )
         self.assertEqual(self.control.poster_size_control.posters_per_row, 10)
         self.assertEqual(self.control.poster_size_control.minimum, 4)
-        self.assertEqual(self.control.poster_size_control.maximum, 20)
+        self.assertEqual(self.control.poster_size_control.maximum, 24)
         self.assertFalse(hasattr(self.control, "reload_button"))
 
         self.control.set_state(1, 12)
@@ -45,7 +45,7 @@ class CabinetStatusControlTests(unittest.TestCase):
         self.control.poster_size_control.set_value(100)
         self.control.poster_size_control.set_value(1)
 
-        self.assertEqual(received, [20, 4])
+        self.assertEqual(received, [24, 4])
 
 
 if __name__ == "__main__":

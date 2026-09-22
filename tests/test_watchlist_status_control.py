@@ -151,7 +151,7 @@ class WatchlistStatusControlTests(unittest.TestCase):
         self.assertIsNotNone(self.control.poster_size_control)
         self.assertEqual(
             self.control.poster_size_control.title_label.text(),
-            "Poster size",
+            "Posters per row:",
         )
 
         status_text_font = (
@@ -450,7 +450,7 @@ class WatchlistStatusControlTests(unittest.TestCase):
             self.control.pinned_only_requested
         )
         self.control.set_state(10, 2, False)
-        self.control.poster_size_control.minus_button.setFocus()
+        self.control.poster_size_control.combo_box.setFocus()
         self.application.processEvents()
 
         QTest.mouseClick(

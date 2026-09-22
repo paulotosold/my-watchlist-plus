@@ -82,8 +82,8 @@ class HistoryGridBoardTests(unittest.TestCase):
             DEFAULT_HISTORY_POSTERS_PER_ROW,
         )
         self.assertEqual(DEFAULT_HISTORY_POSTERS_PER_ROW, 10)
-        self.assertEqual(MIN_HISTORY_POSTERS_PER_ROW, 6)
-        self.assertEqual(MAX_HISTORY_POSTERS_PER_ROW, 25)
+        self.assertEqual(MIN_HISTORY_POSTERS_PER_ROW, 4)
+        self.assertEqual(MAX_HISTORY_POSTERS_PER_ROW, 24)
         self.assertEqual(
             self.board.grid_layout.horizontalSpacing(),
             GRID_SPACING,
@@ -179,7 +179,7 @@ class HistoryGridBoardTests(unittest.TestCase):
             MIN_HISTORY_POSTERS_PER_ROW,
         )
         self.assertEqual(self.board.tiles, original_tiles)
-        self.assertEqual(self.board.row_count, 5)
+        self.assertEqual(self.board.row_count, 8)
 
         self.assertTrue(self.board.set_posters_per_row(99))
         self.assertEqual(
@@ -197,15 +197,15 @@ class HistoryGridBoardTests(unittest.TestCase):
     def test_dense_grid_hides_captions_without_reserving_space_and_restores_them(self):
         self.board.set_entries([make_entry(index) for index in range(30)])
         original_tiles = list(self.board.tiles)
-        for density in (6, 10, 14, 15, 25, 14):
+        for density in (4, 6, 8, 10, 12, 16, 24, 12):
             with self.subTest(density=density):
                 self.board.set_posters_per_row(density)
                 self._process_layout_events()
                 self.assertEqual(self.board.tiles, original_tiles)
                 for tile in self.board.tiles:
-                    self.assertEqual(tile.caption.isVisible(), density <= 14)
+                    self.assertEqual(tile.caption.isVisible(), density <= 12)
                     self.assertEqual(tile.poster_label.height(), round(tile.poster_label.width() * 1.5))
-                    footer_height = tile.caption.caption_height() if density <= 14 else 0
+                    footer_height = tile.caption.caption_height() if density <= 12 else 0
                     self.assertEqual(tile.height(), tile.poster_label.height() + footer_height + 2)
                 self.assertEqual(self.board.minimumHeight(), self.board.content_height)
 
@@ -215,26 +215,26 @@ class HistoryGridBoardTests(unittest.TestCase):
         first, second = self.board.tiles
         first.caption.setFocus()
         self.assertTrue(first.caption.hasFocus())
-        self.board.set_posters_per_row(15)
+        self.board.set_posters_per_row(16)
         self._process_layout_events()
         self.assertTrue(first.poster_label.hasFocus())
         QTest.keyClick(first.poster_label, Qt.Key.Key_Tab)
         self.assertTrue(second.poster_label.hasFocus())
-        self.board.set_posters_per_row(14)
+        self.board.set_posters_per_row(12)
         self._process_layout_events()
         first.poster_label.setFocus()
         QTest.keyClick(first.poster_label, Qt.Key.Key_Tab)
         self.assertTrue(first.caption.hasFocus())
 
     def test_refresh_and_resize_keep_captions_hidden_at_high_density(self):
-        self.board.set_posters_per_row(25)
+        self.board.set_posters_per_row(24)
         self.board.set_entries([make_entry(1), make_entry(2)])
         self._process_layout_events()
         self.board.resize(760, 400)
         self.board.set_entries([make_entry(2), make_entry(3)])
         self._process_layout_events()
         self.assertTrue(all(tile.caption.isHidden() for tile in self.board.tiles))
-        self.board.set_posters_per_row(14)
+        self.board.set_posters_per_row(12)
         self._process_layout_events()
         self.assertTrue(all(tile.caption.isVisible() for tile in self.board.tiles))
         self.assertEqual(self.board.tiles[1].caption.label.text(), "24 Jul 2026, Fri")

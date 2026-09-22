@@ -61,10 +61,10 @@ class HistoryPageTests(unittest.TestCase):
         self.assertEqual(self.page.posters_per_row, 10)
         self.assertFalse(self.page.set_posters_per_row(10))
         self.page.set_posters_per_row(0)
-        self.assertEqual(self.page.posters_per_row, 6)
+        self.assertEqual(self.page.posters_per_row, 4)
         self.page.set_posters_per_row(100)
-        self.assertEqual(self.page.posters_per_row, 25)
-        self.assertEqual([spy.at(i) for i in range(spy.count())], [[6], [25]])
+        self.assertEqual(self.page.posters_per_row, 24)
+        self.assertEqual([spy.at(i) for i in range(spy.count())], [[4], [24]])
 
     def test_filter_and_search_preserve_existing_semantics(self):
         self.page.ensure_loaded()

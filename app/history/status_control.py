@@ -6,8 +6,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QWidget
 from app.ui.posters_per_row_control import PostersPerRowControl
 from .constants import (
     DEFAULT_HISTORY_POSTERS_PER_ROW,
-    MAX_HISTORY_POSTERS_PER_ROW,
-    MIN_HISTORY_POSTERS_PER_ROW,
+    HISTORY_POSTERS_PER_ROW_OPTIONS,
 )
 from .page import _format_entry_count
 
@@ -31,8 +30,7 @@ class HistoryStatusControl(QWidget):
         self.poster_size_control = PostersPerRowControl(
             self,
             value=DEFAULT_HISTORY_POSTERS_PER_ROW,
-            minimum=MIN_HISTORY_POSTERS_PER_ROW,
-            maximum=MAX_HISTORY_POSTERS_PER_ROW,
+            options=HISTORY_POSTERS_PER_ROW_OPTIONS,
         )
         self.count_label.setFont(self.poster_size_control.title_label.font())
         layout = QHBoxLayout(self)
