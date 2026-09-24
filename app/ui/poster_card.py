@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 from app.paths import ICONS_DIR, MEDIA_POSTERS_DIR
+from app.media_tooltip import media_draft_tooltip
+from app.ui.poster_tooltip import apply_poster_tooltip_timing
 
 
 MEDIA_CARD_ICON_HEIGHT = 32
@@ -43,6 +45,24 @@ def get_media_key(media_draft):
     if not media_draft:
         return None
     return media_draft.get("media_id")
+
+
+def make_poster_button(icon_img_path, parent):
+    button = QToolButton(parent)
+    icon_size = QSize(
+        *icon_dimensions_for_height(icon_img_path, MEDIA_CARD_ICON_HEIGHT)
+    )
+    button.setFixedSize(icon_size)
+    button.setIcon(QIcon(str(icon_img_path)))
+    button.setIconSize(icon_size)
+    button.setCursor(Qt.CursorShape.PointingHandCursor)
+    button.setStyleSheet(
+        "QToolButton { background: transparent; border: none; padding: 0px; }"
+    )
+    opacity = QGraphicsOpacityEffect(button)
+    opacity.setOpacity(0.9)
+    button.setGraphicsEffect(opacity)
+    return button
 
 
 class PosterCardOverlay(QWidget):
@@ -136,22 +156,10 @@ class PosterCard(QFrame):
         self.poster_layer.lower()
         self.overlay_layer.raise_()
 
+        apply_poster_tooltip_timing(self)
+
     def make_button(self, icon_img_path, parent):
-        button = QToolButton(parent)
-        icon_size = QSize(
-            *icon_dimensions_for_height(icon_img_path, MEDIA_CARD_ICON_HEIGHT)
-        )
-        button.setFixedSize(icon_size)
-        button.setIcon(QIcon(str(icon_img_path)))
-        button.setIconSize(icon_size)
-        button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.setStyleSheet(
-            "QToolButton { background: transparent; border: none; padding: 0px; }"
-        )
-        opacity = QGraphicsOpacityEffect(button)
-        opacity.setOpacity(0.9)
-        button.setGraphicsEffect(opacity)
-        return button
+        return make_poster_button(icon_img_path, parent)
 
     def set_filtered_media(self, filtered_media):
         self.filtered_media = filtered_media
@@ -170,6 +178,7 @@ class PosterCard(QFrame):
 
     def load_card_media(self, media_draft):
         self.current_media = deepcopy(media_draft)
+        self.setToolTip(media_draft_tooltip(self.current_media))
         posters = self._get_eligible_posters()
         if self.initial_poster_mode == "default_first":
             posters.sort(key=lambda poster: not bool(poster.get("is_default")))
@@ -241,6 +250,7 @@ class PosterCard(QFrame):
         self.is_disabled = True
         self.filtered_media = None
         self.current_media = None
+        self.setToolTip("")
         self.poster_index = 0
         self.poster_filenames = []
         self.poster_layer.clear()

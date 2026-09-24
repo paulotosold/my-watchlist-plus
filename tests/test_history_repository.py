@@ -42,6 +42,39 @@ class HistoryRepositoryTests(unittest.TestCase):
             entries = {entry.entry_id: entry for entry in history_repository.load_default_history_entries(self.conn)}
             self.assertEqual(entries[entry_id].tooltip_text, expected)
 
+    def test_poster_collections_preserve_context_priority_without_extra_queries(self):
+        series = self._insert_media(980, "series", "Series")
+        first = self._insert_episode(series, 981, 1, 1)
+        second = self._insert_episode(series, 982, 1, 2)
+        third = self._insert_episode(series, 983, 2, 1)
+        self._insert_poster(series, "series.jpg", "selected")
+        self._insert_poster(first, "pending.jpg", "pending")
+        self._insert_poster(first, "selected.jpg", "selected")
+        self._insert_poster(first, "default.jpg", "selected", is_default=True)
+        self._insert_poster(first, "rejected.jpg", "discarded")
+        self._insert_season_poster(series, 1, "season.jpg", "selected")
+        self._insert_season_poster(series, 1, "season-pending.jpg", "pending")
+        direct = insert_entry(self.conn, [series], "2026-01-01", "2026-01-01")
+        single = insert_entry(self.conn, [first], "2026-01-01", "2026-01-01")
+        grouped = insert_entry(self.conn, [first, second], "2026-01-01", "2026-01-01")
+        multi = insert_entry(self.conn, [second, third], "2026-01-01", "2026-01-01")
+        statements = []
+        self.conn.set_trace_callback(statements.append)
+        entries = {entry.entry_id: entry for entry in history_repository.load_default_history_entries(self.conn)}
+        self.conn.set_trace_callback(None)
+        self.assertEqual(len(statements), 1)
+        def filenames(entry_id):
+            return [[poster["filename"] for poster in collection]
+                    for collection in entries[entry_id].poster_collections]
+        self.assertEqual(filenames(direct), [["series.jpg"]])
+        self.assertEqual(filenames(single), [
+            ["default.jpg", "selected.jpg", "pending.jpg"],
+            ["season.jpg", "season-pending.jpg"], ["series.jpg"],
+        ])
+        self.assertEqual(filenames(grouped), [["season.jpg", "season-pending.jpg"], ["series.jpg"]])
+        self.assertEqual(filenames(multi), [["series.jpg"]])
+        self.assertEqual(entries[single].poster["filename"], "default.jpg")
+
     def test_default_history_filters_and_groups_without_n_plus_one(self):
         movie_id = self._insert_media(
             1,

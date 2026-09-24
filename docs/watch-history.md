@@ -217,15 +217,34 @@ or dragging, with both scrollbars hidden. Ordinary vertical scrolling continues
 to scroll the History page. Dragging does not activate the footer. Changing the
 text, or widening the card enough to fit it, resets the horizontal offset.
 
-Clicking the poster opens Media Details. Clicking the footer opens Media Details
-and then its existing Watch Entry Details editor for the selected persistent entry
-ID. Both actions also support Enter and Space when focused. Editor changes remain
+Clicking the poster cycles through its available local images and wraps back to
+the first image. The same “i” button used by Cabinet appears at the top left on
+hover or keyboard focus and opens Media Details without changing the image.
+Enter and Space on the focused poster remain shortcuts for Media Details.
+Clicking the footer opens Media Details and then its existing Watch Entry Details
+editor for the selected persistent entry ID; Enter and Space also activate the
+focused footer. Editor changes remain
 in the Media Details draft until that window is saved; cancelling retains the
 existing dialog semantics. If the selected entry has been removed, Media Details
 stays open and reports the missing entry rather than creating a new one.
 
-The footer tooltip says `Edit watch history entry`. Poster tooltips identify
-the work, rather than repeating the viewing date:
+Image cycling uses selected or pending local files, without duplicate filenames.
+Movie and series entries use their own posters. A single episode uses its own
+posters, falling back to its season and then its series when a context has no
+available files. A group within one season uses that season's posters, falling
+back to the series; a group spanning seasons uses the series posters. Only the
+first available context participates in cycling. The initial image keeps the
+existing History priority. One image stays unchanged on click; no images leave
+the placeholder visible, with details still accessible through “i” or keyboard.
+Each card remembers its chosen filename across refreshes and reordering while
+it exists, falling back to the first available image if that filename disappears.
+This choice is not saved to the database.
+
+Poster tooltips wait two seconds before appearing, including when moving directly
+from a poster whose tooltip is already visible to another poster.
+
+The footer tooltip says `Edit watch history entry`. Poster tooltips in History,
+Watchlist and Cabinet share the same title and year formatting:
 
 - Movies: `Chicken Run: Dawn of the Nugget (2023)`.
 - Series and multiple-episode entries: `Foundation (2021-2025)`.

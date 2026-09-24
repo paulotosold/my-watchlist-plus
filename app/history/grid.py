@@ -15,6 +15,12 @@ from PySide6.QtWidgets import (
 )
 
 from app.ui.poster_density import normalize_posters_per_row
+from app.ui.poster_tooltip import apply_poster_tooltip_timing
+from app.ui.poster_card import (
+    MEDIA_CARD_BUTTON_MARGIN,
+    MEDIA_CARD_ICON_DIR,
+    make_poster_button,
+)
 
 from app.ui.styles import INPUT_BORDER
 from .caption import HistoryCaption
@@ -42,7 +48,9 @@ class HistoryPosterImage(QLabel):
         super().__init__(parent)
 
         self._pressed = False
+        self._hovered = False
         self.entry = None
+        self.poster_filenames = []
         self._poster_filename = None
         self._poster_path = None
         self._poster_fingerprint = None
@@ -60,6 +68,12 @@ class HistoryPosterImage(QLabel):
         )
         self.setFixedSize(1, 1)
         self._placeholder_font = QFont(self.font())
+        self.btn_info = make_poster_button(MEDIA_CARD_ICON_DIR / "info.png", self)
+        self.btn_info.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_info.clicked.connect(self.request_details)
+        self.btn_info.move(MEDIA_CARD_BUTTON_MARGIN, MEDIA_CARD_BUTTON_MARGIN)
+        self.btn_info.hide()
+        apply_poster_tooltip_timing(self)
 
         self.set_entry(entry)
 
@@ -68,16 +82,26 @@ class HistoryPosterImage(QLabel):
         return self.entry.key
 
     def set_entry(self, entry):
+        previous_filename = self._poster_filename if self.entry and self.entry.key == entry.key else None
         self.entry = entry
-        self._poster_filename = _poster_filename(entry)
+        self.poster_filenames = _eligible_poster_filenames(entry)
+        self._poster_filename = (
+            previous_filename if previous_filename in self.poster_filenames
+            else next(iter(self.poster_filenames), None)
+        )
+        tooltip = entry.tooltip_text or entry.title
+        self.setToolTip(tooltip)
+        self.setAccessibleName(
+            f"{tooltip} — Click to change poster; press Enter or Space for Media Details"
+        )
+        self.btn_info.setAccessibleName(f"Open Media Details: {tooltip}")
+        self._update_poster()
+
+    def _update_poster(self):
         (
             self._poster_path,
             poster_fingerprint,
         ) = _poster_file_state(self._poster_filename)
-        self.setToolTip(entry.tooltip_text or entry.title)
-        self.setAccessibleName(
-            f"{entry.title} — {entry.formatted_date}"
-        )
 
         if poster_fingerprint != self._poster_fingerprint:
             self._rendered_fingerprint = None
@@ -85,6 +109,13 @@ class HistoryPosterImage(QLabel):
 
         self._poster_fingerprint = poster_fingerprint
         self._render_poster()
+
+    def cycle_poster(self):
+        if len(self.poster_filenames) <= 1:
+            return
+        index = self.poster_filenames.index(self._poster_filename)
+        self._poster_filename = self.poster_filenames[(index + 1) % len(self.poster_filenames)]
+        self._update_poster()
 
     def request_details(self):
         self.details_requested.emit(self.entry.details_media_id)
@@ -103,7 +134,7 @@ class HistoryPosterImage(QLabel):
             and self.rect().contains(event.position().toPoint())
         ):
             self._pressed = False
-            self.request_details()
+            self.cycle_poster()
             event.accept()
             return
 
@@ -125,6 +156,28 @@ class HistoryPosterImage(QLabel):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._render_poster()
+
+    def _update_info_visibility(self):
+        self.btn_info.setVisible(self._hovered or self.hasFocus())
+        self.btn_info.raise_()
+
+    def enterEvent(self, event):
+        self._hovered = True
+        self._update_info_visibility()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hovered = False
+        self._update_info_visibility()
+        super().leaveEvent(event)
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self._update_info_visibility()
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self._update_info_visibility()
 
     def _render_poster(self):
         target_size = self.size()
@@ -164,9 +217,6 @@ class HistoryPosterImage(QLabel):
             "background-color: #dedede;"
             "border: none;"
             "}"
-            "QLabel#historyGridPosterTile:focus {"
-            "border: 2px solid #4f93cc;"
-            "}"
         )
         crop_x = max(0, (scaled.width() - target_size.width()) // 2)
         crop_y = max(0, (scaled.height() - target_size.height()) // 2)
@@ -194,9 +244,6 @@ class HistoryPosterImage(QLabel):
             "background-color: #dedede;"
             "border: none;"
             "color: #777777;"
-            "}"
-            "QLabel#historyGridPosterTile:focus {"
-            "border: 2px solid #4f93cc;"
             "}"
         )
 
@@ -236,7 +283,6 @@ class HistoryPosterTile(QFrame):
         self.setToolTip(tooltip)
         self.caption.setToolTip("Edit watch history entry")
         self.setAccessibleName(f"{tooltip} — {entry.footer_text or entry.formatted_date}")
-        self.poster_label.setAccessibleName(f"Open Media Details: {tooltip}")
         self.caption.setAccessibleName(
             f"Open Watch Entry Details: {entry.footer_text or entry.formatted_date} — {tooltip}"
         )
@@ -516,6 +562,33 @@ class HistoryGridBoard(QWidget):
 def _poster_filename(entry):
     poster = entry.poster or {}
     return str(poster.get("filename") or "").lstrip("/") or None
+
+
+def _eligible_poster_filenames(entry):
+    # Legacy callers can still provide only the initial poster.
+    collections = entry.poster_collections
+    if not collections and entry.poster:
+        collections = (({"curation_status": "selected", **entry.poster},),)
+    for posters in collections:
+        filenames = []
+        seen = set()
+        for poster in posters:
+            filename = str(poster.get("filename") or "").lstrip("/")
+            if (
+                poster.get("curation_status") not in {"selected", "pending"}
+                or not filename or filename in seen
+                or not (POSTER_DIR / filename).is_file()
+            ):
+                continue
+            filenames.append(filename)
+            seen.add(filename)
+        if filenames:
+            initial = _poster_filename(entry)
+            if initial in filenames:
+                filenames.remove(initial)
+                filenames.insert(0, initial)
+            return filenames
+    return []
 
 
 def _poster_file_state(filename):

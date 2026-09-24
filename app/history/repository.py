@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Any
 
+from app.media_tooltip import format_media_tooltip
 from app.media_user_data.watch_history_formatters import (
     format_episode_ranges,
     format_watch_history_caption,
-    parse_date,
     resolve_watch_interval,
     watch_history_sort_key,
     watch_history_release_date,
@@ -40,6 +41,7 @@ class HistoryEntry:
     updated_at: str | None = None
     footer_text: str = ""
     tooltip_text: str = ""
+    poster_collections: tuple[tuple[dict[str, Any], ...], ...] = ()
 
 
 def load_default_history_entries(conn) -> list[HistoryEntry]:
@@ -68,6 +70,15 @@ def choose_history_poster(
         "curation_status": row.get(f"{prefix}_curation_status"),
         "is_default": bool(row.get(f"{prefix}_is_default")),
     }
+
+
+def _poster_collection(row, prefix="poster"):
+    posters = json.loads(row.get(f"{prefix}_candidates") or "[]")
+    return tuple(sorted(posters, key=lambda poster: (
+        0 if poster["is_default"] and poster["curation_status"] == "selected"
+        else 1 if poster["curation_status"] == "selected" else 2,
+        poster["id"],
+    )))
 
 
 def _project_history_entries(rows) -> list[HistoryEntry]:
@@ -106,6 +117,7 @@ def _build_direct_entry(row) -> HistoryEntry:
         tooltip_text=_history_tooltip(row),
         sort_key=watch_history_sort_key(event, interval=interval),
         poster=choose_history_poster(row),
+        poster_collections=(_poster_collection(row),),
         media_type=row["display_media_type"],
         watch_state=row.get("display_watch_state"),
         impression=row.get("display_impression"),
@@ -183,6 +195,12 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         tooltip_text=_history_tooltip(representative),
         sort_key=watch_history_sort_key(event, interval=interval),
         poster=poster,
+        poster_collections=(
+            (_poster_collection(representative, "season_poster"),
+             _poster_collection(representative))
+            if len(season_numbers) == 1
+            else (_poster_collection(representative),)
+        ),
         media_type=representative["display_media_type"],
         watch_state=representative.get("display_watch_state"),
         impression=representative.get("display_impression"),
@@ -241,6 +259,11 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
         tooltip_text=_history_tooltip(representative, single_episode=True),
         sort_key=watch_history_sort_key(event, interval=interval),
         poster=poster,
+        poster_collections=(
+            _poster_collection(representative, "owner_poster"),
+            _poster_collection(representative, "season_poster"),
+            _poster_collection(representative),
+        ),
         media_type=representative["owner_media_type"],
         watch_state=representative.get("owner_watch_state"),
         impression=representative.get("owner_impression"),
@@ -252,25 +275,19 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
 
 
 def _history_tooltip(row, *, single_episode=False):
-    title = row["display_title"]
     if single_episode:
-        season = row.get("season_num")
-        episode = row.get("episode_num")
-        code = f" S{season}E{episode}" if season is not None and episode is not None else ""
-        title = f"{title}{code}: {row.get('owner_title') or 'Untitled episode'}"
-        dates = (row.get("owner_release_date"),)
-    elif row["display_media_type"] == "series":
-        dates = (
-            row.get("series_first_air_date") or row.get("display_release_date"),
-            row.get("series_last_air_date"),
+        return format_media_tooltip(
+            row.get("owner_title"), "episode", row.get("owner_release_date"),
+            series_title=row["display_title"],
+            season_num=row.get("season_num"), episode_num=row.get("episode_num"),
         )
-    else:
-        dates = (row.get("owner_release_date"),)
-    years = sorted({parsed.year for value in dates if (parsed := parse_date(value))})
-    if not years:
-        return title
-    year_label = str(years[0]) if len(years) == 1 else f"{years[0]}-{years[-1]}"
-    return f"{title} ({year_label})"
+    return format_media_tooltip(
+        row["display_title"], row["display_media_type"],
+        row.get("display_release_date") if row["display_media_type"] == "series"
+        else row.get("owner_release_date"),
+        first_air_date=row.get("series_first_air_date"),
+        last_air_date=row.get("series_last_air_date"),
+    )
 
 
 def _watch_event(row):
@@ -304,6 +321,10 @@ _DEFAULT_HISTORY_QUERY = """
             mp.source,
             mp.curation_status,
             mp.is_default,
+            json_group_array(json_object(
+                'id', mp.id, 'filename', mp.filename, 'source', mp.source,
+                'curation_status', mp.curation_status, 'is_default', mp.is_default
+            )) OVER (PARTITION BY mp.media_id) AS candidates,
             ROW_NUMBER() OVER (
                 PARTITION BY mp.media_id
                 ORDER BY
@@ -330,6 +351,10 @@ _DEFAULT_HISTORY_QUERY = """
             sp.source,
             sp.curation_status,
             sp.is_default,
+            json_group_array(json_object(
+                'id', sp.id, 'filename', sp.filename, 'source', sp.source,
+                'curation_status', sp.curation_status, 'is_default', sp.is_default
+            )) OVER (PARTITION BY sp.series_id, sp.season_num) AS candidates,
             ROW_NUMBER() OVER (
                 PARTITION BY sp.series_id, sp.season_num
                 ORDER BY
@@ -391,14 +416,17 @@ _DEFAULT_HISTORY_QUERY = """
         display_state.impression AS display_impression,
         display_state.is_cabinet_worthy AS display_is_cabinet_worthy,
         owner_poster.filename AS owner_poster_filename,
+        owner_poster.candidates AS owner_poster_candidates,
         owner_poster.source AS owner_poster_source,
         owner_poster.curation_status AS owner_poster_curation_status,
         owner_poster.is_default AS owner_poster_is_default,
         season_poster.filename AS season_poster_filename,
+        season_poster.candidates AS season_poster_candidates,
         season_poster.source AS season_poster_source,
         season_poster.curation_status AS season_poster_curation_status,
         season_poster.is_default AS season_poster_is_default,
         poster.filename AS poster_filename,
+        poster.candidates AS poster_candidates,
         poster.source AS poster_source,
         poster.curation_status AS poster_curation_status,
         poster.is_default AS poster_is_default

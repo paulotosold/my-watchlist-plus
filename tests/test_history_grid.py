@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QImage
+from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
+from PySide6.QtGui import QColor, QEnterEvent, QImage
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QAbstractButton, QApplication
 
@@ -299,6 +299,8 @@ class HistoryGridBoardTests(unittest.TestCase):
             Qt.MouseButton.LeftButton,
             pos=QPoint(tile.width() // 2, tile.height() // 2),
         )
+        self.assertEqual(board_spy.count(), 0)
+        QTest.mouseClick(tile.poster_label.btn_info, Qt.MouseButton.LeftButton)
         tile.poster_label.setFocus(Qt.FocusReason.TabFocusReason)
         QTest.keyClick(tile.poster_label, Qt.Key.Key_Return)
         QTest.keyClick(tile.poster_label, Qt.Key.Key_Space)
@@ -332,15 +334,17 @@ class HistoryGridBoardTests(unittest.TestCase):
         QTest.keyClick(first.caption, Qt.Key.Key_Tab)
         self.assertTrue(second.poster_label.hasFocus())
 
-    def test_placeholder_is_clickable_and_grid_has_no_buttons_or_overlays(self):
+    def test_placeholder_keeps_details_on_info_only(self):
         self.board.set_entries([make_entry(1, details_media_id=77)])
         self._process_layout_events()
         tile = self.board.tiles[0]
         spy = QSignalSpy(self.board.details_requested)
 
         self.assertEqual(tile.poster_label.text().replace("\n", " "), "No poster")
-        self.assertEqual(tile.findChildren(QAbstractButton), [])
+        self.assertEqual(tile.findChildren(QAbstractButton), [tile.poster_label.btn_info])
         QTest.mouseClick(tile.poster_label, Qt.MouseButton.LeftButton)
+        self.assertEqual(spy.count(), 0)
+        QTest.mouseClick(tile.poster_label.btn_info, Qt.MouseButton.LeftButton)
 
         self.assertEqual(spy.count(), 1)
         self.assertEqual(spy.at(0), [77])
@@ -376,7 +380,90 @@ class HistoryGridBoardTests(unittest.TestCase):
             with patch("app.history.grid._read_scaled_poster") as read:
                 self.board.set_entries([entry])
 
-            read.assert_not_called()
+                read.assert_not_called()
+
+    def test_info_visibility_tracks_hover_and_keyboard_focus(self):
+        self.board.set_entries([make_entry(1), make_entry(2)])
+        self._process_layout_events()
+        poster = self.board.tiles[0].poster_label
+        self.board.tiles[1].caption.setFocus()
+        self.application.sendEvent(poster, QEvent(QEvent.Type.Leave))
+        self.assertFalse(poster.btn_info.isVisible())
+        self.application.sendEvent(poster, QEnterEvent(QPointF(), QPointF(), QPointF()))
+        self.assertTrue(poster.btn_info.isVisible())
+        self.application.sendEvent(poster, QEvent(QEvent.Type.Leave))
+        self.assertFalse(poster.btn_info.isVisible())
+        poster.setFocus(Qt.FocusReason.TabFocusReason)
+        self.assertTrue(poster.btn_info.isVisible())
+        QTest.keyClick(poster, Qt.Key.Key_Tab)
+        self.assertTrue(self.board.tiles[0].caption.hasFocus())
+        self.assertFalse(poster.btn_info.isVisible())
+
+    def test_cycling_preserves_context_selection_and_refreshes_removed_images(self):
+        with tempfile.TemporaryDirectory() as directory, patch("app.history.grid.POSTER_DIR", Path(directory)):
+            for filename, color in (("a.png", "red"), ("b.png", "blue"), ("series.png", "green")):
+                image = QImage(20, 30, QImage.Format.Format_RGB32)
+                image.fill(QColor(color))
+                self.assertTrue(image.save(str(Path(directory) / filename)))
+            def candidate(filename, status="selected"):
+                return {"filename": filename, "curation_status": status}
+            entry = replace(make_entry(1, poster=candidate("b.png")), poster_collections=(
+                (candidate("missing.png"), candidate("a.png"), candidate("/a.png"),
+                 candidate("series.png", "discarded"), candidate("b.png", "pending")),
+                (candidate("series.png"),),
+            ))
+            self.board.set_entries([entry, make_entry(2)])
+            self._process_layout_events()
+            poster = self.board.tiles[0].poster_label
+            spy = QSignalSpy(self.board.details_requested)
+            self.assertEqual(poster.poster_filenames, ["b.png", "a.png"])
+            self.assertEqual(poster.pixmap().toImage().pixelColor(0, 0), QColor("blue"))
+            QTest.mouseClick(poster, Qt.MouseButton.LeftButton)
+            self.assertEqual(poster.pixmap().toImage().pixelColor(0, 0), QColor("red"))
+            self.assertEqual(spy.count(), 0)
+            QTest.mouseClick(poster.btn_info, Qt.MouseButton.LeftButton)
+            self.assertEqual(spy.count(), 1)
+            self.assertEqual(poster._poster_filename, "a.png")
+            QTest.mouseClick(poster, Qt.MouseButton.LeftButton)
+            self.assertEqual(poster._poster_filename, "b.png")
+            QTest.mouseClick(poster, Qt.MouseButton.LeftButton)
+            self.board.set_entries([make_entry(2), entry])
+            self.assertIs(self.board.tiles[1].poster_label, poster)
+            self.assertEqual(poster._poster_filename, "a.png")
+            (Path(directory) / "a.png").unlink()
+            self.board.set_entries([make_entry(2), entry])
+            self.assertEqual(poster._poster_filename, "b.png")
+            QTest.mouseClick(poster, Qt.MouseButton.LeftButton)
+            self.assertEqual(poster._poster_filename, "b.png")
+            (Path(directory) / "b.png").unlink()
+            self.board.set_entries([make_entry(2), entry])
+            self.assertEqual(poster.poster_filenames, ["series.png"])
+            self.assertEqual(poster.pixmap().toImage().pixelColor(0, 0), QColor("green"))
+
+    def test_clicking_posters_and_placeholder_leaves_no_focus_border(self):
+        with tempfile.TemporaryDirectory() as directory, patch("app.history.grid.POSTER_DIR", Path(directory)):
+            candidates = []
+            for filename, color in (("a.png", "red"), ("b.png", "green")):
+                image = QImage(20, 30, QImage.Format.Format_RGB32)
+                image.fill(QColor(color))
+                self.assertTrue(image.save(str(Path(directory) / filename)))
+                candidates.append({"filename": filename, "curation_status": "selected"})
+            entry = replace(make_entry(1), poster_collections=(tuple(candidates),))
+            self.board.set_entries([entry, make_entry(2)])
+            self._process_layout_events()
+            for tile in self.board.tiles:
+                poster = tile.poster_label
+                # Keep the hover button visible in both images so this comparison
+                # isolates the focus decoration, including after cycling images.
+                self.application.sendEvent(poster, QEnterEvent(QPointF(), QPointF(), QPointF()))
+                for _ in range(2):
+                    QTest.mouseClick(poster, Qt.MouseButton.LeftButton)
+                    self.application.processEvents()
+                    self.assertTrue(poster.hasFocus())
+                    focused_image = poster.grab().toImage()
+                    poster.clearFocus()
+                    self.application.processEvents()
+                    self.assertEqual(focused_image, poster.grab().toImage())
 
     def test_missing_poster_is_loaded_when_file_appears_on_refresh(self):
         with tempfile.TemporaryDirectory() as directory:

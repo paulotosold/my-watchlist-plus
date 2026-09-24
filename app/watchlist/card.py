@@ -7,6 +7,7 @@ from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QLabel
 
 from app.paths import OVERLAYS_DIR
+from app.ui.poster_tooltip import apply_poster_tooltip_timing
 from app.ui.poster_card import (
     MEDIA_CARD_BUTTON_MARGIN,
     MEDIA_CARD_ICON_DIR,
@@ -50,6 +51,7 @@ class MediaCard(PosterCard):
         self.poster_layer.lower()
         self.pin_layer.raise_()
         self.overlay_layer.raise_()
+        apply_poster_tooltip_timing(self)
 
     def on_close_clicked(self):
         self.clear_pinned()
