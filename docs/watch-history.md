@@ -199,67 +199,6 @@ Application workflows may connect the two concepts. A user-initiated transition 
 
 Because watch state describes the present and watch history preserves past viewing events, an existing history entry may coexist with another current state or with no current state. Changing the current state does not by itself erase history, and editing an existing history entry does not by itself redefine the current state.
 
-## History cards and navigation
-
-History has a single grid view. Its poster-size control allows 6–25 cards per row,
-with 10 as the default; density is retained while switching tabs during the session.
-Each card has a square-cornered 1px `#bcbcbc` border, a 2:3 poster and a white footer.
-The footer uses the same 12px entry typography as Media Details and adds episode
-ranges when present, including individual episodes: `Aug 2026 · S1:E1-5`.
-Series-level entries without episode items show only the viewing-date label.
-At 15–25 posters per row, the entire footer is hidden and reserves no space;
-only the bordered posters remain. Returning to 6–14 restores the footers and
-their edit actions. Keyboard navigation skips hidden footers.
-
-The footer stays on one line. Text that fits is centered; overflow starts at the
-left and can be scrolled with horizontal trackpad gestures, Shift + mouse wheel,
-or dragging, with both scrollbars hidden. Ordinary vertical scrolling continues
-to scroll the History page. Dragging does not activate the footer. Changing the
-text, or widening the card enough to fit it, resets the horizontal offset.
-
-Clicking the poster cycles through its available local images and wraps back to
-the first image. The same “i” button used by Cabinet appears at the top left on
-hover or keyboard focus and opens Media Details without changing the image.
-Enter and Space on the focused poster remain shortcuts for Media Details.
-Clicking the footer opens Media Details and then its existing Watch Entry Details
-editor for the selected persistent entry ID; Enter and Space also activate the
-focused footer. Editor changes remain
-in the Media Details draft until that window is saved; cancelling retains the
-existing dialog semantics. If the selected entry has been removed, Media Details
-stays open and reports the missing entry rather than creating a new one.
-
-Image cycling uses selected or pending local files, without duplicate filenames.
-Movie and series entries use their own posters. A single episode uses its own
-posters, falling back to its season and then its series when a context has no
-available files. A group within one season uses that season's posters, falling
-back to the series; a group spanning seasons uses the series posters. Only the
-first available context participates in cycling. The initial image keeps the
-existing History priority. One image stays unchanged on click; no images leave
-the placeholder visible, with details still accessible through “i” or keyboard.
-Each card remembers its chosen filename across refreshes and reordering while
-it exists, falling back to the first available image if that filename disappears.
-This choice is not saved to the database.
-
-Poster tooltips wait two seconds before appearing, including when moving directly
-from a poster whose tooltip is already visible to another poster.
-
-The footer tooltip says `Edit watch history entry`. Poster tooltips in History,
-Watchlist and Cabinet share the same title and year formatting:
-
-- Movies: `Chicken Run: Dawn of the Nugget (2023)`.
-- Series and multiple-episode entries: `Foundation (2021-2025)`.
-- Single episodes: `Black Mirror S3E4: San Junipero (2016)`.
-
-Series year ranges cover all episodes in the local catalog, including future
-release dates, regardless of which episodes were watched. They do not indicate
-whether a series has ended. The series release date is the fallback when the first
-episode date is unavailable. Equal years collapse to one year; unknown years are
-omitted. These release years are independent of the viewing-date timeline.
-
-Card reuse, poster render caching and scroll anchoring survive density changes,
-window resizing and history refreshes. The former list view and its inline state
-controls have been removed; state editing remains available in Media Details.
-
 ## Edge cases
 
 The following rules complete normal interval resolution. A missing or unparseable latent value is treated as unavailable. Invalid explicit input is rejected rather than silently reinterpreted.
@@ -284,24 +223,3 @@ The following rules complete normal interval resolution. A missing or unparseabl
 When a boundary is replaced during collapse, its source becomes the input whose date was retained. Approximation and specificity still reflect the original explicit inputs: any entry missing at least one explicit date keeps the `~` prefix, including collapsed single-day intervals.
 
 Preview labels use the same rules and provisional UTC creation time as drafts. Persistence supplies the actual creation time, so saving on a different UTC day may legitimately change the upper latent boundary and label.
-
-## Implementation and verification
-
-The canonical home for watch-history temporal behavior is `app/media_user_data/watch_history_formatters.py`. `resolve_watch_interval` returns an immutable `WatchInterval` containing the resolved boundaries, their sources, and original temporal specificity. Its `label`, `anchor`, and `approximate` properties share that resolution. Public formatting and sorting functions remain adapters to this model; consumers that need both label and order reuse the same interval.
-
-History repository projections, Media Details, and watch-entry previews all consume this shared behavior. Episode release selection and range formatting live in the watch-history domain layer. History loads its data in one query and sorts projected entries without additional per-entry database reads. No schema migration or persisted derived values are required.
-
-### Required test coverage
-
-Changes to the temporal model must update this document and its behavioral tests in the same change. At minimum, tests should cover:
-
-| Area | Required cases |
-| --- | --- |
-| Interval resolution | Every combination of explicit and latent boundary sources |
-| Viewing-date labels | Single days, every range-compression level, approximate labels, and unavailable dates |
-| Timeline anchors | Equal boundaries, midpoint anchors, and `P = A` anchors |
-| Ordering | Descending anchors and every tie-break level |
-| Episode groups | One episode, contiguous episodes, gaps, multiple seasons, and the first episode’s release date and shared entry creation timestamp |
-| Consumer consistency | History, Media Details, and watch-entry preview produce compatible results from the same inputs |
-
-The tests are concentrated in `tests/test_watch_history_temporal.py`, `tests/test_media_details_helpers.py`, `tests/test_history_repository.py`, `tests/test_media_repository_watch_history.py`, `tests/test_watch_history_editor.py`, and `tests/test_watch_entry_details_dialog.py`. They include missing and contradictory latent bounds, immutable resolution, UTC preview/draft/persistence consistency, fractional anchors, specificity and identity tie-breakers, release-date refreshes, and separate identical-date viewings. Repository-level watch-state transitions are covered separately in `tests/test_media_repository_watch_state_transitions.py`.

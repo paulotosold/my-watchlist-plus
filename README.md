@@ -37,7 +37,7 @@ Movie and TV metadata comes primarily from the TMDB API, while optional LLM assi
 
 ## Database design
 
-I spent quite a bit of time thinking through the database model, and TV series quickly became one of its more interesting challenges. Movies are relatively straightforward units, while series can be tracked at very different levels of detail. A *Black Mirror* episode may be worth treating almost like a movie of its own, with an independent watch state, a rating or even a poster. With *Friends*, the series itself may matter more, while episode progress still matters. With *ALF*, on the other hand, "I watched some *ALF*" may be precise enough.
+I spent quite a bit of time working out the database model, and TV series quickly became one of its more interesting challenges. Movies are relatively straightforward units, while series can be tracked at very different levels of detail. A *Black Mirror* episode may be worth treating almost like a movie of its own, with an independent watch state, a rating or even a poster. With *Friends*, the series itself may matter more, while episode progress still matters. With *ALF*, on the other hand, "I watched some *ALF*" may be precise enough.
 
 My solution to this design problem was to let movies, series and episodes share the same core `media` model. Episodes remain linked to their parent series, but both the series and its individual episodes can be tracked independently, each with their own state, watch history, rating, notes, lists and poster. At the same time, episode-level information can still be brought together to track progress through the series. Detailed episode tracking is possible, but never required.
 
