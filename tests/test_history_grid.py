@@ -313,14 +313,20 @@ class HistoryGridBoardTests(unittest.TestCase):
         ))
 
     def test_card_tooltips_caption_action_and_focus_order_after_reordering(self):
-        entries = [replace(make_entry(index), footer_text="Aug 2026 · S1:E1-5", tooltip_text=f"Series {index} (2021-2025)")
-                   for index in (1, 2)]
+        entries = [
+            replace(
+                make_entry(index),
+                footer_text="Aug 2026 · S1:E1-5",
+                tooltip_text=f"Series {index} S1:E1-5 (2021-2025)",
+            )
+            for index in (1, 2)
+        ]
         self.board.set_entries(entries)
         self._process_layout_events()
         self.board.set_entries(list(reversed(entries)))
         self._process_layout_events()
         first, second = self.board.tiles
-        self.assertEqual(first.poster_label.toolTip(), "Series 2 (2021-2025)")
+        self.assertEqual(first.poster_label.toolTip(), "Series 2 S1:E1-5 (2021-2025)")
         self.assertEqual(first.caption.toolTip(), "Edit watch history entry")
         self.assertEqual(first.caption.label.text(), "Aug 2026 · S1:E1-5")
         poster_spy = QSignalSpy(self.board.details_requested)

@@ -4,7 +4,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtGui import QColor, QWheelEvent
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication
 
@@ -73,6 +73,20 @@ class HistoryCaptionTests(unittest.TestCase):
         self.settle()
         self.assertGreater(bar.maximum(), previous_maximum)
         self.assertGreater(self.caption.caption_height(), 24)
+
+    def test_approximate_date_captions_use_gray_until_replaced_by_an_explicit_date(self):
+        label = self.caption.label
+        role = label.foregroundRole()
+        self.caption.set_text("Aug 2026")
+        explicit_color = label.palette().color(role)
+
+        for text in ("~Aug 2026 · S1:E1-5", "~unknown date"):
+            self.caption.set_text(text)
+            self.assertEqual(label.text(), text)
+            self.assertEqual(label.palette().color(role), QColor("#666666"))
+
+        self.caption.set_text("Sep 2026 · S1:E1-5")
+        self.assertEqual(label.palette().color(role), explicit_color)
 
     def test_scrolling_reveals_the_complete_tail_with_its_right_margin(self):
         self.caption.resize(90, 24)

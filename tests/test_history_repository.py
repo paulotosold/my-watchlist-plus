@@ -17,7 +17,7 @@ class HistoryRepositoryTests(unittest.TestCase):
     def tearDown(self):
         self.conn.close()
 
-    def test_tooltips_use_full_catalog_years_and_captions_use_watched_items(self):
+    def test_tooltips_use_watched_items_and_full_catalog_years(self):
         series = self._insert_media(900, "series", "Foundation", release_date="2020-01-01")
         first = self._insert_episode(series, 901, 1, 1, release_date="2021-01-01")
         second = self._insert_episode(series, 902, 1, 2, release_date="2021-02-01")
@@ -25,7 +25,7 @@ class HistoryRepositoryTests(unittest.TestCase):
         grouped = insert_entry(self.conn, [first, second], "2026-08-01", "2026-08-31")
         direct = self._insert_history(series, "2026-09-01", "2026-09-01")
         entries = {entry.entry_id: entry for entry in history_repository.load_default_history_entries(self.conn)}
-        self.assertEqual(entries[grouped].tooltip_text, "Foundation (2021-2030)")
+        self.assertEqual(entries[grouped].tooltip_text, "Foundation S1:E1-2 (2021-2030)")
         self.assertEqual(entries[direct].tooltip_text, "Foundation (2021-2030)")
         self.assertEqual(entries[grouped].footer_text, "Aug 2026 · S1:E1-2")
         self.assertEqual(entries[direct].footer_text, entries[direct].formatted_date)
@@ -235,7 +235,7 @@ class HistoryRepositoryTests(unittest.TestCase):
         self.assertEqual(first_session.owner_media_ids, (episode_1, episode_2))
         self.assertEqual(first_session.title, "Fallout (S1:E1-2)")
         self.assertEqual(first_session.formatted_date, "3 Jul 2026, Fri")
-        self.assertEqual(first_session.tooltip_text, "Fallout (2024)")
+        self.assertEqual(first_session.tooltip_text, "Fallout S1:E1-2 (2024)")
         self.assertEqual(first_session.details_media_id, series_id)
         self.assertEqual(first_session.state_media_id, series_id)
         self.assertEqual(first_session.media_type, "series")
@@ -341,6 +341,7 @@ class HistoryRepositoryTests(unittest.TestCase):
             (51, 1, 1),
             (52, 1, 2),
             (53, 2, 1),
+            (54, 1, 4),
         ):
             episode_id = self._insert_episode(
                 series_id,
@@ -358,9 +359,17 @@ class HistoryRepositoryTests(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(
             entries[0].title,
-            "Long Series (S1:E1-2, S2:E1)",
+            "Long Series (S1:E1-2, S1:E4, S2:E1)",
         )
-        self.assertEqual(len(entries[0].episodes), 3)
+        self.assertEqual(
+            entries[0].tooltip_text,
+            "Long Series S1:E1-2, S1:E4, S2:E1 (2020)",
+        )
+        self.assertEqual(
+            entries[0].footer_text,
+            "1 Jul 2026, Wed · S1:E1-2, S1:E4, S2:E1",
+        )
+        self.assertEqual(len(entries[0].episodes), 4)
         self.assertEqual(
             entries[0].poster["filename"],
             "long-series.jpg",
@@ -412,7 +421,7 @@ class HistoryRepositoryTests(unittest.TestCase):
             entry.title,
             "Black Mirror (S3:E4) – San Junipero",
         )
-        self.assertEqual(entry.tooltip_text, "Black Mirror S3E4: San Junipero (2016)")
+        self.assertEqual(entry.tooltip_text, "Black Mirror S3:E4 – San Junipero (2016)")
         self.assertEqual(entry.footer_text, "3 Aug 2021, Tue · S3:E4")
         self.assertEqual(entry.kind, "episode_event")
         self.assertEqual(entry.state_media_id, episode_id)

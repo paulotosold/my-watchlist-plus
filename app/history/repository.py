@@ -192,7 +192,7 @@ def _build_episode_group_entry(rows) -> HistoryEntry:
         release_date=release_date,
         formatted_date=interval.label,
         footer_text=format_watch_history_caption(interval.label, episodes),
-        tooltip_text=_history_tooltip(representative),
+        tooltip_text=_history_tooltip(representative, episode_ranges=episode_ranges),
         sort_key=watch_history_sort_key(event, interval=interval),
         poster=poster,
         poster_collections=(
@@ -228,6 +228,12 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
     episode_code = format_episode_ranges(episodes)
     series_title = representative.get("display_title") or "Series"
     episode_title = representative.get("owner_title") or "Untitled episode"
+    tooltip_title = episode_title
+    if representative["display_title"]:
+        series_label = series_title
+        if representative["series_id"] is not None:
+            series_label = f"{series_title} {episode_code}"
+        tooltip_title = f"{series_label} – {episode_title}"
     poster = (
         choose_history_poster(
             representative,
@@ -256,7 +262,7 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
         release_date=release_date,
         formatted_date=interval.label,
         footer_text=format_watch_history_caption(interval.label, episodes),
-        tooltip_text=_history_tooltip(representative, single_episode=True),
+        tooltip_text=format_media_tooltip(tooltip_title, "episode", release_date),
         sort_key=watch_history_sort_key(event, interval=interval),
         poster=poster,
         poster_collections=(
@@ -274,16 +280,14 @@ def _build_single_episode_entry(rows, episode_media_id) -> HistoryEntry:
     )
 
 
-def _history_tooltip(row, *, single_episode=False):
-    if single_episode:
-        return format_media_tooltip(
-            row.get("owner_title"), "episode", row.get("owner_release_date"),
-            series_title=row["display_title"],
-            season_num=row.get("season_num"), episode_num=row.get("episode_num"),
-        )
+def _history_tooltip(row, *, episode_ranges=None):
+    title = row["display_title"]
+    media_type = row["display_media_type"]
+    if media_type == "series" and episode_ranges:
+        title = f"{title or 'Untitled'} {episode_ranges}"
     return format_media_tooltip(
-        row["display_title"], row["display_media_type"],
-        row.get("display_release_date") if row["display_media_type"] == "series"
+        title, media_type,
+        row.get("display_release_date") if media_type == "series"
         else row.get("owner_release_date"),
         first_air_date=row.get("series_first_air_date"),
         last_air_date=row.get("series_last_air_date"),

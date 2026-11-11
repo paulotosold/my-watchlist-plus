@@ -53,8 +53,12 @@ class HistoryCaption(QScrollArea):
         return max(24, self.label.fontMetrics().height() + 8)
 
     def set_text(self, text):
-        if text != self.label.text():
+        previous_text = self.label.text()
+        if text != previous_text:
             self.label.setText(text)
+            approximate = text.startswith("~")
+            if approximate != previous_text.startswith("~"):
+                self.label.setStyleSheet("color: #666666;" if approximate else "")
             self.horizontalScrollBar().setValue(0)
         self.setAccessibleName(text)
         self._update_content()
